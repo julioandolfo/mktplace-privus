@@ -1,7 +1,8 @@
 FROM php:8.2-fpm-alpine
 
-# Install install-php-extensions helper (handles all deps automatically)
-COPY --from=mlocati/docker-php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+# Install install-php-extensions helper via GitHub (avoids Docker Hub rate limits)
+ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/install-php-extensions
+RUN chmod +x /usr/local/bin/install-php-extensions
 
 # Install system dependencies
 RUN apk add --no-cache \
