@@ -15,10 +15,17 @@ RUN apk add --no-cache \
     oniguruma-dev \
     postgresql-dev \
     redis \
+    libxml2-dev \
+    icu-dev \
+    freetype-dev \
+    libjpeg-turbo-dev \
     autoconf \
     g++ \
     make \
     linux-headers
+
+# Configure GD with freetype and jpeg support
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg
 
 # Install PHP extensions
 RUN docker-php-ext-install \
@@ -31,7 +38,14 @@ RUN docker-php-ext-install \
     bcmath \
     gd \
     zip \
-    opcache
+    opcache \
+    xml \
+    dom \
+    xmlreader \
+    xmlwriter \
+    simplexml \
+    intl \
+    fileinfo
 
 # Install Redis PHP extension and remove build tools
 RUN pecl install redis \
