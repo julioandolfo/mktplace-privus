@@ -1,6 +1,9 @@
 FROM php:8.2-fpm-alpine
 
-# Install system dependencies + build tools for pecl
+# Install install-php-extensions helper (handles all deps automatically)
+COPY --from=mlocati/docker-php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+
+# Install system dependencies
 RUN apk add --no-cache \
     nginx \
     supervisor \
@@ -8,30 +11,12 @@ RUN apk add --no-cache \
     npm \
     git \
     curl \
-    libpng-dev \
-    libzip-dev \
     zip \
-    unzip \
-    oniguruma-dev \
-    postgresql-dev \
-    redis \
-    libxml2-dev \
-    icu-dev \
-    freetype-dev \
-    libjpeg-turbo-dev \
-    autoconf \
-    g++ \
-    make \
-    linux-headers
+    unzip
 
-# Configure GD with freetype and jpeg support
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg
-
-# Install PHP extensions
-RUN docker-php-ext-install \
-    pdo \
+# Install all required PHP extensions
+RUN install-php-extensions \
     pdo_pgsql \
-    pgsql \
     mbstring \
     exif \
     pcntl \
@@ -39,18 +24,14 @@ RUN docker-php-ext-install \
     gd \
     zip \
     opcache \
+    intl \
     xml \
     dom \
     xmlreader \
     xmlwriter \
     simplexml \
-    intl \
-    fileinfo
-
-# Install Redis PHP extension and remove build tools
-RUN pecl install redis \
-    && docker-php-ext-enable redis \
-    && apk del autoconf g++ make linux-headers
+    fileinfo \
+    redis
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
