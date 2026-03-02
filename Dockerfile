@@ -1,6 +1,6 @@
 FROM php:8.2-fpm-alpine
 
-# Install system dependencies
+# Install system dependencies + build tools for pecl
 RUN apk add --no-cache \
     nginx \
     supervisor \
@@ -14,7 +14,11 @@ RUN apk add --no-cache \
     unzip \
     oniguruma-dev \
     postgresql-dev \
-    redis
+    redis \
+    autoconf \
+    g++ \
+    make \
+    linux-headers
 
 # Install PHP extensions
 RUN docker-php-ext-install \
@@ -29,8 +33,10 @@ RUN docker-php-ext-install \
     zip \
     opcache
 
-# Install Redis PHP extension
-RUN pecl install redis && docker-php-ext-enable redis
+# Install Redis PHP extension and remove build tools
+RUN pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del autoconf g++ make linux-headers
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
