@@ -1,21 +1,29 @@
 #!/bin/sh
-set -e
 
 cd /var/www/html
 
-# Generate app key if not set
-php artisan key:generate --no-interaction --force 2>/dev/null || true
+# Create .env from environment variables if not exists
+if [ ! -f .env ]; then
+    cp .env.example .env 2>/dev/null || touch .env
+fi
 
-# Cache configs for production
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-
-# Run migrations
-php artisan migrate --force --no-interaction
+# Generate app key if APP_KEY not set
+if [ -z "$APP_KEY" ]; then
+    php artisan key:generate --no-interaction --force
+else
+    php artisan key:generate --no-interaction --force --show > /dev/null 2>&1 || true
+fi
 
 # Fix storage permissions
-chown -R www-data:www-data storage bootstrap/cache
-chmod -R 775 storage bootstrap/cache
+chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+
+# Cache configs (non-fatal)
+php artisan config:cache 2>/dev/null || echo "[warn] config:cache failed, continuing..."
+php artisan route:cache 2>/dev/null || echo "[warn] route:cache failed, continuing..."
+php artisan view:cache 2>/dev/null || echo "[warn] view:cache failed, continuing..."
+
+# Run migrations (non-fatal)
+php artisan migrate --force --no-interaction 2>/dev/null || echo "[warn] migrate failed, continuing..."
 
 exec "$@"
