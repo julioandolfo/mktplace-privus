@@ -26,4 +26,11 @@ php artisan view:cache 2>/dev/null || echo "[warn] view:cache failed, continuing
 # Run migrations (non-fatal)
 php artisan migrate --force --no-interaction 2>/dev/null || echo "[warn] migrate failed, continuing..."
 
+# Run seeder only on first deploy (when no users exist)
+USER_COUNT=$(php artisan tinker --execute="echo \App\Models\User::count();" 2>/dev/null | tail -1 | tr -d '[:space:]')
+if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
+    echo "[info] Primeiro deploy detectado, executando seeder..."
+    php artisan db:seed --force --no-interaction 2>/dev/null || echo "[warn] seeder falhou, continuando..."
+fi
+
 exec "$@"

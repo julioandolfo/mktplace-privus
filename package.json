@@ -19,6 +19,8 @@
         "vite": "^7.0.7"
     },
     "dependencies": {
+        "@fontsource/figtree": "^5.0.0",
+        "@fontsource/inter": "^5.0.0",
         "apexcharts": "^5.7.0"
     }
 }
