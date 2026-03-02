@@ -5,8 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: mktplace-app
     restart: unless-stopped
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     environment:
       APP_ENV: production
       APP_DEBUG: false
