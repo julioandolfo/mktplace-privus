@@ -8,15 +8,18 @@ use App\Models\StockLocation;
 use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
         // Admin user
-        User::factory()->create([
+        User::create([
             'name' => 'Admin',
             'email' => 'admin@privus.com',
+            'password' => Hash::make('password'),
+            'email_verified_at' => now(),
             'theme_preference' => 'dark',
         ]);
 
