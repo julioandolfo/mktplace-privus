@@ -30,17 +30,17 @@
         {{-- Catalog --}}
         <div x-show="sidebarOpen" class="px-3 mt-6 mb-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Catalogo</div>
 
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('products.index') }}" class="sidebar-link {{ request()->routeIs('products.*') ? 'active' : '' }}">
             <x-heroicon-o-cube class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Produtos</span>
         </a>
 
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('kits.index') }}" class="sidebar-link {{ request()->routeIs('kits.*') ? 'active' : '' }}">
             <x-heroicon-o-rectangle-group class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Kits</span>
         </a>
 
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('stock.index') }}" class="sidebar-link {{ request()->routeIs('stock.*') ? 'active' : '' }}">
             <x-heroicon-o-archive-box class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Estoque</span>
         </a>
