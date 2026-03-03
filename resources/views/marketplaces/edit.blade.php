@@ -12,5 +12,5 @@
         </li>
     </x-slot>
 
-    <livewire:marketplaces.marketplace-form :marketplace-id="$marketplace->id" />
+    @livewire('marketplaces.marketplace-form', ['marketplaceId' => $marketplace->id])
 </x-app-layout>

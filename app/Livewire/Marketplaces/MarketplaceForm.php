@@ -38,9 +38,13 @@ class MarketplaceForm extends Component
 
     public function mount(?int $marketplaceId = null): void
     {
-        if ($marketplaceId) {
-            $this->marketplaceId = $marketplaceId;
-            $this->loadFromModel(MarketplaceAccount::findOrFail($marketplaceId));
+        // Resolve ID: from parameter (passed via @livewire array) or from
+        // the public property if Livewire already hydrated it from the prop.
+        $id = $marketplaceId ?? $this->marketplaceId;
+
+        if ($id) {
+            $this->marketplaceId = $id;
+            $this->loadFromModel(MarketplaceAccount::findOrFail($id));
         }
 
         if (! $this->company_id) {
