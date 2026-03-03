@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class CompanyController extends Controller
 {
@@ -40,6 +41,10 @@ class CompanyController extends Controller
 
         $validated['document'] = preg_replace('/\D/', '', $validated['document']);
 
+        if ($request->hasFile('logo')) {
+            $validated['logo_path'] = $request->file('logo')->store('logos/companies', 'public');
+        }
+
         Company::create($validated);
 
         return redirect()->route('companies.index')
@@ -71,9 +76,20 @@ class CompanyController extends Controller
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
             'is_active' => 'boolean',
+            'logo' => 'nullable|image|max:2048',
         ]);
 
         $validated['document'] = preg_replace('/\D/', '', $validated['document']);
+
+        if ($request->boolean('remove_logo') && $company->logo_path) {
+            Storage::disk('public')->delete($company->logo_path);
+            $validated['logo_path'] = null;
+        } elseif ($request->hasFile('logo')) {
+            if ($company->logo_path) {
+                Storage::disk('public')->delete($company->logo_path);
+            }
+            $validated['logo_path'] = $request->file('logo')->store('logos/companies', 'public');
+        }
 
         $company->update($validated);
 

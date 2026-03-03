@@ -109,6 +109,41 @@
     <x-ui.card title="Dados da Empresa">
         <div class="space-y-4">
 
+            {{-- Logo --}}
+            <div
+                class="flex items-center gap-4 pb-4 border-b border-gray-100 dark:border-zinc-700"
+                x-data="{ preview: @js($company?->logo_path ? asset('storage/' . $company->logo_path) : null) }"
+            >
+                <div class="flex-shrink-0">
+                    <div class="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden bg-gray-50 dark:bg-zinc-800">
+                        <template x-if="preview">
+                            <img :src="preview" class="w-full h-full object-contain p-1">
+                        </template>
+                        <template x-if="!preview">
+                            <x-heroicon-o-building-office-2 class="w-8 h-8 text-gray-300 dark:text-zinc-600" />
+                        </template>
+                    </div>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <label class="form-label">Logo da Empresa</label>
+                    <input
+                        type="file"
+                        name="logo"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        class="block w-full text-sm text-gray-500 dark:text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 dark:file:bg-primary-900/30 dark:file:text-primary-400 hover:file:bg-primary-100 dark:hover:file:bg-primary-900/50 cursor-pointer"
+                        @change="preview = $event.target.files[0] ? URL.createObjectURL($event.target.files[0]) : preview"
+                    >
+                    <p class="mt-1 text-xs text-gray-400 dark:text-zinc-500">PNG, JPG, WEBP ou SVG. Max 2 MB.</p>
+                    @if($company?->logo_path)
+                    <label class="flex items-center gap-1.5 mt-1.5 text-xs text-red-500 cursor-pointer select-none">
+                        <input type="checkbox" name="remove_logo" value="1" class="rounded border-gray-300 text-red-500" @change="if ($event.target.checked) preview = null">
+                        Remover logo atual
+                    </label>
+                    @endif
+                    @error('logo') <p class="form-error mt-1">{{ $message }}</p> @enderror
+                </div>
+            </div>
+
             {{-- CNPJ/CPF — primeiro campo --}}
             <div class="grid grid-cols-2 gap-4">
                 <div>
