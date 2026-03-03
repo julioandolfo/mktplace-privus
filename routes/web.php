@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\MarketplaceController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
@@ -46,6 +47,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/expedition', function () {
         return view('expedition.index');
     })->name('expedition.index');
+
+    // Marketplaces
+    Route::get('/marketplaces', [MarketplaceController::class, 'index'])->name('marketplaces.index');
+    Route::get('/marketplaces/create', [MarketplaceController::class, 'create'])->name('marketplaces.create');
+    Route::get('/marketplaces/{marketplace}', [MarketplaceController::class, 'show'])->name('marketplaces.show');
+    Route::get('/marketplaces/{marketplace}/edit', [MarketplaceController::class, 'edit'])->name('marketplaces.edit');
 
     // Invoices (NF-e)
     Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');

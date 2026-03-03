@@ -1,0 +1,216 @@
+<x-app-layout>
+    <x-slot name="header">{{ $marketplace->account_name }}</x-slot>
+    <x-slot name="actions">
+        <a href="{{ route('marketplaces.edit', $marketplace) }}" class="btn-secondary">
+            <x-heroicon-o-pencil-square class="w-4 h-4" />
+            Editar
+        </a>
+    </x-slot>
+    <x-slot name="breadcrumbs">
+        <li class="flex items-center gap-2">
+            <x-heroicon-s-chevron-right class="w-4 h-4" />
+            <a href="{{ route('marketplaces.index') }}" class="hover:text-gray-700 dark:hover:text-zinc-200">Marketplaces</a>
+        </li>
+        <li class="flex items-center gap-2">
+            <x-heroicon-s-chevron-right class="w-4 h-4" />
+            <span class="text-gray-700 dark:text-zinc-200">{{ $marketplace->account_name }}</span>
+        </li>
+    </x-slot>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {{-- Main content --}}
+        <div class="lg:col-span-2 space-y-6">
+            {{-- Account info --}}
+            <x-ui.card title="Informacoes da Conta">
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-gray-500 dark:text-zinc-400">Nome da Conta</span>
+                        <p class="font-medium mt-1">{{ $marketplace->account_name }}</p>
+                    </div>
+                    <div>
+                        <span class="text-gray-500 dark:text-zinc-400">Marketplace</span>
+                        <div class="mt-1 flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full" style="background-color: {{ $marketplace->marketplace_type->color() }}"></span>
+                            <span class="font-medium">{{ $marketplace->marketplace_type->label() }}</span>
+                        </div>
+                    </div>
+                    @if($marketplace->shop_id)
+                    <div>
+                        <span class="text-gray-500 dark:text-zinc-400">Shop ID</span>
+                        <p class="font-mono mt-1">{{ $marketplace->shop_id }}</p>
+                    </div>
+                    @endif
+                    @if($marketplace->company)
+                    <div>
+                        <span class="text-gray-500 dark:text-zinc-400">Empresa</span>
+                        <p class="font-medium mt-1">{{ $marketplace->company->name }}</p>
+                    </div>
+                    @endif
+                </div>
+            </x-ui.card>
+
+            {{-- Credentials status --}}
+            <x-ui.card title="Credenciais">
+                <div class="space-y-3 text-sm">
+                    @php $creds = $marketplace->credentials ?? []; @endphp
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-600 dark:text-zinc-400">Client ID</span>
+                        @if(!empty($creds['client_id']))
+                            <span class="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                <x-heroicon-s-check-circle class="w-4 h-4" />
+                                Configurado
+                            </span>
+                        @else
+                            <span class="flex items-center gap-1 text-gray-400 dark:text-zinc-500">
+                                <x-heroicon-o-x-circle class="w-4 h-4" />
+                                Nao configurado
+                            </span>
+                        @endif
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-600 dark:text-zinc-400">Client Secret</span>
+                        @if(!empty($creds['client_secret']))
+                            <span class="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                <x-heroicon-s-check-circle class="w-4 h-4" />
+                                Configurado
+                            </span>
+                        @else
+                            <span class="flex items-center gap-1 text-gray-400 dark:text-zinc-500">
+                                <x-heroicon-o-x-circle class="w-4 h-4" />
+                                Nao configurado
+                            </span>
+                        @endif
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-600 dark:text-zinc-400">Access Token</span>
+                        @if(!empty($creds['access_token']))
+                            <span class="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                <x-heroicon-s-check-circle class="w-4 h-4" />
+                                Configurado
+                            </span>
+                        @else
+                            <span class="flex items-center gap-1 text-gray-400 dark:text-zinc-500">
+                                <x-heroicon-o-x-circle class="w-4 h-4" />
+                                Nao configurado
+                            </span>
+                        @endif
+                    </div>
+                    @if($marketplace->token_expires_at)
+                    <div class="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-zinc-700">
+                        <span class="text-gray-600 dark:text-zinc-400">Token Expira em</span>
+                        <span class="{{ $marketplace->isTokenExpired() ? 'text-red-600 dark:text-red-400' : '' }}">
+                            {{ $marketplace->token_expires_at->format('d/m/Y H:i') }}
+                            @if($marketplace->isTokenExpired())
+                                (Expirado)
+                            @endif
+                        </span>
+                    </div>
+                    @endif
+                </div>
+            </x-ui.card>
+
+            {{-- Sync settings --}}
+            <x-ui.card title="Configuracoes de Sincronizacao">
+                @php $settings = $marketplace->settings ?? []; @endphp
+                <div class="space-y-3 text-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-600 dark:text-zinc-400">Sincronizar Produtos</span>
+                        @if($settings['auto_sync_products'] ?? false)
+                            <x-ui.badge color="success">Ativo</x-ui.badge>
+                        @else
+                            <x-ui.badge color="neutral">Inativo</x-ui.badge>
+                        @endif
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-600 dark:text-zinc-400">Sincronizar Pedidos</span>
+                        @if($settings['auto_sync_orders'] ?? false)
+                            <x-ui.badge color="success">Ativo</x-ui.badge>
+                        @else
+                            <x-ui.badge color="neutral">Inativo</x-ui.badge>
+                        @endif
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-600 dark:text-zinc-400">Atualizar Estoque</span>
+                        @if($settings['auto_update_stock'] ?? false)
+                            <x-ui.badge color="success">Ativo</x-ui.badge>
+                        @else
+                            <x-ui.badge color="neutral">Inativo</x-ui.badge>
+                        @endif
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-600 dark:text-zinc-400">Intervalo de Sync</span>
+                        <span>{{ $settings['sync_interval'] ?? 30 }} min</span>
+                    </div>
+                </div>
+            </x-ui.card>
+
+            {{-- Last error --}}
+            @if($marketplace->last_error)
+            <x-ui.card title="Ultimo Erro">
+                <div class="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                    <p class="text-sm text-red-700 dark:text-red-300">{{ $marketplace->last_error }}</p>
+                </div>
+            </x-ui.card>
+            @endif
+        </div>
+
+        {{-- Sidebar --}}
+        <div class="space-y-6">
+            {{-- Status --}}
+            <x-ui.card title="Status">
+                <div class="space-y-3">
+                    <div>
+                        <x-ui.badge :color="$marketplace->status->color()">{{ $marketplace->status->label() }}</x-ui.badge>
+                    </div>
+                    <div>
+                        <span class="text-xs text-gray-500 dark:text-zinc-400">Saude da Conta</span>
+                        <div class="mt-1">
+                            @if($marketplace->is_healthy)
+                                <span class="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+                                    <x-heroicon-s-check-circle class="w-4 h-4" />
+                                    Saudavel
+                                </span>
+                            @else
+                                <span class="flex items-center gap-1 text-sm text-yellow-600 dark:text-yellow-400">
+                                    <x-heroicon-s-exclamation-triangle class="w-4 h-4" />
+                                    Requer atencao
+                                </span>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </x-ui.card>
+
+            {{-- Sync info --}}
+            <x-ui.card title="Sincronizacao">
+                <div class="space-y-3 text-sm">
+                    <div>
+                        <span class="text-gray-500 dark:text-zinc-400">Ultima Sincronizacao</span>
+                        <p class="mt-1">
+                            @if($marketplace->last_synced_at)
+                                {{ $marketplace->last_synced_at->format('d/m/Y H:i') }}
+                                <span class="text-xs text-gray-400 dark:text-zinc-500">({{ $marketplace->last_synced_at->diffForHumans() }})</span>
+                            @else
+                                <span class="text-gray-400 dark:text-zinc-500">Nunca sincronizado</span>
+                            @endif
+                        </p>
+                    </div>
+                </div>
+            </x-ui.card>
+
+            {{-- Timeline --}}
+            <x-ui.card title="Historico">
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">Criado em</span>
+                        <span>{{ $marketplace->created_at->format('d/m/Y H:i') }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">Atualizado em</span>
+                        <span>{{ $marketplace->updated_at->format('d/m/Y H:i') }}</span>
+                    </div>
+                </div>
+            </x-ui.card>
+        </div>
+    </div>
+</x-app-layout>

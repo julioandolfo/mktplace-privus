@@ -4,8 +4,10 @@ namespace App\Models;
 
 use App\Enums\AccountStatus;
 use App\Enums\MarketplaceType;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
@@ -48,10 +50,34 @@ class MarketplaceAccount extends Model
             ->logOnlyDirty();
     }
 
+    // Relationships
+
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
     }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    // Scopes
+
+    public function scopeSearch(Builder $query, string $term): Builder
+    {
+        return $query->where(function ($q) use ($term) {
+            $q->where('account_name', 'ilike', "%{$term}%")
+              ->orWhere('shop_id', 'ilike', "%{$term}%");
+        });
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('status', AccountStatus::Active);
+    }
+
+    // Methods
 
     public function isTokenExpired(): bool
     {
@@ -60,5 +86,10 @@ class MarketplaceAccount extends Model
         }
 
         return $this->token_expires_at->isPast();
+    }
+
+    public function getIsHealthyAttribute(): bool
+    {
+        return $this->status === AccountStatus::Active && ! $this->isTokenExpired();
     }
 }

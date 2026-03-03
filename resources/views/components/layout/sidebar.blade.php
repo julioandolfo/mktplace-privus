@@ -66,7 +66,7 @@
         {{-- Integrations --}}
         <div x-show="sidebarOpen" class="px-3 mt-6 mb-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Integracoes</div>
 
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('marketplaces.index') }}" class="sidebar-link {{ request()->routeIs('marketplaces.*') ? 'active' : '' }}">
             <x-heroicon-o-globe-alt class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Marketplaces</span>
         </a>
@@ -150,6 +150,10 @@
         <a href="{{ route('expedition.index') }}" class="sidebar-link {{ request()->routeIs('expedition.*') ? 'active' : '' }}">
             <x-heroicon-o-truck class="icon" />
             <span>Expedicao</span>
+        </a>
+        <a href="{{ route('marketplaces.index') }}" class="sidebar-link {{ request()->routeIs('marketplaces.*') ? 'active' : '' }}">
+            <x-heroicon-o-globe-alt class="icon" />
+            <span>Marketplaces</span>
         </a>
         <a href="{{ route('invoices.index') }}" class="sidebar-link {{ request()->routeIs('invoices.*') ? 'active' : '' }}">
             <x-heroicon-o-document-text class="icon" />
