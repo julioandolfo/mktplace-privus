@@ -11,55 +11,71 @@ use Livewire\Component;
 
 class MarketplaceForm extends Component
 {
-    public ?MarketplaceAccount $marketplace = null;
+    // Store only the ID to avoid Livewire serializing the model with
+    // encrypted:json attributes (credentials), which breaks hydration.
+    public ?int $marketplaceId = null;
+    public bool $isOAuth       = false;
 
     // Account info
     public string $marketplace_type = 'mercado_livre';
-    public string $account_name = '';
-    public string $shop_id = '';
-    public string $status = 'inactive';
-    public ?int $company_id = null;
+    public string $account_name     = '';
+    public string $shop_id          = '';
+    public string $status           = 'inactive';
+    public ?int   $company_id       = null;
 
-    // Credentials
-    public string $client_id = '';
+    // Credentials (editable only for non-OAuth types)
+    public string $client_id     = '';
     public string $client_secret = '';
-    public string $access_token = '';
+    public string $access_token  = '';
     public string $refresh_token = '';
-    public string $api_url = '';
+    public string $api_url       = '';
 
     // Settings
-    public bool $auto_sync_products = true;
-    public bool $auto_sync_orders = true;
-    public bool $auto_update_stock = true;
-    public string $sync_interval = '30';
+    public bool   $auto_sync_products = true;
+    public bool   $auto_sync_orders   = true;
+    public bool   $auto_update_stock  = true;
+    public string $sync_interval      = '30';
 
     public function mount(?MarketplaceAccount $marketplace = null): void
     {
         if ($marketplace && $marketplace->exists) {
-            $this->marketplace = $marketplace;
+            $this->marketplaceId    = $marketplace->id;
             $this->marketplace_type = $marketplace->marketplace_type->value;
-            $this->account_name = $marketplace->account_name;
-            $this->shop_id = $marketplace->shop_id ?? '';
-            $this->status = $marketplace->status->value;
-            $this->company_id = $marketplace->company_id;
+            $this->isOAuth          = $marketplace->marketplace_type->supportsOAuth();
+            $this->account_name     = $marketplace->account_name;
+            $this->shop_id          = $marketplace->shop_id ?? '';
+            $this->status           = $marketplace->status->value;
+            $this->company_id       = $marketplace->company_id;
 
-            $creds = $marketplace->credentials ?? [];
-            $type  = $marketplace->marketplace_type->value;
+            $type = $marketplace->marketplace_type->value;
 
-            // Client ID: prefer per-account credential, fallback to SystemSetting
+            // Decrypt credentials safely
+            try {
+                $creds = $marketplace->credentials ?? [];
+            } catch (\Exception $e) {
+                $creds = [];
+            }
+
+            // client_id/secret: from credentials or SystemSetting fallback
             $this->client_id = $creds['client_id']
                 ?? SystemSetting::get('marketplaces', "{$type}_client_id")
                 ?? '';
 
-            // Client Secret: show placeholder if set in SystemSetting but not per-account
+            $hasSecret = ! empty($creds['client_secret'])
+                || ! empty(SystemSetting::get('marketplaces', "{$type}_client_secret"));
             $this->client_secret = $creds['client_secret']
-                ?? (SystemSetting::get('marketplaces', "{$type}_client_secret") ? '••••••••' : '');
+                ?? ($hasSecret ? '••••••••' : '');
 
             $this->access_token  = $creds['access_token'] ?? '';
             $this->refresh_token = $creds['refresh_token'] ?? '';
             $this->api_url       = $creds['api_url'] ?? '';
 
-            $settings = $marketplace->settings ?? [];
+            try {
+                $settings = $marketplace->settings ?? [];
+            } catch (\Exception $e) {
+                $settings = [];
+            }
+
             $this->auto_sync_products = $settings['auto_sync_products'] ?? true;
             $this->auto_sync_orders   = $settings['auto_sync_orders'] ?? true;
             $this->auto_update_stock  = $settings['auto_update_stock'] ?? true;
@@ -68,6 +84,15 @@ class MarketplaceForm extends Component
 
         if (! $this->company_id) {
             $this->company_id = Company::first()?->id;
+        }
+    }
+
+    public function updatedMarketplaceType(string $value): void
+    {
+        try {
+            $this->isOAuth = MarketplaceType::from($value)->supportsOAuth();
+        } catch (\ValueError $e) {
+            $this->isOAuth = false;
         }
     }
 
@@ -87,12 +112,17 @@ class MarketplaceForm extends Component
             'sync_interval'    => 'required|integer|min:5|max:1440',
         ]);
 
-        // If client_secret was not changed (placeholder), keep the existing value
+        // Resolve client_secret placeholder back to real value
         $clientSecret = $this->client_secret;
         if ($clientSecret === '••••••••') {
-            $existingCreds = $this->marketplace?->credentials ?? [];
-            $type          = $this->marketplace_type;
-            $clientSecret  = $existingCreds['client_secret']
+            $type = $this->marketplace_type;
+            $existing = $this->marketplaceId ? MarketplaceAccount::find($this->marketplaceId) : null;
+            try {
+                $existingCreds = $existing?->credentials ?? [];
+            } catch (\Exception $e) {
+                $existingCreds = [];
+            }
+            $clientSecret = $existingCreds['client_secret']
                 ?? SystemSetting::get('marketplaces', "{$type}_client_secret")
                 ?? '';
         }
@@ -122,22 +152,31 @@ class MarketplaceForm extends Component
             'settings'         => $settings,
         ];
 
-        if ($this->marketplace) {
-            $this->marketplace->update($data);
+        $account = $this->marketplaceId ? MarketplaceAccount::find($this->marketplaceId) : null;
+
+        if ($account) {
+            $account->update($data);
         } else {
             MarketplaceAccount::create($data);
         }
 
-        session()->flash('success', $this->marketplace ? 'Conta atualizada.' : 'Conta de marketplace criada.');
+        session()->flash('success', $account ? 'Conta atualizada.' : 'Conta de marketplace criada.');
         return $this->redirect(route('marketplaces.index'), navigate: false);
     }
 
     public function render()
     {
+        // Reload model from DB on every render (never store Eloquent model with
+        // encrypted attributes as a public Livewire property).
+        $marketplace = $this->marketplaceId
+            ? MarketplaceAccount::find($this->marketplaceId)
+            : null;
+
         return view('livewire.marketplaces.marketplace-form', [
-            'companies' => Company::orderBy('name')->get(),
-            'types'     => MarketplaceType::cases(),
-            'statuses'  => AccountStatus::cases(),
+            'companies'   => Company::orderBy('name')->get(),
+            'types'       => MarketplaceType::cases(),
+            'statuses'    => AccountStatus::cases(),
+            'marketplace' => $marketplace,
         ]);
     }
 }
