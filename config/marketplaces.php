@@ -1,42 +1,36 @@
 <?php
 
+// Credenciais (client_id, client_secret, etc.) são configuradas pelo painel em
+// Configurações > Marketplaces e armazenadas via SystemSetting (grupo "marketplaces").
+// Este arquivo contém apenas os endpoints estáticos de cada marketplace.
+
 return [
 
     'mercado_livre' => [
-        'client_id'     => env('MERCADO_LIVRE_CLIENT_ID'),
-        'client_secret' => env('MERCADO_LIVRE_CLIENT_SECRET'),
-        'auth_url'      => 'https://auth.mercadolivre.com.br/authorization',
-        'token_url'     => 'https://api.mercadolibre.com/oauth/token',
-        'api_url'       => 'https://api.mercadolibre.com',
-        'scopes'        => [],
+        'auth_url'  => 'https://auth.mercadolivre.com.br/authorization',
+        'token_url' => 'https://api.mercadolibre.com/oauth/token',
+        'api_url'   => 'https://api.mercadolibre.com',
     ],
 
     'amazon' => [
-        'client_id'     => env('AMAZON_CLIENT_ID'),
-        'client_secret' => env('AMAZON_CLIENT_SECRET'),
-        'auth_url'      => 'https://sellercentral.amazon.com.br/apps/authorize/consent',
-        'token_url'     => 'https://api.amazon.com/auth/o2/token',
-        'api_url'       => 'https://sellingpartnerapi-na.amazon.com',
-        'scopes'        => [],
+        'auth_url'  => 'https://sellercentral.amazon.com.br/apps/authorize/consent',
+        'token_url' => 'https://api.amazon.com/auth/o2/token',
+        'api_url'   => 'https://sellingpartnerapi-na.amazon.com',
     ],
 
-    // Shopee usa assinatura HMAC — integração manual via API Key
+    // Shopee usa assinatura HMAC — Partner ID e Key configurados nas Configurações
     'shopee' => [
-        'partner_id'  => env('SHOPEE_PARTNER_ID'),
-        'partner_key' => env('SHOPEE_PARTNER_KEY'),
-        'api_url'     => 'https://partner.shopeemobile.com',
+        'api_url' => 'https://partner.shopeemobile.com',
     ],
 
-    // WooCommerce usa REST API Key gerado no painel do cliente
+    // WooCommerce usa REST API Key gerado no painel do cliente — configurado por conta
     'woocommerce' => [
         'api_url' => null,
     ],
 
-    // TikTok Shop — app review necessária
+    // TikTok Shop — credenciais configuradas nas Configurações
     'tiktok' => [
-        'app_id'     => env('TIKTOK_APP_ID'),
-        'app_secret' => env('TIKTOK_APP_SECRET'),
-        'api_url'    => 'https://open-api.tiktokglobalshop.com',
+        'api_url' => 'https://open-api.tiktokglobalshop.com',
     ],
 
 ];

@@ -6,6 +6,7 @@ use App\Enums\AccountStatus;
 use App\Enums\MarketplaceType;
 use App\Models\Company;
 use App\Models\MarketplaceAccount;
+use App\Models\SystemSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -22,19 +23,21 @@ class MarketplaceOAuthController extends Controller
                 ->with('error', "{$marketplace->label()} não suporta autenticação OAuth automática.");
         }
 
-        $config = config("marketplaces.{$type}");
+        $clientId = SystemSetting::get('marketplaces', "{$type}_client_id");
 
-        if (empty($config['client_id'])) {
-            return redirect()->route('marketplaces.index')
-                ->with('error', "Credenciais do {$marketplace->label()} não configuradas. Adicione as variáveis de ambiente.");
+        if (empty($clientId)) {
+            return redirect()->route('settings.index')
+                ->with('error', "Configure o Client ID do {$marketplace->label()} em Configurações > Marketplaces antes de conectar.");
         }
+
+        $config = config("marketplaces.{$type}");
 
         $state = Str::random(40);
         session(['oauth_state' => $state, 'oauth_type' => $type]);
 
         $params = http_build_query([
             'response_type' => 'code',
-            'client_id'     => $config['client_id'],
+            'client_id'     => $clientId,
             'redirect_uri'  => route('marketplaces.oauth.callback', $type),
             'state'         => $state,
         ]);
@@ -54,21 +57,23 @@ class MarketplaceOAuthController extends Controller
                 ->with('error', 'Autorização negada: ' . $request->error_description);
         }
 
-        $marketplace = MarketplaceType::from($type);
-        $config = config("marketplaces.{$type}");
+        $marketplace  = MarketplaceType::from($type);
+        $config       = config("marketplaces.{$type}");
+        $clientId     = SystemSetting::get('marketplaces', "{$type}_client_id");
+        $clientSecret = SystemSetting::get('marketplaces', "{$type}_client_secret");
 
         // Exchange authorization code for tokens
         $response = Http::asForm()->post($config['token_url'], [
             'grant_type'    => 'authorization_code',
-            'client_id'     => $config['client_id'],
-            'client_secret' => $config['client_secret'],
+            'client_id'     => $clientId,
+            'client_secret' => $clientSecret,
             'code'          => $request->code,
             'redirect_uri'  => route('marketplaces.oauth.callback', $type),
         ]);
 
         if (! $response->successful()) {
             return redirect()->route('marketplaces.index')
-                ->with('error', "Falha ao obter tokens do {$marketplace->label()}. Verifique suas credenciais.");
+                ->with('error', "Falha ao obter tokens do {$marketplace->label()}. Verifique as credenciais em Configurações > Marketplaces.");
         }
 
         $tokens = $response->json();

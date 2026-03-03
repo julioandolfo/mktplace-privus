@@ -10,10 +10,11 @@ class SettingsController extends Controller
 {
     public function index()
     {
-        $generalSettings = SystemSetting::getGroup('general');
-        $aiProviders = AiProviderSetting::all();
+        $generalSettings     = SystemSetting::getGroup('general');
+        $marketplaceSettings = SystemSetting::getGroup('marketplaces');
+        $aiProviders         = AiProviderSetting::all();
 
-        return view('settings.index', compact('generalSettings', 'aiProviders'));
+        return view('settings.index', compact('generalSettings', 'marketplaceSettings', 'aiProviders'));
     }
 
     public function update(Request $request)
@@ -24,6 +25,8 @@ class SettingsController extends Controller
             $this->updateGeneralSettings($request);
         } elseif ($section === 'ai') {
             $this->updateAiSettings($request);
+        } elseif ($section === 'marketplaces') {
+            $this->updateMarketplaceSettings($request);
         }
 
         return redirect()->route('settings.index')
@@ -59,5 +62,29 @@ class SettingsController extends Controller
                 'is_active' => true,
             ]
         );
+    }
+
+    private function updateMarketplaceSettings(Request $request): void
+    {
+        // Campos de cada marketplace: [type => [field => label]]
+        $fields = [
+            'mercado_livre' => ['client_id', 'client_secret'],
+            'amazon'        => ['client_id', 'client_secret'],
+            'shopee'        => ['partner_id', 'partner_key'],
+            'tiktok'        => ['app_id', 'app_secret'],
+        ];
+
+        foreach ($fields as $type => $keys) {
+            foreach ($keys as $key) {
+                $inputName = "{$type}_{$key}";
+                if ($request->has($inputName)) {
+                    $value = $request->input($inputName);
+                    // Só atualiza se vier um valor novo (não apaga com placeholder "••••••••")
+                    if ($value !== '' && $value !== '••••••••') {
+                        SystemSetting::set('marketplaces', $inputName, $value);
+                    }
+                }
+            }
+        }
     }
 }

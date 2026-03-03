@@ -8,23 +8,32 @@
         </li>
     </x-slot>
 
-    <div x-data="{ tab: 'general' }" class="flex flex-col lg:flex-row gap-6">
+    <div x-data="{ tab: '{{ request('tab', 'general') }}' }" class="flex flex-col lg:flex-row gap-6">
         {{-- Settings sidebar --}}
         <div class="lg:w-64 flex-shrink-0">
             <nav class="card p-2 space-y-1">
-                <button @click="tab = 'general'" :class="tab === 'general' ? 'bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400' : 'text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-700'" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+                @php
+                    $navBtn = "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors";
+                    $navActive = "bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400";
+                    $navInactive = "text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-700";
+                @endphp
+                <button @click="tab = 'general'" :class="tab === 'general' ? '{{ $navActive }}' : '{{ $navInactive }}'" class="{{ $navBtn }}">
                     <x-heroicon-o-cog-6-tooth class="w-5 h-5" />
                     Geral
                 </button>
-                <button @click="tab = 'ai'" :class="tab === 'ai' ? 'bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400' : 'text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-700'" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+                <button @click="tab = 'marketplaces'" :class="tab === 'marketplaces' ? '{{ $navActive }}' : '{{ $navInactive }}'" class="{{ $navBtn }}">
+                    <x-heroicon-o-globe-alt class="w-5 h-5" />
+                    Marketplaces
+                </button>
+                <button @click="tab = 'ai'" :class="tab === 'ai' ? '{{ $navActive }}' : '{{ $navInactive }}'" class="{{ $navBtn }}">
                     <x-heroicon-o-sparkles class="w-5 h-5" />
                     Inteligencia Artificial
                 </button>
-                <button @click="tab = 'sync'" :class="tab === 'sync' ? 'bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400' : 'text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-700'" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+                <button @click="tab = 'sync'" :class="tab === 'sync' ? '{{ $navActive }}' : '{{ $navInactive }}'" class="{{ $navBtn }}">
                     <x-heroicon-o-arrow-path class="w-5 h-5" />
                     Sincronizacao
                 </button>
-                <button @click="tab = 'notifications'" :class="tab === 'notifications' ? 'bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400' : 'text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-700'" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+                <button @click="tab = 'notifications'" :class="tab === 'notifications' ? '{{ $navActive }}' : '{{ $navInactive }}'" class="{{ $navBtn }}">
                     <x-heroicon-o-bell class="w-5 h-5" />
                     Notificacoes
                 </button>
@@ -80,6 +89,145 @@
                             </div>
                         </x-slot>
                     </x-ui.card>
+                </form>
+            </div>
+
+            {{-- Marketplace settings --}}
+            <div x-show="tab === 'marketplaces'" x-transition>
+                <form method="POST" action="{{ route('settings.update') }}">
+                    @csrf
+                    <input type="hidden" name="section" value="marketplaces">
+
+                    <div class="space-y-6">
+                        {{-- Mercado Livre --}}
+                        <x-ui.card>
+                            <x-slot name="title">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full" style="background-color:#FFE600;"></span>
+                                    Mercado Livre
+                                    <span class="text-xs font-normal text-gray-500 dark:text-zinc-400">(OAuth)</span>
+                                </div>
+                            </x-slot>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+                                <div>
+                                    <label class="form-label">Client ID</label>
+                                    <input type="text" name="mercado_livre_client_id"
+                                           value="{{ $marketplaceSettings['mercado_livre_client_id'] ?? '' }}"
+                                           class="form-input font-mono" placeholder="APP_ID">
+                                    <p class="mt-1 text-xs text-gray-400 dark:text-zinc-500">Disponivel em developers.mercadolivre.com.br</p>
+                                </div>
+                                <div>
+                                    <label class="form-label">Client Secret</label>
+                                    <input type="password" name="mercado_livre_client_secret"
+                                           value="{{ !empty($marketplaceSettings['mercado_livre_client_secret']) ? '••••••••' : '' }}"
+                                           class="form-input font-mono" placeholder="Secret Key"
+                                           autocomplete="new-password">
+                                </div>
+                            </div>
+                        </x-ui.card>
+
+                        {{-- Amazon --}}
+                        <x-ui.card>
+                            <x-slot name="title">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full" style="background-color:#FF9900;"></span>
+                                    Amazon
+                                    <span class="text-xs font-normal text-gray-500 dark:text-zinc-400">(OAuth — Selling Partner API)</span>
+                                </div>
+                            </x-slot>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+                                <div>
+                                    <label class="form-label">Client ID</label>
+                                    <input type="text" name="amazon_client_id"
+                                           value="{{ $marketplaceSettings['amazon_client_id'] ?? '' }}"
+                                           class="form-input font-mono" placeholder="amzn1.application-oa2-client...">
+                                    <p class="mt-1 text-xs text-gray-400 dark:text-zinc-500">Gerado no Seller Central > Apps & Services</p>
+                                </div>
+                                <div>
+                                    <label class="form-label">Client Secret</label>
+                                    <input type="password" name="amazon_client_secret"
+                                           value="{{ !empty($marketplaceSettings['amazon_client_secret']) ? '••••••••' : '' }}"
+                                           class="form-input font-mono" placeholder="Secret"
+                                           autocomplete="new-password">
+                                </div>
+                            </div>
+                        </x-ui.card>
+
+                        {{-- Shopee --}}
+                        <x-ui.card>
+                            <x-slot name="title">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full" style="background-color:#EE4D2D;"></span>
+                                    Shopee
+                                    <span class="text-xs font-normal text-gray-500 dark:text-zinc-400">(Autenticacao HMAC)</span>
+                                </div>
+                            </x-slot>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+                                <div>
+                                    <label class="form-label">Partner ID</label>
+                                    <input type="text" name="shopee_partner_id"
+                                           value="{{ $marketplaceSettings['shopee_partner_id'] ?? '' }}"
+                                           class="form-input font-mono" placeholder="123456">
+                                    <p class="mt-1 text-xs text-gray-400 dark:text-zinc-500">Disponivel no Shopee Open Platform</p>
+                                </div>
+                                <div>
+                                    <label class="form-label">Partner Key</label>
+                                    <input type="password" name="shopee_partner_key"
+                                           value="{{ !empty($marketplaceSettings['shopee_partner_key']) ? '••••••••' : '' }}"
+                                           class="form-input font-mono" placeholder="Partner Key"
+                                           autocomplete="new-password">
+                                </div>
+                            </div>
+                        </x-ui.card>
+
+                        {{-- TikTok Shop --}}
+                        <x-ui.card>
+                            <x-slot name="title">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full bg-black dark:bg-white"></span>
+                                    TikTok Shop
+                                    <span class="text-xs font-normal text-gray-500 dark:text-zinc-400">(Requer aprovacao no Partner Center)</span>
+                                </div>
+                            </x-slot>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+                                <div>
+                                    <label class="form-label">App ID</label>
+                                    <input type="text" name="tiktok_app_id"
+                                           value="{{ $marketplaceSettings['tiktok_app_id'] ?? '' }}"
+                                           class="form-input font-mono" placeholder="App ID">
+                                    <p class="mt-1 text-xs text-gray-400 dark:text-zinc-500">Disponivel no TikTok Shop Partner Center</p>
+                                </div>
+                                <div>
+                                    <label class="form-label">App Secret</label>
+                                    <input type="password" name="tiktok_app_secret"
+                                           value="{{ !empty($marketplaceSettings['tiktok_app_secret']) ? '••••••••' : '' }}"
+                                           class="form-input font-mono" placeholder="App Secret"
+                                           autocomplete="new-password">
+                                </div>
+                            </div>
+                        </x-ui.card>
+
+                        {{-- WooCommerce info --}}
+                        <x-ui.card>
+                            <x-slot name="title">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full" style="background-color:#96588A;"></span>
+                                    WooCommerce
+                                </div>
+                            </x-slot>
+                            <div class="flex items-start gap-3 text-sm text-gray-600 dark:text-zinc-400 max-w-2xl">
+                                <x-heroicon-o-information-circle class="w-5 h-5 flex-shrink-0 text-blue-500 mt-0.5" />
+                                <p>O WooCommerce usa chaves de API REST geradas individualmente em cada loja do cliente. Essas credenciais sao configuradas diretamente no cadastro de cada conta de marketplace, nao aqui.</p>
+                            </div>
+                        </x-ui.card>
+                    </div>
+
+                    <div class="flex justify-end mt-6">
+                        <button type="submit" class="btn-primary">
+                            <x-heroicon-s-check class="w-4 h-4" />
+                            Salvar Credenciais
+                        </button>
+                    </div>
                 </form>
             </div>
 
