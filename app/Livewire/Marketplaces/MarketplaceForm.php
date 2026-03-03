@@ -36,55 +36,54 @@ class MarketplaceForm extends Component
     public bool   $auto_update_stock  = true;
     public string $sync_interval      = '30';
 
-    public function mount(?MarketplaceAccount $marketplace = null): void
+    public function mount(?int $marketplaceId = null): void
     {
-        if ($marketplace && $marketplace->exists) {
-            $this->marketplaceId    = $marketplace->id;
-            $this->marketplace_type = $marketplace->marketplace_type->value;
-            $this->isOAuth          = $marketplace->marketplace_type->supportsOAuth();
-            $this->account_name     = $marketplace->account_name;
-            $this->shop_id          = $marketplace->shop_id ?? '';
-            $this->status           = $marketplace->status->value;
-            $this->company_id       = $marketplace->company_id;
-
-            $type = $marketplace->marketplace_type->value;
-
-            // Decrypt credentials safely
-            try {
-                $creds = $marketplace->credentials ?? [];
-            } catch (\Exception $e) {
-                $creds = [];
-            }
-
-            // client_id/secret: from credentials or SystemSetting fallback
-            $this->client_id = $creds['client_id']
-                ?? SystemSetting::get('marketplaces', "{$type}_client_id")
-                ?? '';
-
-            $hasSecret = ! empty($creds['client_secret'])
-                || ! empty(SystemSetting::get('marketplaces', "{$type}_client_secret"));
-            $this->client_secret = $creds['client_secret']
-                ?? ($hasSecret ? '••••••••' : '');
-
-            $this->access_token  = $creds['access_token'] ?? '';
-            $this->refresh_token = $creds['refresh_token'] ?? '';
-            $this->api_url       = $creds['api_url'] ?? '';
-
-            try {
-                $settings = $marketplace->settings ?? [];
-            } catch (\Exception $e) {
-                $settings = [];
-            }
-
-            $this->auto_sync_products = $settings['auto_sync_products'] ?? true;
-            $this->auto_sync_orders   = $settings['auto_sync_orders'] ?? true;
-            $this->auto_update_stock  = $settings['auto_update_stock'] ?? true;
-            $this->sync_interval      = (string) ($settings['sync_interval'] ?? '30');
+        if ($marketplaceId) {
+            $this->marketplaceId = $marketplaceId;
+            $this->loadFromModel(MarketplaceAccount::findOrFail($marketplaceId));
         }
 
         if (! $this->company_id) {
             $this->company_id = Company::first()?->id;
         }
+    }
+
+    private function loadFromModel(MarketplaceAccount $marketplace): void
+    {
+        $this->marketplace_type = $marketplace->marketplace_type->value;
+        $this->isOAuth          = $marketplace->marketplace_type->supportsOAuth();
+        $this->account_name     = $marketplace->account_name;
+        $this->shop_id          = $marketplace->shop_id ?? '';
+        $this->status           = $marketplace->status->value;
+        $this->company_id       = $marketplace->company_id;
+
+        $type = $marketplace->marketplace_type->value;
+
+        try {
+            $creds = $marketplace->credentials ?? [];
+        } catch (\Exception $e) {
+            $creds = [];
+        }
+
+        $this->client_id = $creds['client_id']
+            ?? SystemSetting::get('marketplaces', "{$type}_client_id")
+            ?? '';
+
+        $hasSecret = ! empty($creds['client_secret'])
+            || ! empty(SystemSetting::get('marketplaces', "{$type}_client_secret"));
+        $this->client_secret = $creds['client_secret']
+            ?? ($hasSecret ? '••••••••' : '');
+
+        $this->access_token  = $creds['access_token'] ?? '';
+        $this->refresh_token = $creds['refresh_token'] ?? '';
+        $this->api_url       = $creds['api_url'] ?? '';
+
+        $settings = $marketplace->settings ?? [];
+
+        $this->auto_sync_products = $settings['auto_sync_products'] ?? true;
+        $this->auto_sync_orders   = $settings['auto_sync_orders'] ?? true;
+        $this->auto_update_stock  = $settings['auto_update_stock'] ?? true;
+        $this->sync_interval      = (string) ($settings['sync_interval'] ?? '30');
     }
 
     public function updatedMarketplaceType(string $value): void

@@ -12,5 +12,5 @@
         </li>
     </x-slot>
 
-    <livewire:marketplaces.marketplace-form :marketplace="$marketplace" />
+    <livewire:marketplaces.marketplace-form :marketplace-id="$marketplace->id" />
 </x-app-layout>
