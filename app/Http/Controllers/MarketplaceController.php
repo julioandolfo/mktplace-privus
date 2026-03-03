@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MarketplaceType;
 use App\Models\MarketplaceAccount;
 
 class MarketplaceController extends Controller
 {
     public function index()
     {
-        return view('marketplaces.index');
+        $accounts = MarketplaceAccount::with('company')->get()->keyBy(fn ($a) => $a->marketplace_type->value);
+
+        return view('marketplaces.index', [
+            'types'    => MarketplaceType::cases(),
+            'accounts' => $accounts,
+        ]);
     }
 
     public function create()

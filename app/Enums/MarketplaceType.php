@@ -31,4 +31,17 @@ enum MarketplaceType: string
             self::TikTok => '#000000',
         };
     }
+
+    public function supportsOAuth(): bool
+    {
+        return match ($this) {
+            self::MercadoLivre, self::Amazon => true,
+            self::Shopee, self::WooCommerce, self::TikTok => false,
+        };
+    }
+
+    public function oauthConfigKey(): string
+    {
+        return $this->value;
+    }
 }

@@ -3,6 +3,7 @@
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MarketplaceController;
+use App\Http\Controllers\MarketplaceOAuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
@@ -53,6 +54,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/marketplaces/create', [MarketplaceController::class, 'create'])->name('marketplaces.create');
     Route::get('/marketplaces/{marketplace}', [MarketplaceController::class, 'show'])->name('marketplaces.show');
     Route::get('/marketplaces/{marketplace}/edit', [MarketplaceController::class, 'edit'])->name('marketplaces.edit');
+
+    // Marketplaces OAuth
+    Route::get('/marketplaces/oauth/{type}/redirect', [MarketplaceOAuthController::class, 'redirect'])->name('marketplaces.oauth.redirect');
+    Route::get('/marketplaces/oauth/{type}/callback', [MarketplaceOAuthController::class, 'callback'])->name('marketplaces.oauth.callback');
 
     // Invoices (NF-e)
     Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
