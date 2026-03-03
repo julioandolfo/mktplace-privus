@@ -1,9 +1,151 @@
 @php $company = $company ?? null; @endphp
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div
+    class="grid grid-cols-1 lg:grid-cols-2 gap-6"
+    x-data="{
+        docType: @js(old('document_type', $company?->document_type ?? 'cnpj')),
+        loading: false,
+        apiError: '',
+
+        formatCnpj(v) {
+            v = v.replace(/\D/g, '').slice(0, 14);
+            if (v.length > 12) return v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8,12)+'-'+v.slice(12);
+            if (v.length > 8)  return v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8);
+            if (v.length > 5)  return v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5);
+            if (v.length > 2)  return v.slice(0,2)+'.'+v.slice(2);
+            return v;
+        },
+
+        formatCpf(v) {
+            v = v.replace(/\D/g, '').slice(0, 11);
+            if (v.length > 9) return v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9);
+            if (v.length > 6) return v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);
+            if (v.length > 3) return v.slice(0,3)+'.'+v.slice(3);
+            return v;
+        },
+
+        onDocInput(event) {
+            this.apiError = '';
+            let fmt = this.docType === 'cnpj'
+                ? this.formatCnpj(event.target.value)
+                : this.formatCpf(event.target.value);
+            event.target.value = fmt;
+            let digits = fmt.replace(/\D/g, '');
+            if (this.docType === 'cnpj' && digits.length === 14) {
+                this.fetchCnpj(digits);
+            }
+        },
+
+        onDocTypeChange() {
+            this.apiError = '';
+            let input = document.getElementById('document');
+            if (input) input.value = '';
+        },
+
+        async fetchCnpj(cnpj) {
+            this.loading = true;
+            this.apiError = '';
+            try {
+                const res = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + cnpj);
+                if (res.status === 404) {
+                    this.apiError = 'CNPJ não encontrado na Receita Federal.';
+                    return;
+                }
+                if (!res.ok) {
+                    this.apiError = 'Erro ao consultar CNPJ. Preencha os dados manualmente.';
+                    return;
+                }
+                const d = await res.json();
+
+                this.fill('name', d.nome_fantasia || d.razao_social || '');
+                this.fill('trade_name', d.razao_social || '');
+
+                if (d.ddd_telefone_1) {
+                    let p = d.ddd_telefone_1.replace(/\D/g, '');
+                    let fmtPhone = p.length >= 11
+                        ? '(' + p.slice(0,2) + ') ' + p.slice(2,7) + '-' + p.slice(7,11)
+                        : '(' + p.slice(0,2) + ') ' + p.slice(2,6) + '-' + p.slice(6,10);
+                    this.fill('phone', fmtPhone);
+                }
+                if (d.email) this.fill('email', d.email.toLowerCase());
+
+                if (d.cep) {
+                    let c = d.cep.replace(/\D/g, '');
+                    this.fill('address_zip_code', c.slice(0,5) + '-' + c.slice(5));
+                }
+                this.fill('address_street', d.logradouro || '');
+                this.fill('address_number', d.numero || '');
+                this.fill('address_complement', d.complemento || '');
+                this.fill('address_neighborhood', d.bairro || '');
+                this.fill('address_city', d.municipio || '');
+                if (d.uf) {
+                    let sel = document.getElementById('address_state');
+                    if (sel) sel.value = d.uf;
+                }
+
+            } catch (e) {
+                this.apiError = 'Erro de conexão ao consultar CNPJ.';
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        fill(id, value) {
+            let el = document.getElementById(id);
+            if (el && value) el.value = value;
+        },
+
+        init() {
+            let input = document.getElementById('document');
+            if (input && input.value) {
+                input.value = this.docType === 'cnpj'
+                    ? this.formatCnpj(input.value)
+                    : this.formatCpf(input.value);
+            }
+        }
+    }"
+>
     {{-- Company info --}}
     <x-ui.card title="Dados da Empresa">
         <div class="space-y-4">
+
+            {{-- CNPJ/CPF — primeiro campo --}}
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="document_type" class="form-label">Tipo *</label>
+                    <select id="document_type" name="document_type" class="form-input" x-model="docType" @change="onDocTypeChange()">
+                        <option value="cnpj">CNPJ</option>
+                        <option value="cpf">CPF</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="document" class="form-label">
+                        <span x-text="docType === 'cnpj' ? 'CNPJ *' : 'CPF *'">CNPJ *</span>
+                    </label>
+                    <div class="relative">
+                        <input
+                            type="text"
+                            id="document"
+                            name="document"
+                            value="{{ old('document', $company?->document) }}"
+                            class="form-input pr-8"
+                            :placeholder="docType === 'cnpj' ? '00.000.000/0001-00' : '000.000.000-00'"
+                            @input="onDocInput($event)"
+                            autocomplete="off"
+                            required
+                        >
+                        <div x-show="loading" class="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                            <svg class="animate-spin w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    @error('document') <p class="form-error">{{ $message }}</p> @enderror
+                    <p x-show="apiError" x-text="apiError" class="mt-1 text-xs text-red-500 dark:text-red-400"></p>
+                </div>
+            </div>
+
             <div>
                 <label for="name" class="form-label">Nome Fantasia *</label>
                 <input type="text" id="name" name="name" value="{{ old('name', $company?->name) }}" class="form-input" required>
@@ -14,21 +156,6 @@
                 <label for="trade_name" class="form-label">Razao Social</label>
                 <input type="text" id="trade_name" name="trade_name" value="{{ old('trade_name', $company?->trade_name) }}" class="form-input">
                 @error('trade_name') <p class="form-error">{{ $message }}</p> @enderror
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label for="document_type" class="form-label">Tipo *</label>
-                    <select id="document_type" name="document_type" class="form-input">
-                        <option value="cnpj" {{ old('document_type', $company?->document_type) === 'cnpj' ? 'selected' : '' }}>CNPJ</option>
-                        <option value="cpf" {{ old('document_type', $company?->document_type) === 'cpf' ? 'selected' : '' }}>CPF</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="document" class="form-label">Documento *</label>
-                    <input type="text" id="document" name="document" value="{{ old('document', $company?->document) }}" class="form-input" required>
-                    @error('document') <p class="form-error">{{ $message }}</p> @enderror
-                </div>
             </div>
 
             <div class="grid grid-cols-2 gap-4">
