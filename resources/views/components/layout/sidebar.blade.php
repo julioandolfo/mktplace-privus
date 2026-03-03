@@ -48,7 +48,7 @@
         {{-- Sales --}}
         <div x-show="sidebarOpen" class="px-3 mt-6 mb-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Vendas</div>
 
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('orders.index') }}" class="sidebar-link {{ request()->routeIs('orders.*') ? 'active' : '' }}">
             <x-heroicon-o-shopping-bag class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Pedidos</span>
         </a>
@@ -135,11 +135,11 @@
             <x-heroicon-o-building-office class="icon" />
             <span>Empresas</span>
         </a>
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('products.index') }}" class="sidebar-link {{ request()->routeIs('products.*') ? 'active' : '' }}">
             <x-heroicon-o-cube class="icon" />
             <span>Produtos</span>
         </a>
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('orders.index') }}" class="sidebar-link {{ request()->routeIs('orders.*') ? 'active' : '' }}">
             <x-heroicon-o-shopping-bag class="icon" />
             <span>Pedidos</span>
         </a>
