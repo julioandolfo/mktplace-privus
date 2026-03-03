@@ -58,6 +58,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/marketplaces/create', [MarketplaceController::class, 'create'])->name('marketplaces.create');
     Route::get('/marketplaces/{marketplace}', [MarketplaceController::class, 'show'])->name('marketplaces.show');
     Route::get('/marketplaces/{marketplace}/edit', [MarketplaceController::class, 'edit'])->name('marketplaces.edit');
+    Route::put('/marketplaces/{marketplace}', [MarketplaceController::class, 'update'])->name('marketplaces.update');
 
     // Marketplaces OAuth
     Route::get('/marketplaces/oauth/{type}/redirect', [MarketplaceOAuthController::class, 'redirect'])->name('marketplaces.oauth.redirect');
