@@ -53,12 +53,12 @@
             <span x-show="sidebarOpen" x-transition.opacity>Pedidos</span>
         </a>
 
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('production.index') }}" class="sidebar-link {{ request()->routeIs('production.*') ? 'active' : '' }}">
             <x-heroicon-o-wrench-screwdriver class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Producao</span>
         </a>
 
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('expedition.index') }}" class="sidebar-link {{ request()->routeIs('expedition.*') ? 'active' : '' }}">
             <x-heroicon-o-truck class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Expedicao</span>
         </a>
@@ -71,7 +71,7 @@
             <span x-show="sidebarOpen" x-transition.opacity>Marketplaces</span>
         </a>
 
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('invoices.index') }}" class="sidebar-link {{ request()->routeIs('invoices.*') ? 'active' : '' }}">
             <x-heroicon-o-document-text class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Notas Fiscais</span>
         </a>
@@ -143,13 +143,17 @@
             <x-heroicon-o-shopping-bag class="icon" />
             <span>Pedidos</span>
         </a>
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('production.index') }}" class="sidebar-link {{ request()->routeIs('production.*') ? 'active' : '' }}">
+            <x-heroicon-o-wrench-screwdriver class="icon" />
+            <span>Producao</span>
+        </a>
+        <a href="{{ route('expedition.index') }}" class="sidebar-link {{ request()->routeIs('expedition.*') ? 'active' : '' }}">
             <x-heroicon-o-truck class="icon" />
             <span>Expedicao</span>
         </a>
-        <a href="#" class="sidebar-link">
-            <x-heroicon-o-globe-alt class="icon" />
-            <span>Marketplaces</span>
+        <a href="{{ route('invoices.index') }}" class="sidebar-link {{ request()->routeIs('invoices.*') ? 'active' : '' }}">
+            <x-heroicon-o-document-text class="icon" />
+            <span>Notas Fiscais</span>
         </a>
         <a href="{{ route('settings.index') }}" class="sidebar-link {{ request()->routeIs('settings.*') ? 'active' : '' }}">
             <x-heroicon-o-cog-6-tooth class="icon" />

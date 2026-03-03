@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
@@ -35,6 +36,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/orders/create', [OrderController::class, 'create'])->name('orders.create');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::get('/orders/{order}/edit', [OrderController::class, 'edit'])->name('orders.edit');
+
+    // Production
+    Route::get('/production', function () {
+        return view('production.index');
+    })->name('production.index');
+
+    // Expedition
+    Route::get('/expedition', function () {
+        return view('expedition.index');
+    })->name('expedition.index');
+
+    // Invoices (NF-e)
+    Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
+    Route::get('/invoices/create', [InvoiceController::class, 'create'])->name('invoices.create');
+    Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
 
     // Kits
     Route::get('/kits', function () {

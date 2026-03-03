@@ -97,6 +97,11 @@ class Order extends Model
         return $this->hasMany(OrderItem::class);
     }
 
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
     // Scopes
 
     public function scopeSearch(Builder $query, string $term): Builder
