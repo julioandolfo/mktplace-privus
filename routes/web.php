@@ -4,6 +4,7 @@ use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MarketplaceController;
 use App\Http\Controllers\MarketplaceOAuthController;
+use App\Http\Controllers\MarketplaceWebhookController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
@@ -13,6 +14,9 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return redirect()->route('login');
 });
+
+// Marketplace Webhooks — públicos, sem autenticação (chamados pelos marketplaces)
+Route::post('/webhooks/{type}', [MarketplaceWebhookController::class, 'handle'])->name('webhooks.marketplace');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard

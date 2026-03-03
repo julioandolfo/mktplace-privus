@@ -94,6 +94,98 @@
 
             {{-- Marketplace settings --}}
             <div x-show="tab === 'marketplaces'" x-transition>
+
+                {{-- URLs de Integração --}}
+                <x-ui.card class="mb-6">
+                    <x-slot name="title">
+                        <div class="flex items-center gap-2">
+                            <x-heroicon-o-link class="w-5 h-5 text-primary-500" />
+                            URLs de Integracao
+                        </div>
+                    </x-slot>
+                    <p class="text-sm text-gray-500 dark:text-zinc-400 mb-4">
+                        Configure estas URLs no painel de desenvolvedor de cada marketplace ao registrar seu app.
+                    </p>
+
+                    @php
+                        $integrationUrls = [
+                            [
+                                'label'       => 'Mercado Livre — OAuth Redirect URI',
+                                'description' => 'Configurar em: developers.mercadolivre.com.br → seu app → "URI de redirecionamento"',
+                                'url'         => route('marketplaces.oauth.callback', 'mercado_livre'),
+                                'color'       => '#FFE600',
+                            ],
+                            [
+                                'label'       => 'Mercado Livre — Webhook / Notificações',
+                                'description' => 'Configurar em: developers.mercadolivre.com.br → seu app → "URL de notificações"',
+                                'url'         => route('webhooks.marketplace', 'mercado_livre'),
+                                'color'       => '#FFE600',
+                            ],
+                            [
+                                'label'       => 'Amazon — OAuth Redirect URI',
+                                'description' => 'Configurar em: Seller Central → Apps & Services → Develop Apps → seu app → OAuth Login URI',
+                                'url'         => route('marketplaces.oauth.callback', 'amazon'),
+                                'color'       => '#FF9900',
+                            ],
+                            [
+                                'label'       => 'Amazon — Webhook',
+                                'description' => 'Configurar em: Seller Central → Notifications → Destination',
+                                'url'         => route('webhooks.marketplace', 'amazon'),
+                                'color'       => '#FF9900',
+                            ],
+                            [
+                                'label'       => 'Shopee — Webhook / Push URL',
+                                'description' => 'Configurar em: Open Platform → App Config → Push URL',
+                                'url'         => route('webhooks.marketplace', 'shopee'),
+                                'color'       => '#EE4D2D',
+                            ],
+                            [
+                                'label'       => 'TikTok Shop — Webhook',
+                                'description' => 'Configurar em: Partner Center → App → Webhook URL',
+                                'url'         => route('webhooks.marketplace', 'tiktok'),
+                                'color'       => '#000000',
+                            ],
+                            [
+                                'label'       => 'WooCommerce — Webhook',
+                                'description' => 'Configurar em: painel WooCommerce do cliente → WooCommerce → Configurações → Avancado → Webhooks',
+                                'url'         => route('webhooks.marketplace', 'woocommerce'),
+                                'color'       => '#96588A',
+                            ],
+                        ];
+                    @endphp
+
+                    <div class="space-y-2" x-data="{ copied: null }">
+                        @foreach($integrationUrls as $i => $item)
+                        <div class="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50 border border-gray-200 dark:border-zinc-700">
+                            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5" style="background-color: {{ $item['color'] }}"></span>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-xs font-medium text-gray-700 dark:text-zinc-300">{{ $item['label'] }}</p>
+                                <p class="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">{{ $item['description'] }}</p>
+                                <div class="flex items-center gap-2 mt-1.5">
+                                    <code class="text-xs font-mono text-primary-700 dark:text-primary-400 truncate flex-1">{{ $item['url'] }}</code>
+                                    <button type="button"
+                                        @click="navigator.clipboard.writeText('{{ $item['url'] }}'); copied = {{ $i }}; setTimeout(() => copied = null, 2000)"
+                                        class="flex-shrink-0 flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-300 dark:border-zinc-600 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors">
+                                        <template x-if="copied !== {{ $i }}">
+                                            <span class="flex items-center gap-1">
+                                                <x-heroicon-o-clipboard class="w-3.5 h-3.5" />
+                                                Copiar
+                                            </span>
+                                        </template>
+                                        <template x-if="copied === {{ $i }}">
+                                            <span class="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                                <x-heroicon-s-check class="w-3.5 h-3.5" />
+                                                Copiado
+                                            </span>
+                                        </template>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+                </x-ui.card>
+
                 <form method="POST" action="{{ route('settings.update') }}">
                     @csrf
                     <input type="hidden" name="section" value="marketplaces">
