@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\Company;
 use App\Models\StockLocation;
 use App\Models\SystemSetting;
 use App\Models\User;
@@ -14,6 +15,14 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // Default company (required for marketplace accounts)
+        Company::create([
+            'name'          => 'Minha Empresa',
+            'document_type' => 'cnpj',
+            'document'      => '00.000.000/0001-00',
+            'is_active'     => true,
+        ]);
+
         // Admin user
         User::create([
             'name' => 'Admin',

@@ -57,31 +57,44 @@ class MarketplaceOAuthController extends Controller
                 ->with('error', 'Autorização negada: ' . $request->error_description);
         }
 
+        // Verificar se existe ao menos uma empresa cadastrada
+        $company = Company::first();
+        if (! $company) {
+            session()->forget(['oauth_state', 'oauth_type']);
+            return redirect()->route('companies.create')
+                ->with('error', 'Cadastre uma empresa antes de conectar um marketplace.');
+        }
+
         $marketplace  = MarketplaceType::from($type);
         $config       = config("marketplaces.{$type}");
         $clientId     = SystemSetting::get('marketplaces', "{$type}_client_id");
         $clientSecret = SystemSetting::get('marketplaces', "{$type}_client_secret");
 
         // Exchange authorization code for tokens
-        $response = Http::asForm()->post($config['token_url'], [
-            'grant_type'    => 'authorization_code',
-            'client_id'     => $clientId,
-            'client_secret' => $clientSecret,
-            'code'          => $request->code,
-            'redirect_uri'  => route('marketplaces.oauth.callback', $type),
-        ]);
-
-        if (! $response->successful()) {
+        try {
+            $response = Http::timeout(15)->asForm()->post($config['token_url'], [
+                'grant_type'    => 'authorization_code',
+                'client_id'     => $clientId,
+                'client_secret' => $clientSecret,
+                'code'          => $request->code,
+                'redirect_uri'  => route('marketplaces.oauth.callback', $type),
+            ]);
+        } catch (\Exception $e) {
+            session()->forget(['oauth_state', 'oauth_type']);
             return redirect()->route('marketplaces.index')
-                ->with('error', "Falha ao obter tokens do {$marketplace->label()}. Verifique as credenciais em Configurações > Marketplaces.");
+                ->with('error', "Erro de conexão ao trocar tokens com {$marketplace->label()}: {$e->getMessage()}");
         }
 
-        $tokens = $response->json();
+        if (! $response->successful()) {
+            session()->forget(['oauth_state', 'oauth_type']);
+            return redirect()->route('marketplaces.index')
+                ->with('error', "Falha ao obter tokens do {$marketplace->label()} (HTTP {$response->status()}). Verifique as credenciais em Configurações > Marketplaces.");
+        }
 
-        $companyId = Company::first()?->id;
-        $shopId = (string) ($tokens['user_id'] ?? $tokens['seller_id'] ?? $tokens['account_id'] ?? null);
+        $tokens      = $response->json();
+        $shopId      = (string) ($tokens['user_id'] ?? $tokens['seller_id'] ?? $tokens['account_id'] ?? '');
         $accountName = $tokens['nickname'] ?? ($marketplace->label() . ' ' . now()->format('d/m/Y H:i'));
-        $expiresAt = isset($tokens['expires_in']) ? now()->addSeconds($tokens['expires_in']) : null;
+        $expiresAt   = isset($tokens['expires_in']) ? now()->addSeconds($tokens['expires_in']) : null;
 
         MarketplaceAccount::updateOrCreate(
             [
@@ -89,7 +102,7 @@ class MarketplaceOAuthController extends Controller
                 'shop_id'          => $shopId ?: null,
             ],
             [
-                'company_id'      => $companyId,
+                'company_id'      => $company->id,
                 'account_name'    => $accountName,
                 'credentials'     => [
                     'access_token'  => $tokens['access_token'],
