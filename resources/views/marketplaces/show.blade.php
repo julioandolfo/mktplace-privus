@@ -55,7 +55,7 @@
                     @php $creds = $marketplace->credentials ?? []; @endphp
                     <div class="flex items-center justify-between">
                         <span class="text-gray-600 dark:text-zinc-400">Client ID</span>
-                        @if(!empty($creds['client_id']))
+                        @if(!empty($creds['client_id']) || $sysClientId)
                             <span class="flex items-center gap-1 text-green-600 dark:text-green-400">
                                 <x-heroicon-s-check-circle class="w-4 h-4" />
                                 Configurado
@@ -69,7 +69,7 @@
                     </div>
                     <div class="flex items-center justify-between">
                         <span class="text-gray-600 dark:text-zinc-400">Client Secret</span>
-                        @if(!empty($creds['client_secret']))
+                        @if(!empty($creds['client_secret']) || $sysClientSecret)
                             <span class="flex items-center gap-1 text-green-600 dark:text-green-400">
                                 <x-heroicon-s-check-circle class="w-4 h-4" />
                                 Configurado

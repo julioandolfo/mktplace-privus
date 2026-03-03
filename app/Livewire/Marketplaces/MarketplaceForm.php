@@ -6,6 +6,7 @@ use App\Enums\AccountStatus;
 use App\Enums\MarketplaceType;
 use App\Models\Company;
 use App\Models\MarketplaceAccount;
+use App\Models\SystemSetting;
 use Livewire\Component;
 
 class MarketplaceForm extends Component
@@ -43,17 +44,26 @@ class MarketplaceForm extends Component
             $this->company_id = $marketplace->company_id;
 
             $creds = $marketplace->credentials ?? [];
-            $this->client_id = $creds['client_id'] ?? '';
-            $this->client_secret = $creds['client_secret'] ?? '';
-            $this->access_token = $creds['access_token'] ?? '';
+            $type  = $marketplace->marketplace_type->value;
+
+            // Client ID: prefer per-account credential, fallback to SystemSetting
+            $this->client_id = $creds['client_id']
+                ?? SystemSetting::get('marketplaces', "{$type}_client_id")
+                ?? '';
+
+            // Client Secret: show placeholder if set in SystemSetting but not per-account
+            $this->client_secret = $creds['client_secret']
+                ?? (SystemSetting::get('marketplaces', "{$type}_client_secret") ? '••••••••' : '');
+
+            $this->access_token  = $creds['access_token'] ?? '';
             $this->refresh_token = $creds['refresh_token'] ?? '';
-            $this->api_url = $creds['api_url'] ?? '';
+            $this->api_url       = $creds['api_url'] ?? '';
 
             $settings = $marketplace->settings ?? [];
             $this->auto_sync_products = $settings['auto_sync_products'] ?? true;
-            $this->auto_sync_orders = $settings['auto_sync_orders'] ?? true;
-            $this->auto_update_stock = $settings['auto_update_stock'] ?? true;
-            $this->sync_interval = (string) ($settings['sync_interval'] ?? '30');
+            $this->auto_sync_orders   = $settings['auto_sync_orders'] ?? true;
+            $this->auto_update_stock  = $settings['auto_update_stock'] ?? true;
+            $this->sync_interval      = (string) ($settings['sync_interval'] ?? '30');
         }
 
         if (! $this->company_id) {
@@ -65,41 +75,51 @@ class MarketplaceForm extends Component
     {
         $validated = $this->validate([
             'marketplace_type' => 'required|in:' . implode(',', array_column(MarketplaceType::cases(), 'value')),
-            'account_name' => 'required|string|max:255',
-            'shop_id' => 'nullable|string|max:100',
-            'status' => 'required|in:' . implode(',', array_column(AccountStatus::cases(), 'value')),
-            'company_id' => 'required|exists:companies,id',
-            'client_id' => 'nullable|string|max:500',
-            'client_secret' => 'nullable|string|max:500',
-            'access_token' => 'nullable|string|max:2000',
-            'refresh_token' => 'nullable|string|max:2000',
-            'api_url' => 'nullable|url|max:500',
-            'sync_interval' => 'required|integer|min:5|max:1440',
+            'account_name'     => 'required|string|max:255',
+            'shop_id'          => 'nullable|string|max:100',
+            'status'           => 'required|in:' . implode(',', array_column(AccountStatus::cases(), 'value')),
+            'company_id'       => 'required|exists:companies,id',
+            'client_id'        => 'nullable|string|max:500',
+            'client_secret'    => 'nullable|string|max:500',
+            'access_token'     => 'nullable|string|max:2000',
+            'refresh_token'    => 'nullable|string|max:2000',
+            'api_url'          => 'nullable|url|max:500',
+            'sync_interval'    => 'required|integer|min:5|max:1440',
         ]);
 
+        // If client_secret was not changed (placeholder), keep the existing value
+        $clientSecret = $this->client_secret;
+        if ($clientSecret === '••••••••') {
+            $existingCreds = $this->marketplace?->credentials ?? [];
+            $type          = $this->marketplace_type;
+            $clientSecret  = $existingCreds['client_secret']
+                ?? SystemSetting::get('marketplaces', "{$type}_client_secret")
+                ?? '';
+        }
+
         $credentials = array_filter([
-            'client_id' => $this->client_id,
-            'client_secret' => $this->client_secret,
-            'access_token' => $this->access_token,
+            'client_id'     => $this->client_id,
+            'client_secret' => $clientSecret,
+            'access_token'  => $this->access_token,
             'refresh_token' => $this->refresh_token,
-            'api_url' => $this->api_url,
+            'api_url'       => $this->api_url,
         ]);
 
         $settings = [
             'auto_sync_products' => $this->auto_sync_products,
-            'auto_sync_orders' => $this->auto_sync_orders,
-            'auto_update_stock' => $this->auto_update_stock,
-            'sync_interval' => (int) $this->sync_interval,
+            'auto_sync_orders'   => $this->auto_sync_orders,
+            'auto_update_stock'  => $this->auto_update_stock,
+            'sync_interval'      => (int) $this->sync_interval,
         ];
 
         $data = [
-            'company_id' => $this->company_id,
+            'company_id'       => $this->company_id,
             'marketplace_type' => $this->marketplace_type,
-            'account_name' => $this->account_name,
-            'shop_id' => $this->shop_id ?: null,
-            'status' => $this->status,
-            'credentials' => ! empty($credentials) ? $credentials : null,
-            'settings' => $settings,
+            'account_name'     => $this->account_name,
+            'shop_id'          => $this->shop_id ?: null,
+            'status'           => $this->status,
+            'credentials'      => ! empty($credentials) ? $credentials : null,
+            'settings'         => $settings,
         ];
 
         if ($this->marketplace) {
@@ -116,8 +136,8 @@ class MarketplaceForm extends Component
     {
         return view('livewire.marketplaces.marketplace-form', [
             'companies' => Company::orderBy('name')->get(),
-            'types' => MarketplaceType::cases(),
-            'statuses' => AccountStatus::cases(),
+            'types'     => MarketplaceType::cases(),
+            'statuses'  => AccountStatus::cases(),
         ]);
     }
 }
