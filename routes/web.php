@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MarketplaceController;
+use App\Http\Controllers\MarketplaceListingController;
 use App\Http\Controllers\MarketplaceOAuthController;
 use App\Http\Controllers\MarketplaceWebhookController;
 use App\Http\Controllers\OrderController;
@@ -80,6 +82,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/stock', function () {
         return view('stock.index');
     })->name('stock.index');
+
+    // Customers
+    Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
+    Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
+
+    // Marketplace Listings (Anuncios)
+    Route::get('/listings', [MarketplaceListingController::class, 'index'])->name('listings.index');
+    Route::get('/listings/{listing}', [MarketplaceListingController::class, 'show'])->name('listings.show');
+    Route::post('/listings/{listing}/link-product', [MarketplaceListingController::class, 'linkProduct'])->name('listings.link-product');
+    Route::post('/listings/{listing}/create-product', [MarketplaceListingController::class, 'createProduct'])->name('listings.create-product');
+    Route::delete('/listings/{listing}/unlink-product', [MarketplaceListingController::class, 'unlinkProduct'])->name('listings.unlink-product');
 
     // Logs
     Route::get('/logs', [ActivityLogController::class, 'index'])->name('logs.index');

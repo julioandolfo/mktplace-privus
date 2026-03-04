@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Enums\MarketplaceType;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Models\Customer;
 use App\Models\MarketplaceAccount;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -54,7 +55,6 @@ class SyncMarketplaceOrders extends Command
     {
         $this->info("Sincronizando pedidos: [{$account->id}] {$account->account_name}");
 
-        // Determine start date: last sync minus 1h overlap, or N days back
         $since = $account->last_synced_at
             ? $account->last_synced_at->subHour()
             : now()->subDays((int) $this->option('days'));
@@ -106,7 +106,7 @@ class SyncMarketplaceOrders extends Command
         // Shipping / tracking
         $trackingCode = null;
         $shippingCost = 0;
-        $shipment = [];
+        $shipment     = [];
 
         if (! empty($ml['shipping']['id'])) {
             $shipment     = $service->getShipping((string) $ml['shipping']['id']);
@@ -114,20 +114,34 @@ class SyncMarketplaceOrders extends Command
             $shippingCost = $shipment['shipping_option']['cost'] ?? 0;
         }
 
-        // Build shipping address from shipment receiver
         $receiver        = $shipment['receiver_address'] ?? [];
         $shippingAddress = ! empty($receiver) ? [
-            'street'     => ($receiver['street_name'] ?? '') . ' ' . ($receiver['street_number'] ?? ''),
-            'city'       => $receiver['city']['name'] ?? '',
-            'state'      => $receiver['state']['name'] ?? '',
-            'zip'        => $receiver['zip_code'] ?? '',
-            'country'    => $receiver['country']['id'] ?? 'BR',
+            'street'  => ($receiver['street_name'] ?? '') . ' ' . ($receiver['street_number'] ?? ''),
+            'city'    => $receiver['city']['name'] ?? '',
+            'state'   => $receiver['state']['name'] ?? '',
+            'zip'     => $receiver['zip_code'] ?? '',
+            'country' => $receiver['country']['id'] ?? 'BR',
         ] : null;
 
         $total    = (float) ($payment['transaction_amount'] ?? 0);
         $subtotal = $total - $shippingCost;
 
-        DB::transaction(function () use ($account, $ml, $buyer, $orderStatus, $paymentStatus, $payment, $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal) {
+        $customerName  = trim(($buyer['first_name'] ?? '') . ' ' . ($buyer['last_name'] ?? ''))
+                         ?: ($buyer['nickname'] ?? 'Comprador ML');
+        $customerEmail = ! empty($buyer['email']) ? $buyer['email'] : null;
+        $mlUserId      = $buyer['id'] ?? null;
+
+        DB::transaction(function () use (
+            $account, $ml, $buyer, $orderStatus, $paymentStatus, $payment,
+            $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal,
+            $customerName, $customerEmail, $mlUserId, $receiver
+        ) {
+            // ── Upsert Customer ──────────────────────────────────────────────
+            $customer = $this->upsertCustomer(
+                $account, $customerName, $customerEmail, $mlUserId, $buyer, $receiver
+            );
+
+            // ── Upsert Order ─────────────────────────────────────────────────
             $order = Order::updateOrCreate(
                 [
                     'marketplace_account_id' => $account->id,
@@ -135,28 +149,31 @@ class SyncMarketplaceOrders extends Command
                 ],
                 [
                     'company_id'      => $account->company_id,
+                    'customer_id'     => $customer?->id,
                     'status'          => $orderStatus,
                     'payment_status'  => $paymentStatus,
                     'payment_method'  => $payment['payment_type'] ?? null,
-                    'customer_name'   => $buyer['nickname'] ?? ($buyer['first_name'] ?? '') . ' ' . ($buyer['last_name'] ?? ''),
-                    'customer_email'  => $buyer['email'] ?? null,
+                    'customer_name'   => $customerName,
+                    'customer_email'  => $customerEmail,
                     'shipping_address' => $shippingAddress,
                     'subtotal'        => max(0, $subtotal),
                     'shipping_cost'   => $shippingCost,
                     'discount'        => 0,
                     'total'           => $total,
                     'tracking_code'   => $trackingCode,
-                    'paid_at'         => $paymentStatus === PaymentStatus::Paid ? ($payment['date_approved'] ? now()->parse($payment['date_approved']) : null) : null,
-                    'meta'            => [
-                        'ml_order_id'   => $ml['id'],
-                        'ml_status'     => $ml['status'],
-                        'ml_payment_id' => $payment['id'] ?? null,
+                    'paid_at'         => $paymentStatus === PaymentStatus::Paid
+                        ? (! empty($payment['date_approved']) ? now()->parse($payment['date_approved']) : null)
+                        : null,
+                    'meta' => [
+                        'ml_order_id'    => $ml['id'],
+                        'ml_status'      => $ml['status'],
+                        'ml_payment_id'  => $payment['id'] ?? null,
                         'ml_shipping_id' => $ml['shipping']['id'] ?? null,
                     ],
                 ]
             );
 
-            // Upsert order items
+            // ── Upsert Order Items ────────────────────────────────────────────
             foreach ($ml['order_items'] ?? [] as $mlItem) {
                 $product = null;
                 $mlSku   = $mlItem['item']['seller_sku'] ?? null;
@@ -168,7 +185,6 @@ class SyncMarketplaceOrders extends Command
                 $unitPrice = (float) ($mlItem['unit_price'] ?? 0);
                 $quantity  = (int) ($mlItem['quantity'] ?? 1);
 
-                // Check if item already exists (by ML item ID in meta)
                 $existing = $order->items()
                     ->whereJsonContains('meta->ml_item_id', $mlItem['item']['id'] ?? null)
                     ->first();
@@ -195,5 +211,56 @@ class SyncMarketplaceOrders extends Command
                 }
             }
         });
+    }
+
+    private function upsertCustomer(
+        MarketplaceAccount $account,
+        string $name,
+        ?string $email,
+        ?int $mlUserId,
+        array $buyer,
+        array $receiver
+    ): ?Customer {
+        $companyId = $account->company_id;
+
+        $newData = array_filter([
+            'name'    => $name,
+            'email'   => $email,
+            'phone'   => $buyer['phone']['number'] ?? null,
+            'address' => ! empty($receiver) ? [
+                'street'  => ($receiver['street_name'] ?? '') . ' ' . ($receiver['street_number'] ?? ''),
+                'city'    => $receiver['city']['name'] ?? '',
+                'state'   => $receiver['state']['name'] ?? '',
+                'zip'     => $receiver['zip_code'] ?? '',
+            ] : null,
+            'meta'    => $mlUserId ? ['ml_user_id' => $mlUserId] : null,
+        ]);
+
+        // 1. Try by email
+        if ($email) {
+            $customer = Customer::where('company_id', $companyId)
+                ->where('email', $email)
+                ->first();
+
+            if ($customer) {
+                $customer->fill(array_filter($newData))->save();
+                return $customer;
+            }
+        }
+
+        // 2. Try by ML user ID in meta
+        if ($mlUserId) {
+            $customer = Customer::where('company_id', $companyId)
+                ->whereJsonContains('meta->ml_user_id', $mlUserId)
+                ->first();
+
+            if ($customer) {
+                $customer->fill(array_filter($newData))->save();
+                return $customer;
+            }
+        }
+
+        // 3. Create new
+        return Customer::create(array_merge(['company_id' => $companyId], array_filter($newData)));
     }
 }

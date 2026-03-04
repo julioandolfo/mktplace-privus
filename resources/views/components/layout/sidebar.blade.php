@@ -63,6 +63,11 @@
             <span x-show="sidebarOpen" x-transition.opacity>Expedicao</span>
         </a>
 
+        <a href="{{ route('customers.index') }}" class="sidebar-link {{ request()->routeIs('customers.*') ? 'active' : '' }}">
+            <x-heroicon-o-users class="icon" />
+            <span x-show="sidebarOpen" x-transition.opacity>Clientes</span>
+        </a>
+
         {{-- Integrations --}}
         <div x-show="sidebarOpen" class="px-3 mt-6 mb-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Integracoes</div>
 
@@ -79,7 +84,7 @@
         {{-- Intelligence --}}
         <div x-show="sidebarOpen" class="px-3 mt-6 mb-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Inteligencia</div>
 
-        <a href="#" class="sidebar-link">
+        <a href="{{ route('listings.index') }}" class="sidebar-link {{ request()->routeIs('listings.*') ? 'active' : '' }}">
             <x-heroicon-o-megaphone class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Anuncios</span>
         </a>
@@ -155,6 +160,10 @@
             <x-heroicon-o-truck class="icon" />
             <span>Expedicao</span>
         </a>
+        <a href="{{ route('customers.index') }}" class="sidebar-link {{ request()->routeIs('customers.*') ? 'active' : '' }}">
+            <x-heroicon-o-users class="icon" />
+            <span>Clientes</span>
+        </a>
         <a href="{{ route('marketplaces.index') }}" class="sidebar-link {{ request()->routeIs('marketplaces.*') ? 'active' : '' }}">
             <x-heroicon-o-globe-alt class="icon" />
             <span>Marketplaces</span>
@@ -162,6 +171,10 @@
         <a href="{{ route('invoices.index') }}" class="sidebar-link {{ request()->routeIs('invoices.*') ? 'active' : '' }}">
             <x-heroicon-o-document-text class="icon" />
             <span>Notas Fiscais</span>
+        </a>
+        <a href="{{ route('listings.index') }}" class="sidebar-link {{ request()->routeIs('listings.*') ? 'active' : '' }}">
+            <x-heroicon-o-megaphone class="icon" />
+            <span>Anuncios</span>
         </a>
         <a href="{{ route('logs.index') }}" class="sidebar-link {{ request()->routeIs('logs.*') ? 'active' : '' }}">
             <x-heroicon-o-clipboard-document-list class="icon" />

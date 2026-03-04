@@ -17,7 +17,7 @@ class Order extends Model
     use SoftDeletes, LogsActivity;
 
     protected $fillable = [
-        'order_number', 'company_id', 'marketplace_account_id', 'external_id',
+        'order_number', 'company_id', 'marketplace_account_id', 'customer_id', 'external_id',
         'status', 'payment_status', 'payment_method',
         'customer_name', 'customer_email', 'customer_phone', 'customer_document',
         'shipping_address', 'billing_address',
@@ -85,6 +85,11 @@ class Order extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function marketplaceAccount(): BelongsTo

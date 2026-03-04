@@ -3,9 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Enums\MarketplaceType;
-use App\Enums\ProductStatus;
 use App\Models\MarketplaceAccount;
-use App\Models\Product;
+use App\Models\MarketplaceListing;
 use App\Services\Marketplaces\MercadoLivreService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -15,7 +14,7 @@ class SyncMarketplaceListings extends Command
     protected $signature = 'marketplace:sync-listings
                             {--account= : ID de conta específica (padrão: todas ativas)}';
 
-    protected $description = 'Importa anúncios/listings do Mercado Livre para o catálogo de produtos';
+    protected $description = 'Importa anúncios do Mercado Livre para marketplace_listings (sem criar produtos automaticamente)';
 
     public function handle(): int
     {
@@ -50,20 +49,15 @@ class SyncMarketplaceListings extends Command
         $this->info("Sincronizando anúncios: [{$account->id}] {$account->account_name}");
 
         $service = new MercadoLivreService($account);
-        $updated = 0;
-        $created = 0;
-        $errors  = 0;
+        $upserted = 0;
+        $errors   = 0;
 
         try {
             foreach ($service->getListings() as $batch) {
                 foreach ($batch as $mlItem) {
                     try {
-                        $result = $this->upsertListing($mlItem);
-                        if ($result === 'created') {
-                            $created++;
-                        } else {
-                            $updated++;
-                        }
+                        $this->upsertListing($account, $mlItem);
+                        $upserted++;
                     } catch (\Throwable $e) {
                         $errors++;
                         Log::error("SyncListings: erro no anúncio ML#{$mlItem['id']}: " . $e->getMessage());
@@ -74,10 +68,10 @@ class SyncMarketplaceListings extends Command
 
             activity('marketplace')
                 ->performedOn($account)
-                ->withProperties(['created' => $created, 'updated' => $updated, 'errors' => $errors])
+                ->withProperties(['upserted' => $upserted, 'errors' => $errors])
                 ->log('Anúncios sincronizados');
 
-            $this->info("  ✓ {$created} criados, {$updated} atualizados" . ($errors ? ", {$errors} erros" : ''));
+            $this->info("  ✓ {$upserted} anúncios sincronizados" . ($errors ? ", {$errors} erros" : ''));
 
         } catch (\Throwable $e) {
             $account->update(['last_error' => $e->getMessage()]);
@@ -86,51 +80,34 @@ class SyncMarketplaceListings extends Command
         }
     }
 
-    /**
-     * @return string 'created' | 'updated'
-     */
-    private function upsertListing(array $ml): string
+    private function upsertListing(MarketplaceAccount $account, array $ml): void
     {
-        $mlItemId = $ml['id'];
-        $sku      = $ml['seller_custom_field'] ?? null;
-        $price    = (float) ($ml['price'] ?? 0);
-        $mlStatus = $ml['status'] ?? 'active'; // active, paused, closed, deleted
+        $existing = MarketplaceListing::where('marketplace_account_id', $account->id)
+            ->where('external_id', $ml['id'])
+            ->first();
 
-        $meta = [
-            'ml_item_id'  => $mlItemId,
-            'ml_status'   => $mlStatus,
-            'ml_permalink' => $ml['permalink'] ?? null,
+        $data = [
+            'title'              => $ml['title'] ?? "Anúncio #{$ml['id']}",
+            'price'              => (float) ($ml['price'] ?? 0),
+            'available_quantity' => (int) ($ml['available_quantity'] ?? 0),
+            'status'             => $ml['status'] ?? 'active',
+            'meta'               => [
+                'ml_item_id'   => $ml['id'],
+                'ml_status'    => $ml['status'] ?? null,
+                'ml_permalink' => $ml['permalink'] ?? null,
+                'seller_sku'   => $ml['seller_custom_field'] ?? null,
+            ],
         ];
 
-        // Try to find existing product by SKU or by ml_item_id in meta
-        $product = null;
-
-        if ($sku) {
-            $product = Product::where('sku', $sku)->first();
+        if ($existing) {
+            // Never overwrite product_id / product_quantity — those are set manually
+            $existing->update($data);
+        } else {
+            MarketplaceListing::create(array_merge($data, [
+                'marketplace_account_id' => $account->id,
+                'external_id'            => $ml['id'],
+                // product_id and product_quantity start as null/1 — linked manually
+            ]));
         }
-
-        if (! $product) {
-            // Search by ml_item_id stored in meta
-            $product = Product::whereJsonContains('meta->ml_item_id', $mlItemId)->first();
-        }
-
-        if ($product) {
-            $product->update([
-                'price' => $price,
-                'meta'  => array_merge($product->meta ?? [], $meta),
-            ]);
-            return 'updated';
-        }
-
-        // Create new product from ML listing
-        Product::create([
-            'name'   => $ml['title'] ?? "Anúncio ML #{$mlItemId}",
-            'sku'    => $sku ?? $mlItemId,
-            'price'  => $price,
-            'status' => $mlStatus === 'active' ? ProductStatus::Active : ProductStatus::Inactive,
-            'meta'   => $meta,
-        ]);
-
-        return 'created';
     }
 }
