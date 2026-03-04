@@ -188,7 +188,7 @@
                         </div>
 
                         {{-- Visual indicator --}}
-                        <div class="p-4 rounded-lg border border-gray-200 dark:border-zinc-700 text-center">
+                        <div wire:key="type-card-{{ $marketplace_type }}" class="p-4 rounded-lg border border-gray-200 dark:border-zinc-700 text-center">
                             @php
                                 $currentType = collect($types)->first(fn($t) => $t->value === $marketplace_type);
                             @endphp

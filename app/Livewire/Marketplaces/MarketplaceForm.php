@@ -45,6 +45,23 @@ class MarketplaceForm extends Component
         if ($id) {
             $this->marketplaceId = $id;
             $this->loadFromModel(MarketplaceAccount::findOrFail($id));
+        } else {
+            // Pre-select marketplace type from URL query param (e.g. ?type=woocommerce)
+            if ($typeParam = request()->query('type')) {
+                try {
+                    $type = MarketplaceType::from($typeParam);
+                    $this->marketplace_type = $type->value;
+                } catch (\ValueError $e) {
+                    // keep default
+                }
+            }
+
+            // Initialize isOAuth based on the selected type
+            try {
+                $this->isOAuth = MarketplaceType::from($this->marketplace_type)->supportsOAuth();
+            } catch (\ValueError $e) {
+                $this->isOAuth = false;
+            }
         }
 
         if (! $this->company_id) {
