@@ -97,6 +97,10 @@
 
     {{-- Sidebar footer --}}
     <div class="border-t border-zinc-800 p-3">
+        <a href="{{ route('logs.index') }}" class="sidebar-link {{ request()->routeIs('logs.*') ? 'active' : '' }}">
+            <x-heroicon-o-clipboard-document-list class="icon" />
+            <span x-show="sidebarOpen" x-transition.opacity>Logs</span>
+        </a>
         <a href="{{ route('settings.index') }}" class="sidebar-link {{ request()->routeIs('settings.*') ? 'active' : '' }}">
             <x-heroicon-o-cog-6-tooth class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Configuracoes</span>
@@ -158,6 +162,10 @@
         <a href="{{ route('invoices.index') }}" class="sidebar-link {{ request()->routeIs('invoices.*') ? 'active' : '' }}">
             <x-heroicon-o-document-text class="icon" />
             <span>Notas Fiscais</span>
+        </a>
+        <a href="{{ route('logs.index') }}" class="sidebar-link {{ request()->routeIs('logs.*') ? 'active' : '' }}">
+            <x-heroicon-o-clipboard-document-list class="icon" />
+            <span>Logs</span>
         </a>
         <a href="{{ route('settings.index') }}" class="sidebar-link {{ request()->routeIs('settings.*') ? 'active' : '' }}">
             <x-heroicon-o-cog-6-tooth class="icon" />

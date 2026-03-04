@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MarketplaceController;
@@ -78,6 +79,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/stock', function () {
         return view('stock.index');
     })->name('stock.index');
+
+    // Logs
+    Route::get('/logs', [ActivityLogController::class, 'index'])->name('logs.index');
 
     // Settings
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');

@@ -12,7 +12,11 @@
         </li>
     </x-slot>
 
-    @php $isOAuth = $marketplace->marketplace_type->supportsOAuth(); @endphp
+    @php
+        $isOAuth  = $marketplace->marketplace_type->supportsOAuth();
+        $settings = $marketplace->settings ?? [];
+        $hasErrors = $errors->any();
+    @endphp
 
     <form method="POST" action="{{ route('marketplaces.update', $marketplace) }}">
         @csrf
@@ -29,15 +33,15 @@
                             <div>
                                 <label for="account_name" class="form-label">Nome da Conta *</label>
                                 <input type="text" id="account_name" name="account_name"
-                                       value="{{ old('account_name') ?: $marketplace->account_name }}"
-                                       class="form-input" required>
+                                       value="{{ $hasErrors ? old('account_name') : $marketplace->account_name }}"
+                                       class="form-input" placeholder="Ex: Minha Loja ML" required>
                                 @error('account_name') <p class="form-error">{{ $message }}</p> @enderror
                             </div>
                             <div>
                                 <label for="shop_id" class="form-label">Shop ID</label>
                                 <input type="text" id="shop_id" name="shop_id"
-                                       value="{{ old('shop_id') ?: $marketplace->shop_id }}"
-                                       class="form-input font-mono">
+                                       value="{{ $hasErrors ? old('shop_id') : $marketplace->shop_id }}"
+                                       class="form-input font-mono" placeholder="ID da loja no marketplace">
                             </div>
                         </div>
                     </div>
@@ -54,7 +58,7 @@
                                     <p class="font-medium">Credenciais gerenciadas automaticamente</p>
                                     <p class="mt-0.5">Client ID e Secret sao configurados em
                                         <a href="{{ route('settings.index') }}#marketplaces" class="underline font-medium">Configuracoes &rsaquo; Marketplaces</a>.
-                                        Os tokens OAuth sao renovados pelo fluxo de conexao.
+                                        Os tokens OAuth sao renovados automaticamente a cada 15 minutos.
                                     </p>
                                 </div>
                             </div>
@@ -115,13 +119,13 @@
                                 <div>
                                     <label for="client_id" class="form-label">Client ID / App ID</label>
                                     <input type="text" id="client_id" name="client_id"
-                                           value="{{ old('client_id') ?: ($creds['client_id'] ?? '') }}"
+                                           value="{{ $hasErrors ? old('client_id') : ($creds['client_id'] ?? '') }}"
                                            class="form-input font-mono text-sm">
                                 </div>
                                 <div>
                                     <label for="client_secret" class="form-label">Client Secret</label>
                                     <input type="password" id="client_secret" name="client_secret"
-                                           value="{{ old('client_secret') ?: ($creds['client_secret'] ?? '') }}"
+                                           value="{{ $hasErrors ? old('client_secret') : ($creds['client_secret'] ?? '') }}"
                                            class="form-input font-mono text-sm">
                                 </div>
                             </div>
@@ -129,21 +133,21 @@
                             <div>
                                 <label for="access_token" class="form-label">Access Token</label>
                                 <input type="password" id="access_token" name="access_token"
-                                       value="{{ old('access_token') ?: ($creds['access_token'] ?? '') }}"
+                                       value="{{ $hasErrors ? old('access_token') : ($creds['access_token'] ?? '') }}"
                                        class="form-input font-mono text-sm">
                             </div>
 
                             <div>
                                 <label for="refresh_token" class="form-label">Refresh Token</label>
                                 <input type="password" id="refresh_token" name="refresh_token"
-                                       value="{{ old('refresh_token') ?: ($creds['refresh_token'] ?? '') }}"
+                                       value="{{ $hasErrors ? old('refresh_token') : ($creds['refresh_token'] ?? '') }}"
                                        class="form-input font-mono text-sm">
                             </div>
 
                             <div>
                                 <label for="api_url" class="form-label">URL da API (Opcional)</label>
                                 <input type="url" id="api_url" name="api_url"
-                                       value="{{ old('api_url') ?: ($creds['api_url'] ?? '') }}"
+                                       value="{{ $hasErrors ? old('api_url') : ($creds['api_url'] ?? '') }}"
                                        class="form-input text-sm">
                                 @error('api_url') <p class="form-error">{{ $message }}</p> @enderror
                             </div>
@@ -152,7 +156,6 @@
                 </x-ui.card>
 
                 {{-- Sync settings --}}
-                @php $settings = $marketplace->settings ?? []; @endphp
                 <x-ui.card title="Configuracoes de Sincronizacao">
                     <div class="space-y-4">
                         @foreach([
@@ -168,7 +171,7 @@
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input type="hidden" name="{{ $key }}" value="0">
                                 <input type="checkbox" name="{{ $key }}" value="1" class="sr-only peer"
-                                       {{ old($key, $settings[$key] ?? true) ? 'checked' : '' }}>
+                                       {{ ($hasErrors ? old($key) : ($settings[$key] ?? true)) ? 'checked' : '' }}>
                                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-primary-600"></div>
                             </label>
                         </div>
@@ -177,7 +180,7 @@
                         <div class="pt-2 border-t border-gray-200 dark:border-zinc-700">
                             <label for="sync_interval" class="form-label">Intervalo de Sincronizacao (minutos)</label>
                             <input type="number" id="sync_interval" name="sync_interval"
-                                   value="{{ old('sync_interval') ?: ($settings['sync_interval'] ?? 30) }}"
+                                   value="{{ $hasErrors ? old('sync_interval') : ($settings['sync_interval'] ?? 30) }}"
                                    class="form-input w-32" min="5" max="1440">
                             @error('sync_interval') <p class="form-error">{{ $message }}</p> @enderror
                         </div>
@@ -205,7 +208,7 @@
                         <label for="status" class="form-label">Status da Conta</label>
                         <select id="status" name="status" class="form-input">
                             @foreach($statuses as $s)
-                                <option value="{{ $s->value }}" {{ old('status', $marketplace->status->value) === $s->value ? 'selected' : '' }}>
+                                <option value="{{ $s->value }}" {{ ($hasErrors ? old('status') : $marketplace->status->value) === $s->value ? 'selected' : '' }}>
                                     {{ $s->label() }}
                                 </option>
                             @endforeach
@@ -219,7 +222,7 @@
                         <label for="company_id" class="form-label">Empresa *</label>
                         <select id="company_id" name="company_id" class="form-input" required>
                             @foreach($companies as $company)
-                                <option value="{{ $company->id }}" {{ old('company_id', $marketplace->company_id) == $company->id ? 'selected' : '' }}>
+                                <option value="{{ $company->id }}" {{ ($hasErrors ? old('company_id') : $marketplace->company_id) == $company->id ? 'selected' : '' }}>
                                     {{ $company->name }}
                                 </option>
                             @endforeach
@@ -238,7 +241,7 @@
                         @if($marketplace->token_expires_at)
                         <div class="flex justify-between">
                             <span class="text-gray-500 dark:text-zinc-400">Token expira</span>
-                            <span class="{{ $marketplace->isTokenExpired() ? 'text-red-500 dark:text-red-400' : '' }}">
+                            <span class="{{ $marketplace->isTokenExpired() ? 'text-red-500 dark:text-red-400' : 'text-green-600 dark:text-green-400' }}">
                                 {{ $marketplace->token_expires_at->format('d/m/Y H:i') }}
                             </span>
                         </div>

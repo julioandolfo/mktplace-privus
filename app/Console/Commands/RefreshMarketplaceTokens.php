@@ -85,6 +85,11 @@ class RefreshMarketplaceTokens extends Command
                         'last_error' => "Token refresh failed: {$error}",
                     ]);
 
+                    activity('marketplace')
+                        ->performedOn($account)
+                        ->withProperties(['error' => $error, 'http_status' => $response->status()])
+                        ->log("Token refresh failed: {$error}");
+
                     Log::error("Marketplace token refresh failed for [{$account->id}] {$account->account_name}", [
                         'status'   => $response->status(),
                         'response' => $response->json(),
@@ -109,6 +114,11 @@ class RefreshMarketplaceTokens extends Command
                     'status'           => AccountStatus::Active,
                     'last_error'       => null,
                 ]);
+
+                activity('marketplace')
+                    ->performedOn($account)
+                    ->withProperties(['expires_at' => $expiresAt?->toDateTimeString()])
+                    ->log('Token renovado automaticamente');
 
                 $this->info("  [{$account->account_name}] Token refreshed successfully." .
                     ($expiresAt ? " Expires: {$expiresAt->format('d/m/Y H:i')}" : ''));
