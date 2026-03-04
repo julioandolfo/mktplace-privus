@@ -195,6 +195,25 @@
                             @endif
                         </p>
                     </div>
+
+                    <div class="pt-2 border-t border-gray-200 dark:border-zinc-700 space-y-2">
+                        <form method="POST" action="{{ route('marketplaces.sync', $marketplace) }}">
+                            @csrf
+                            <input type="hidden" name="type" value="orders">
+                            <button type="submit" class="btn-secondary btn-sm w-full">
+                                <x-heroicon-o-arrow-path class="w-4 h-4" />
+                                Sincronizar Pedidos
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ route('marketplaces.sync', $marketplace) }}">
+                            @csrf
+                            <input type="hidden" name="type" value="listings">
+                            <button type="submit" class="btn-secondary btn-sm w-full">
+                                <x-heroicon-o-arrow-path class="w-4 h-4" />
+                                Sincronizar Anuncios
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </x-ui.card>
 

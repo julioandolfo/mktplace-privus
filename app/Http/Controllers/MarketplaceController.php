@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\MarketplaceAccount;
 use App\Models\SystemSetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 
 class MarketplaceController extends Controller
 {
@@ -130,5 +131,26 @@ class MarketplaceController extends Controller
 
         return redirect()->route('marketplaces.index')
             ->with('success', 'Conta atualizada com sucesso.');
+    }
+
+    public function sync(Request $request, MarketplaceAccount $marketplace)
+    {
+        $type = $request->validate(['type' => 'required|in:orders,listings'])['type'];
+
+        try {
+            Artisan::call("marketplace:sync-{$type}", ['--account' => $marketplace->id]);
+            $msg = $type === 'orders' ? 'Pedidos sincronizados com sucesso.' : 'Anúncios sincronizados com sucesso.';
+            $flash = ['success' => $msg];
+        } catch (\Throwable $e) {
+            $flash = ['error' => 'Erro ao sincronizar: ' . $e->getMessage()];
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json(array_key_exists('success', $flash)
+                ? ['message' => $flash['success']]
+                : ['error' => $flash['error']], array_key_exists('error', $flash) ? 500 : 200);
+        }
+
+        return redirect()->route('marketplaces.show', $marketplace)->with($flash);
     }
 }
