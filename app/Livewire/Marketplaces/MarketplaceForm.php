@@ -7,6 +7,7 @@ use App\Enums\MarketplaceType;
 use App\Models\Company;
 use App\Models\MarketplaceAccount;
 use App\Models\SystemSetting;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 class MarketplaceForm extends Component
@@ -16,7 +17,8 @@ class MarketplaceForm extends Component
     public ?int $marketplaceId = null;
     public bool $isOAuth       = false;
 
-    // Account info
+    // Account info — #[Url] binds ?type= query param on the create page
+    #[Url(as: 'type', except: 'mercado_livre')]
     public string $marketplace_type = 'mercado_livre';
     public string $account_name     = '';
     public string $shop_id          = '';
@@ -46,17 +48,8 @@ class MarketplaceForm extends Component
             $this->marketplaceId = $id;
             $this->loadFromModel(MarketplaceAccount::findOrFail($id));
         } else {
-            // Pre-select marketplace type from URL query param (e.g. ?type=woocommerce)
-            if ($typeParam = request()->query('type')) {
-                try {
-                    $type = MarketplaceType::from($typeParam);
-                    $this->marketplace_type = $type->value;
-                } catch (\ValueError $e) {
-                    // keep default
-                }
-            }
-
-            // Initialize isOAuth based on the selected type
+            // $marketplace_type is already set from ?type= URL param via #[Url] attribute.
+            // Initialize isOAuth based on the selected type.
             try {
                 $this->isOAuth = MarketplaceType::from($this->marketplace_type)->supportsOAuth();
             } catch (\ValueError $e) {

@@ -95,15 +95,20 @@
 
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label for="client_id" class="form-label">Client ID / App ID</label>
+                                    <label for="client_id" class="form-label">
+                                        {{ $marketplace_type === 'woocommerce' ? 'Consumer Key' : 'Client ID / App ID' }}
+                                    </label>
                                     <input type="text" id="client_id" wire:model="client_id" class="form-input font-mono text-sm">
                                 </div>
                                 <div>
-                                    <label for="client_secret" class="form-label">Client Secret / App Secret</label>
+                                    <label for="client_secret" class="form-label">
+                                        {{ $marketplace_type === 'woocommerce' ? 'Consumer Secret' : 'Client Secret / App Secret' }}
+                                    </label>
                                     <input type="password" id="client_secret" wire:model="client_secret" class="form-input font-mono text-sm">
                                 </div>
                             </div>
 
+                            @if($marketplace_type !== 'woocommerce')
                             <div>
                                 <label for="access_token" class="form-label">Access Token</label>
                                 <input type="password" id="access_token" wire:model="access_token" class="form-input font-mono text-sm">
@@ -113,10 +118,14 @@
                                 <label for="refresh_token" class="form-label">Refresh Token</label>
                                 <input type="password" id="refresh_token" wire:model="refresh_token" class="form-input font-mono text-sm">
                             </div>
+                            @endif
 
                             <div>
-                                <label for="api_url" class="form-label">URL da API (Opcional)</label>
-                                <input type="url" id="api_url" wire:model="api_url" class="form-input text-sm" placeholder="https://api.exemplo.com">
+                                <label for="api_url" class="form-label">
+                                    {{ $marketplace_type === 'woocommerce' ? 'URL da Loja WooCommerce *' : 'URL da API (Opcional)' }}
+                                </label>
+                                <input type="url" id="api_url" wire:model="api_url" class="form-input text-sm"
+                                       placeholder="{{ $marketplace_type === 'woocommerce' ? 'https://minhaloja.com.br' : 'https://api.exemplo.com' }}">
                                 @error('api_url') <p class="form-error">{{ $message }}</p> @enderror
                             </div>
                         @endif
