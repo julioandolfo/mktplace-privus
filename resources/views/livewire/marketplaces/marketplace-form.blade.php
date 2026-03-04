@@ -187,7 +187,7 @@
                             <label for="marketplace_type" class="form-label">Tipo *</label>
                             <select id="marketplace_type" wire:model.live="marketplace_type" class="form-input" {{ $marketplaceId ? 'disabled' : '' }}>
                                 @foreach($types as $t)
-                                    <option value="{{ $t->value }}">{{ $t->label() }}</option>
+                                    <option value="{{ $t->value }}" @selected($marketplace_type === $t->value)>{{ $t->label() }}</option>
                                 @endforeach
                             </select>
                             @if($marketplaceId)
