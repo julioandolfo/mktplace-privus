@@ -29,14 +29,14 @@
                             <div>
                                 <label for="account_name" class="form-label">Nome da Conta *</label>
                                 <input type="text" id="account_name" name="account_name"
-                                       value="{{ old('account_name', $marketplace->account_name) }}"
+                                       value="{{ old('account_name') ?: $marketplace->account_name }}"
                                        class="form-input" required>
                                 @error('account_name') <p class="form-error">{{ $message }}</p> @enderror
                             </div>
                             <div>
                                 <label for="shop_id" class="form-label">Shop ID</label>
                                 <input type="text" id="shop_id" name="shop_id"
-                                       value="{{ old('shop_id', $marketplace->shop_id) }}"
+                                       value="{{ old('shop_id') ?: $marketplace->shop_id }}"
                                        class="form-input font-mono">
                             </div>
                         </div>
@@ -115,13 +115,13 @@
                                 <div>
                                     <label for="client_id" class="form-label">Client ID / App ID</label>
                                     <input type="text" id="client_id" name="client_id"
-                                           value="{{ old('client_id', $creds['client_id'] ?? '') }}"
+                                           value="{{ old('client_id') ?: ($creds['client_id'] ?? '') }}"
                                            class="form-input font-mono text-sm">
                                 </div>
                                 <div>
                                     <label for="client_secret" class="form-label">Client Secret</label>
                                     <input type="password" id="client_secret" name="client_secret"
-                                           value="{{ old('client_secret', $creds['client_secret'] ?? '') }}"
+                                           value="{{ old('client_secret') ?: ($creds['client_secret'] ?? '') }}"
                                            class="form-input font-mono text-sm">
                                 </div>
                             </div>
@@ -129,21 +129,21 @@
                             <div>
                                 <label for="access_token" class="form-label">Access Token</label>
                                 <input type="password" id="access_token" name="access_token"
-                                       value="{{ old('access_token', $creds['access_token'] ?? '') }}"
+                                       value="{{ old('access_token') ?: ($creds['access_token'] ?? '') }}"
                                        class="form-input font-mono text-sm">
                             </div>
 
                             <div>
                                 <label for="refresh_token" class="form-label">Refresh Token</label>
                                 <input type="password" id="refresh_token" name="refresh_token"
-                                       value="{{ old('refresh_token', $creds['refresh_token'] ?? '') }}"
+                                       value="{{ old('refresh_token') ?: ($creds['refresh_token'] ?? '') }}"
                                        class="form-input font-mono text-sm">
                             </div>
 
                             <div>
                                 <label for="api_url" class="form-label">URL da API (Opcional)</label>
                                 <input type="url" id="api_url" name="api_url"
-                                       value="{{ old('api_url', $creds['api_url'] ?? '') }}"
+                                       value="{{ old('api_url') ?: ($creds['api_url'] ?? '') }}"
                                        class="form-input text-sm">
                                 @error('api_url') <p class="form-error">{{ $message }}</p> @enderror
                             </div>
@@ -177,7 +177,7 @@
                         <div class="pt-2 border-t border-gray-200 dark:border-zinc-700">
                             <label for="sync_interval" class="form-label">Intervalo de Sincronizacao (minutos)</label>
                             <input type="number" id="sync_interval" name="sync_interval"
-                                   value="{{ old('sync_interval', $settings['sync_interval'] ?? 30) }}"
+                                   value="{{ old('sync_interval') ?: ($settings['sync_interval'] ?? 30) }}"
                                    class="form-input w-32" min="5" max="1440">
                             @error('sync_interval') <p class="form-error">{{ $message }}</p> @enderror
                         </div>
