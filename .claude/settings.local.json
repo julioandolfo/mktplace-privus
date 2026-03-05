@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/c/laragon/bin/python/python-3.13/python.exe .claude/skills/ui-ux-pro-max/scripts/search.py \"saas admin dashboard marketplace ecommerce management integration\" --design-system --persist -p \"Privus Marketplace\" -f markdown)"
+    ]
+  }
+}

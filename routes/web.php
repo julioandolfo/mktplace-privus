@@ -90,6 +90,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Marketplace Listings (Anuncios)
     Route::get('/listings', [MarketplaceListingController::class, 'index'])->name('listings.index');
     Route::get('/listings/{listing}', [MarketplaceListingController::class, 'show'])->name('listings.show');
+    Route::put('/listings/{listing}', [MarketplaceListingController::class, 'update'])->name('listings.update');
+    Route::post('/listings/{listing}/toggle-status', [MarketplaceListingController::class, 'toggleStatus'])->name('listings.toggle-status');
     Route::post('/listings/{listing}/link-product', [MarketplaceListingController::class, 'linkProduct'])->name('listings.link-product');
     Route::post('/listings/{listing}/create-product', [MarketplaceListingController::class, 'createProduct'])->name('listings.create-product');
     Route::delete('/listings/{listing}/unlink-product', [MarketplaceListingController::class, 'unlinkProduct'])->name('listings.unlink-product');

@@ -129,6 +129,76 @@ class MercadoLivreService
         }
     }
 
+    // ─── Item Methods ─────────────────────────────────────────────────────────
+
+    /**
+     * PUT request to ML API.
+     */
+    private function put(string $path, array $data): array
+    {
+        $creds = $this->account->credentials ?? [];
+        $token = $creds['access_token'] ?? null;
+
+        if (! $token) {
+            throw new \RuntimeException("Conta {$this->account->id} não possui access_token.");
+        }
+
+        $response = Http::withToken($token)
+            ->timeout(30)
+            ->put(self::BASE_URL . $path, $data);
+
+        if ($response->failed()) {
+            throw new \RuntimeException(
+                "ML API PUT error [{$response->status()}] {$path}: " . $response->body()
+            );
+        }
+
+        return $response->json();
+    }
+
+    /**
+     * Get full item details from ML API.
+     */
+    public function getItem(string $itemId): array
+    {
+        return $this->get("/items/{$itemId}");
+    }
+
+    /**
+     * Get item description (plain_text) from ML API.
+     */
+    public function getItemDescription(string $itemId): array
+    {
+        try {
+            return $this->get("/items/{$itemId}/description");
+        } catch (\Throwable $e) {
+            Log::warning("ML getItemDescription({$itemId}) failed: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get item quality/health score from ML API.
+     */
+    public function getItemQuality(string $itemId): array
+    {
+        try {
+            return $this->get("/items/{$itemId}/quality");
+        } catch (\Throwable $e) {
+            Log::warning("ML getItemQuality({$itemId}) failed: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Update item fields via ML API.
+     * Supported: title, price, available_quantity, status, shipping.handling_time
+     */
+    public function updateItem(string $itemId, array $data): array
+    {
+        return $this->put("/items/{$itemId}", $data);
+    }
+
     // ─── Status Mappers ───────────────────────────────────────────────────────
 
     public static function mapOrderStatus(string $mlStatus): string
