@@ -90,6 +90,7 @@
             </x-ui.card>
 
             {{-- Editar Anuncio --}}
+            <div id="editar">
             <x-ui.card title="Editar Anuncio">
                 <form method="POST" action="{{ route('listings.update', $listing) }}" class="space-y-4">
                     @csrf
@@ -160,6 +161,7 @@
                     </div>
                 </form>
             </x-ui.card>
+            </div>
 
             {{-- Imagens --}}
             @if(!empty($liveData['pictures']))

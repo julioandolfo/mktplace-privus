@@ -38,7 +38,20 @@ class MarketplaceListingController extends Controller
         $listings  = $query->latest()->paginate(25)->withQueryString();
         $accounts  = MarketplaceAccount::orderBy('account_name')->get();
 
-        return view('marketplace-listings.index', compact('listings', 'accounts'));
+        // Summary stats (always uses full dataset, ignoring active filters)
+        $totalListings  = MarketplaceListing::count();
+        $activeCount    = MarketplaceListing::where('status', 'active')->count();
+        $pausedCount    = MarketplaceListing::where('status', 'paused')->count();
+        $unlinkedCount  = MarketplaceListing::unlinked()->count();
+        $perAccount     = MarketplaceListing::with('marketplaceAccount')
+            ->selectRaw('marketplace_account_id, count(*) as total, sum(case when status = \'active\' then 1 else 0 end) as active_count')
+            ->groupBy('marketplace_account_id')
+            ->get();
+
+        return view('marketplace-listings.index', compact(
+            'listings', 'accounts',
+            'totalListings', 'activeCount', 'pausedCount', 'unlinkedCount', 'perAccount'
+        ));
     }
 
     public function show(MarketplaceListing $listing)
