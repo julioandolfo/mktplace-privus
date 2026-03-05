@@ -91,29 +91,42 @@ class MarketplaceOAuthController extends Controller
                 ->with('error', "Falha ao obter tokens do {$marketplace->label()} (HTTP {$response->status()}). Verifique as credenciais em Configurações > Marketplaces.");
         }
 
-        $tokens      = $response->json();
-        $shopId      = (string) ($tokens['user_id'] ?? $tokens['seller_id'] ?? $tokens['account_id'] ?? '');
-        $accountName = $tokens['nickname'] ?? ($marketplace->label() . ' ' . now()->format('d/m/Y H:i'));
-        $expiresAt   = isset($tokens['expires_in']) ? now()->addSeconds($tokens['expires_in']) : null;
+        $tokens    = $response->json();
+        $shopId    = (string) ($tokens['user_id'] ?? $tokens['seller_id'] ?? $tokens['account_id'] ?? '');
+        $expiresAt = isset($tokens['expires_in']) ? now()->addSeconds($tokens['expires_in']) : null;
 
-        MarketplaceAccount::updateOrCreate(
-            [
-                'marketplace_type' => $type,
-                'shop_id'          => $shopId ?: null,
-            ],
-            [
-                'company_id'      => $company->id,
-                'account_name'    => $accountName,
-                'credentials'     => [
-                    'access_token'  => $tokens['access_token'],
-                    'refresh_token' => $tokens['refresh_token'] ?? null,
-                    'token_type'    => $tokens['token_type'] ?? 'Bearer',
-                ],
+        $credentials = [
+            'access_token'  => $tokens['access_token'],
+            'refresh_token' => $tokens['refresh_token'] ?? null,
+            'token_type'    => $tokens['token_type'] ?? 'Bearer',
+        ];
+
+        $existing = MarketplaceAccount::where('marketplace_type', $type)
+            ->where('shop_id', $shopId ?: null)
+            ->first();
+
+        if ($existing) {
+            // Preserve user-defined account_name — only update credentials/status
+            $existing->update([
+                'credentials'      => $credentials,
                 'token_expires_at' => $expiresAt,
                 'status'           => AccountStatus::Active,
                 'last_error'       => null,
-            ]
-        );
+            ]);
+        } else {
+            // First connection — use nickname or generated name as default
+            $accountName = $tokens['nickname'] ?? ($marketplace->label() . ' ' . now()->format('d/m/Y H:i'));
+
+            MarketplaceAccount::create([
+                'marketplace_type' => $type,
+                'shop_id'          => $shopId ?: null,
+                'company_id'       => $company->id,
+                'account_name'     => $accountName,
+                'credentials'      => $credentials,
+                'token_expires_at' => $expiresAt,
+                'status'           => AccountStatus::Active,
+            ]);
+        }
 
         session()->forget(['oauth_state', 'oauth_type']);
 
