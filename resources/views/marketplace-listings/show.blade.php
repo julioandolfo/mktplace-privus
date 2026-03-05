@@ -131,19 +131,14 @@
                         <label class="form-label">Prazo de Disponibilidade</label>
                         @php
                             $currentHandling = old('handling_time', $liveData['shipping']['handling_time'] ?? 0);
-                            $handlingOptions = [
-                                0 => 'Mesmo dia',
-                                1 => '1 dia útil',
-                                2 => '2 dias úteis',
-                                3 => '3 dias úteis',
-                                4 => '4 dias úteis',
-                                5 => '5 dias úteis',
-                            ];
                         @endphp
                         <select name="handling_time" class="form-input @error('handling_time') border-red-500 @enderror">
-                            @foreach($handlingOptions as $val => $label)
-                                <option value="{{ $val }}" @selected((int)$currentHandling === $val)>{{ $label }}</option>
-                            @endforeach
+                            <option value="0" @selected((int)$currentHandling === 0)>Mesmo dia</option>
+                            @for($d = 1; $d <= 20; $d++)
+                                <option value="{{ $d }}" @selected((int)$currentHandling === $d)>
+                                    {{ $d === 1 ? '1 dia útil' : "{$d} dias úteis" }}
+                                </option>
+                            @endfor
                         </select>
                         <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">
                             Tempo de preparação do pedido antes do envio.
@@ -152,6 +147,32 @@
                             <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
                         @enderror
                     </div>
+
+                    {{-- Attributes (editable) --}}
+                    @if(!empty($liveData['attributes']))
+                    @php
+                        $editableAttrs = collect($liveData['attributes'])->filter(fn($a) => !empty($a['value_name']) && !empty($a['id']));
+                    @endphp
+                    @if($editableAttrs->isNotEmpty())
+                    <div>
+                        <label class="form-label mb-3 block">Atributos</label>
+                        <div class="space-y-2">
+                            @foreach($editableAttrs as $attr)
+                            <div class="flex items-center gap-3">
+                                <span class="text-sm text-gray-500 dark:text-zinc-400 w-40 flex-shrink-0">{{ $attr['name'] }}</span>
+                                <input type="text"
+                                    name="attributes[{{ $attr['id'] }}]"
+                                    value="{{ old('attributes.'.$attr['id'], $attr['value_name']) }}"
+                                    class="form-input flex-1 text-sm py-1.5">
+                            </div>
+                            @endforeach
+                        </div>
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-2">
+                            Atributos com valores fixos predefinidos pelo ML podem ser ignorados ao salvar.
+                        </p>
+                    </div>
+                    @endif
+                    @endif
 
                     <div class="flex justify-end">
                         <button type="submit" class="btn-primary">
@@ -164,44 +185,69 @@
             </div>
 
             {{-- Imagens --}}
-            @if(!empty($liveData['pictures']))
+            @if($liveData !== null)
             <x-ui.card title="Imagens">
-                <div class="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                @if(!empty($liveData['pictures']))
+                <div class="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-4">
                     @foreach($liveData['pictures'] as $pic)
-                    <a href="{{ $pic['url'] }}" target="_blank" class="block aspect-square rounded-md overflow-hidden border border-gray-200 dark:border-zinc-700 hover:border-primary-500 transition-colors">
-                        <img src="{{ $pic['url'] }}" alt="Imagem do anuncio"
-                             class="w-full h-full object-cover"
-                             loading="lazy">
-                    </a>
-                    @endforeach
-                </div>
-            </x-ui.card>
-            @endif
-
-            {{-- Atributos --}}
-            @if(!empty($liveData['attributes']))
-            <x-ui.card title="Atributos">
-                <div class="divide-y divide-gray-100 dark:divide-zinc-800">
-                    @foreach($liveData['attributes'] as $attr)
-                    @if(!empty($attr['value_name']))
-                    <div class="flex justify-between py-2 text-sm">
-                        <span class="text-gray-500 dark:text-zinc-400">{{ $attr['name'] }}</span>
-                        <span class="text-gray-900 dark:text-white font-medium text-right max-w-[60%]">{{ $attr['value_name'] }}</span>
+                    <div class="group relative aspect-square rounded-md overflow-hidden border border-gray-200 dark:border-zinc-700">
+                        <a href="{{ $pic['url'] }}" target="_blank">
+                            <img src="{{ $pic['url'] }}" alt="Imagem do anuncio"
+                                 class="w-full h-full object-cover" loading="lazy">
+                        </a>
+                        {{-- Remove button --}}
+                        <form method="POST"
+                              action="{{ route('listings.remove-picture', [$listing, $pic['id']]) }}"
+                              class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit"
+                                class="text-white hover:text-red-400 transition-colors"
+                                onclick="return confirm('Remover esta imagem do anúncio no ML?')"
+                                title="Remover imagem">
+                                <x-heroicon-o-trash class="w-5 h-5" />
+                            </button>
+                        </form>
                     </div>
-                    @endif
                     @endforeach
                 </div>
+                @else
+                <p class="text-sm text-gray-400 dark:text-zinc-500 mb-4">Nenhuma imagem cadastrada.</p>
+                @endif
+
+                {{-- Add image by URL --}}
+                <form method="POST" action="{{ route('listings.add-picture', $listing) }}"
+                      class="flex gap-2 border-t border-gray-100 dark:border-zinc-800 pt-4">
+                    @csrf
+                    <input type="url" name="picture_url"
+                        placeholder="URL da nova imagem (https://...)"
+                        class="form-input flex-1 text-sm" required>
+                    <button type="submit" class="btn-secondary btn-sm flex-shrink-0">
+                        <x-heroicon-o-plus class="w-4 h-4" />
+                        Adicionar
+                    </button>
+                </form>
             </x-ui.card>
             @endif
 
             {{-- Descricao --}}
-            @if(!empty($description['plain_text']))
             <x-ui.card title="Descricao">
-                <p class="text-sm text-gray-700 dark:text-zinc-300 whitespace-pre-line leading-relaxed">
-                    {{ $description['plain_text'] }}
-                </p>
+                <form method="POST" action="{{ route('listings.update-description', $listing) }}" class="space-y-3">
+                    @csrf
+                    <textarea name="description" rows="8"
+                        class="form-input w-full text-sm leading-relaxed resize-y @error('description') border-red-500 @enderror"
+                        placeholder="Descrição do anúncio...">{{ old('description', $description['plain_text'] ?? '') }}</textarea>
+                    @error('description')
+                        <p class="text-xs text-red-500">{{ $message }}</p>
+                    @enderror
+                    <div class="flex justify-end">
+                        <button type="submit" class="btn-primary btn-sm">
+                            <x-heroicon-o-cloud-arrow-up class="w-4 h-4" />
+                            Salvar Descrição
+                        </button>
+                    </div>
+                </form>
             </x-ui.card>
-            @endif
 
             {{-- Vincular Produto --}}
             @if($listing->product)

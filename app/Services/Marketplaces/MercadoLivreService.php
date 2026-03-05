@@ -199,6 +199,14 @@ class MercadoLivreService
         return $this->put("/items/{$itemId}", $data);
     }
 
+    /**
+     * Update item description via ML API (separate endpoint).
+     */
+    public function updateDescription(string $itemId, string $plainText): array
+    {
+        return $this->put("/items/{$itemId}/description", ['plain_text' => $plainText]);
+    }
+
     // ─── Status Mappers ───────────────────────────────────────────────────────
 
     public static function mapOrderStatus(string $mlStatus): string
