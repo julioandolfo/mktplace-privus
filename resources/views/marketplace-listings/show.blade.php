@@ -41,16 +41,29 @@
     @endif
 
     @php
-        $hasVariations = !empty($liveData['variations']);
-        $variations    = $liveData['variations'] ?? [];
-        $isFulfillment = in_array('fulfillment', $liveData['tags'] ?? []);
+        $hasVariations  = !empty($liveData['variations']);
+        $variations     = $liveData['variations'] ?? [];
+        $isFulfillment  = in_array('fulfillment', $liveData['tags'] ?? []);
+        // Catalog items: title cannot be edited via API
+        $isCatalogItem  = !empty($listing->meta['family_name'])
+                       || !empty($listing->meta['catalog_product_id'])
+                       || !empty($liveData['family_name'])
+                       || !empty($liveData['catalog_product_id']);
 
         // Separate category attributes into editable vs read-only
-        $editableAttrIds = collect($liveData['attributes'] ?? [])->pluck('id')->toArray();
-        $requiredAttrs   = collect($categoryAttributes)->filter(fn($a) => in_array('required', $a['tags'] ?? []));
-        $missingRequired = $requiredAttrs->filter(fn($a) =>
-            ! collect($liveData['attributes'] ?? [])->where('id', $a['id'])->whereNotNull('value_name')->count()
+        $currentAttrsIndexed = collect($liveData['attributes'] ?? [])->keyBy('id');
+
+        // Only count truly missing: required + editable + without any value (name, id or values[])
+        $requiredAttrs   = collect($categoryAttributes)->filter(fn($a) =>
+            in_array('required', $a['tags'] ?? []) && ! in_array('read_only', $a['tags'] ?? [])
         );
+        $missingRequired = $requiredAttrs->filter(function ($a) use ($currentAttrsIndexed) {
+            $current = $currentAttrsIndexed->get($a['id'] ?? '');
+            if (! $current) return true;
+            return empty($current['value_name'])
+                && empty($current['value_id'])
+                && empty($current['values']);
+        });
     @endphp
 
     {{-- Fulfillment warning --}}
@@ -135,11 +148,29 @@
                     @method('PUT')
 
                     <div>
-                        <label class="form-label">Titulo <span class="text-gray-400 text-xs font-normal">(max 60 caracteres)</span></label>
-                        <input type="text" name="title" maxlength="60"
-                            value="{{ old('title', $liveData['title'] ?? $listing->title) }}"
-                            class="form-input @error('title') border-red-500 @enderror" required>
-                        @error('title') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                        <label class="form-label">
+                            Titulo
+                            @if(!$isCatalogItem)
+                                <span class="text-gray-400 text-xs font-normal">(max 60 caracteres)</span>
+                            @endif
+                        </label>
+                        @if($isCatalogItem)
+                            {{-- Catalog items: title is managed by ML, cannot be changed --}}
+                            <input type="text"
+                                value="{{ $liveData['title'] ?? $listing->title }}"
+                                class="form-input bg-gray-100 dark:bg-zinc-800/60 text-gray-500 dark:text-zinc-400 cursor-not-allowed"
+                                disabled>
+                            <input type="hidden" name="title" value="{{ $liveData['title'] ?? $listing->title }}">
+                            <p class="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                                <x-heroicon-o-lock-closed class="w-3 h-3" />
+                                Título bloqueado — este anúncio está vinculado ao catálogo do Mercado Livre.
+                            </p>
+                        @else
+                            <input type="text" name="title" maxlength="60"
+                                value="{{ old('title', $liveData['title'] ?? $listing->title) }}"
+                                class="form-input @error('title') border-red-500 @enderror" required>
+                            @error('title') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                        @endif
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
@@ -234,8 +265,8 @@
                     <input type="hidden" name="handling_time" value="{{ $liveData['shipping']['handling_time'] ?? 0 }}">
 
                     @php
-                        $currentAttrs = collect($liveData['attributes'] ?? [])->keyBy('id');
-                        // Merge category attributes with current values
+                        $currentAttrsMap = collect($liveData['attributes'] ?? [])->keyBy('id');
+                        // Prefer category attributes schema; fall back to live item attributes
                         $allAttrs = collect($categoryAttributes)->isNotEmpty()
                             ? collect($categoryAttributes)
                             : collect($liveData['attributes'] ?? []);
@@ -244,42 +275,64 @@
                     <div class="space-y-3">
                         @foreach($allAttrs as $attr)
                         @php
-                            $attrId       = $attr['id'] ?? null;
-                            $attrName     = $attr['name'] ?? $attrId;
-                            $currentVal   = $currentAttrs->get($attrId);
-                            $currentValue = $currentVal['value_name'] ?? '';
-                            $isRequired   = in_array('required', $attr['tags'] ?? []);
-                            $valueType    = $attr['value_type'] ?? 'string';
-                            $allowedValues= $attr['allowed_values'] ?? [];
-                            $readOnly     = in_array('read_only', $attr['tags'] ?? []);
+                            $attrId        = $attr['id'] ?? null;
+                            $attrName      = $attr['name'] ?? $attrId;
+                            $currentVal    = $currentAttrsMap->get($attrId);
+                            // Resolve current display value: prefer value_name, else first from values[], else value_id
+                            $currentValue  = $currentVal['value_name']
+                                ?? ($currentVal['values'][0]['name'] ?? null)
+                                ?? ($currentVal['value_id'] ? (string)$currentVal['value_id'] : '');
+                            $isRequired    = in_array('required', $attr['tags'] ?? []);
+                            $isMissing     = $isRequired && empty($currentValue);
+                            $valueType     = $attr['value_type'] ?? 'string';
+                            $allowedValues = $attr['allowed_values'] ?? [];
+                            $readOnly      = in_array('read_only', $attr['tags'] ?? []);
+                            // Detect boolean: value_type=boolean OR allowed_values exactly Sim/Não
+                            $isBoolean     = $valueType === 'boolean'
+                                || (count($allowedValues) === 2
+                                    && collect($allowedValues)->pluck('name')->sort()->values()->all() === ['Não', 'Sim']);
                         @endphp
                         @if($attrId && !$readOnly)
-                        <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-3 @if($isMissing) bg-amber-50/40 dark:bg-amber-900/10 rounded-lg px-2 py-1 -mx-2 @endif">
                             <div class="w-44 flex-shrink-0">
                                 <span class="text-sm text-gray-600 dark:text-zinc-400">
                                     {{ $attrName }}
-                                    @if($isRequired) <span class="text-red-400 text-xs">*</span> @endif
+                                    @if($isMissing)
+                                        <span class="text-red-400 text-xs ml-0.5" title="Obrigatório não preenchido">*</span>
+                                    @elseif($isRequired)
+                                        <span class="text-amber-400 text-xs ml-0.5">*</span>
+                                    @endif
                                 </span>
                             </div>
-                            @if(!empty($allowedValues))
-                            <select name="attributes[{{ $attrId }}]" class="form-input flex-1 text-sm py-1.5">
-                                <option value="">Selecione...</option>
-                                @foreach($allowedValues as $val)
-                                <option value="{{ $val['name'] ?? $val['id'] }}"
-                                    @selected($currentValue === ($val['name'] ?? $val['id']))>
-                                    {{ $val['name'] ?? $val['id'] }}
-                                </option>
-                                @endforeach
-                            </select>
-                            @elseif($valueType === 'number')
-                            <input type="number" name="attributes[{{ $attrId }}]"
-                                value="{{ old('attributes.'.$attrId, $currentValue) }}"
-                                class="form-input flex-1 text-sm py-1.5">
+
+                            @if($isBoolean)
+                                {{-- Boolean: always render as Sim/Não select --}}
+                                <select name="attributes[{{ $attrId }}]" class="form-input flex-1 text-sm py-1.5">
+                                    <option value="">Selecione...</option>
+                                    <option value="Sim" @selected(in_array(strtolower($currentValue), ['sim', 'yes', '1', 'true']))>Sim</option>
+                                    <option value="Não" @selected(in_array(strtolower($currentValue), ['não', 'nao', 'no', '0', 'false']))>Não</option>
+                                </select>
+                            @elseif(!empty($allowedValues))
+                                {{-- List of allowed values: render as select --}}
+                                <select name="attributes[{{ $attrId }}]" class="form-input flex-1 text-sm py-1.5">
+                                    <option value="">Selecione...</option>
+                                    @foreach($allowedValues as $val)
+                                    <option value="{{ $val['name'] ?? $val['id'] }}"
+                                        @selected($currentValue === ($val['name'] ?? $val['id']))>
+                                        {{ $val['name'] ?? $val['id'] }}
+                                    </option>
+                                    @endforeach
+                                </select>
+                            @elseif($valueType === 'number' || $valueType === 'number_unit')
+                                <input type="number" name="attributes[{{ $attrId }}]"
+                                    value="{{ old('attributes.'.$attrId, $currentValue) }}"
+                                    class="form-input flex-1 text-sm py-1.5"
+                                    placeholder="{{ $currentValue ?: '0' }}">
                             @else
-                            <input type="text" name="attributes[{{ $attrId }}]"
-                                value="{{ old('attributes.'.$attrId, $currentValue) }}"
-                                class="form-input flex-1 text-sm py-1.5"
-                                placeholder="{{ $currentValue ?: 'Não informado' }}">
+                                <input type="text" name="attributes[{{ $attrId }}]"
+                                    value="{{ old('attributes.'.$attrId, $currentValue) }}"
+                                    class="form-input flex-1 text-sm py-1.5"
+                                    placeholder="{{ $currentValue ?: 'Não informado' }}">
                             @endif
                         </div>
                         @endif

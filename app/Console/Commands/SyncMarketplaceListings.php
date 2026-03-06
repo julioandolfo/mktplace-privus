@@ -92,10 +92,15 @@ class SyncMarketplaceListings extends Command
             'available_quantity' => (int) ($ml['available_quantity'] ?? 0),
             'status'             => $ml['status'] ?? 'active',
             'meta'               => [
-                'ml_item_id'   => $ml['id'],
-                'ml_status'    => $ml['status'] ?? null,
-                'ml_permalink' => $ml['permalink'] ?? null,
-                'seller_sku'   => $ml['seller_custom_field'] ?? null,
+                'ml_item_id'         => $ml['id'],
+                'ml_status'          => $ml['status'] ?? null,
+                'ml_permalink'       => $ml['permalink'] ?? null,
+                'seller_sku'         => $ml['seller_custom_field'] ?? null,
+                'category_id'        => $ml['category_id'] ?? null,
+                'listing_type_id'    => $ml['listing_type_id'] ?? null,
+                'has_variations'     => ! empty($ml['variations']),
+                'family_name'        => $ml['family_name'] ?? null,
+                'catalog_product_id' => $ml['catalog_product_id'] ?? null,
             ],
         ];
 

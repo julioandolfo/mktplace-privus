@@ -105,8 +105,12 @@ class MarketplaceListingController extends Controller
 
     public function update(Request $request, MarketplaceListing $listing)
     {
+        // Items linked to a ML catalog (family_name) cannot have their title modified
+        $isCatalogItem = ! empty($listing->meta['family_name'])
+            || ! empty($listing->meta['catalog_product_id']);
+
         $validated = $request->validate([
-            'title'              => 'required|string|max:60',
+            'title'              => $isCatalogItem ? 'nullable|string|max:60' : 'required|string|max:60',
             'price'              => 'required|numeric|min:0',
             'available_quantity' => 'required|integer|min:0',
             'handling_time'      => 'required|integer|min:0|max:20',
@@ -123,11 +127,15 @@ class MarketplaceListingController extends Controller
         }
 
         $payload = [
-            'title'              => $validated['title'],
             'price'              => (float) $validated['price'],
             'available_quantity' => (int) $validated['available_quantity'],
             'shipping'           => ['handling_time' => (int) $validated['handling_time']],
         ];
+
+        // Only include title for items NOT linked to a ML catalog
+        if (! $isCatalogItem && ! empty($validated['title'])) {
+            $payload['title'] = $validated['title'];
+        }
 
         // Include dimensions if provided
         if (! empty($validated['shipping_width'])) {
@@ -142,6 +150,7 @@ class MarketplaceListingController extends Controller
         // Include editable attributes if provided
         if (! empty($validated['attributes'])) {
             $payload['attributes'] = collect($validated['attributes'])
+                ->filter(fn ($v) => $v !== '' && $v !== null)
                 ->map(fn ($value, $id) => ['id' => $id, 'value_name' => $value])
                 ->values()
                 ->all();
@@ -151,7 +160,25 @@ class MarketplaceListingController extends Controller
             $service = new MercadoLivreService($account);
             $service->updateItem($listing->external_id, $payload);
         } catch (\Throwable $e) {
-            return back()->with('error', 'Erro ao atualizar no Mercado Livre: ' . $e->getMessage());
+            $errorBody = $e->getMessage();
+
+            // If ML rejects title (catalog item not detected locally), retry without title
+            if (str_contains($errorBody, 'family_name') || str_contains($errorBody, 'cannot modify the title')) {
+                unset($payload['title']);
+
+                // Store in meta so future requests skip title automatically
+                $listing->update([
+                    'meta' => array_merge($listing->meta ?? [], ['family_name' => 'catalog']),
+                ]);
+
+                try {
+                    $service->updateItem($listing->external_id, $payload);
+                } catch (\Throwable $e2) {
+                    return back()->with('error', 'Erro ao atualizar no Mercado Livre: ' . $e2->getMessage());
+                }
+            } else {
+                return back()->with('error', 'Erro ao atualizar no Mercado Livre: ' . $errorBody);
+            }
         }
 
         $listing->update([
