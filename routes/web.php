@@ -89,6 +89,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Marketplace Listings (Anuncios)
     Route::get('/listings', [MarketplaceListingController::class, 'index'])->name('listings.index');
+    Route::get('/listings/publish', [MarketplaceListingController::class, 'publishForm'])->name('listings.publish-form');
+    Route::post('/listings/publish', [MarketplaceListingController::class, 'publish'])->name('listings.publish');
+    Route::get('/listings/categories/search', [MarketplaceListingController::class, 'searchCategories'])->name('listings.search-categories');
+    Route::get('/listings/categories/attributes', [MarketplaceListingController::class, 'getCategoryAttributes'])->name('listings.category-attributes');
     Route::get('/listings/{listing}', [MarketplaceListingController::class, 'show'])->name('listings.show');
     Route::put('/listings/{listing}', [MarketplaceListingController::class, 'update'])->name('listings.update');
     Route::post('/listings/{listing}/toggle-status', [MarketplaceListingController::class, 'toggleStatus'])->name('listings.toggle-status');
@@ -98,6 +102,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/listings/{listing}/link-product', [MarketplaceListingController::class, 'linkProduct'])->name('listings.link-product');
     Route::post('/listings/{listing}/create-product', [MarketplaceListingController::class, 'createProduct'])->name('listings.create-product');
     Route::delete('/listings/{listing}/unlink-product', [MarketplaceListingController::class, 'unlinkProduct'])->name('listings.unlink-product');
+    Route::put('/listings/{listing}/variations/{variationId}', [MarketplaceListingController::class, 'updateVariation'])->name('listings.update-variation');
 
     // Logs
     Route::get('/logs', [ActivityLogController::class, 'index'])->name('logs.index');

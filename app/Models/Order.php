@@ -107,6 +107,11 @@ class Order extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    public function messages(): HasMany
+    {
+        return $this->hasMany(OrderMessage::class)->orderBy('created_at');
+    }
+
     // Scopes
 
     public function scopeSearch(Builder $query, string $term): Builder

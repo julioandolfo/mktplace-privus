@@ -10,3 +10,6 @@ Schedule::command('marketplace:sync-orders')->everyFiveMinutes();
 
 // Sync listings/products from Mercado Livre (every hour)
 Schedule::command('marketplace:sync-listings')->hourly();
+
+// Sync post-sale messages from Mercado Livre (every 5 minutes)
+Schedule::command('marketplace:sync-messages')->everyFiveMinutes();

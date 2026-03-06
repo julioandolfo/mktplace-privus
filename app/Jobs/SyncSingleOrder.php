@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Console\Commands;
+namespace App\Jobs;
 
 use App\Enums\MarketplaceType;
 use App\Enums\OrderStatus;
@@ -11,85 +11,55 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Services\Marketplaces\MercadoLivreService;
-use Illuminate\Console\Command;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class SyncMarketplaceOrders extends Command
+class SyncSingleOrder implements ShouldQueue
 {
-    protected $signature = 'marketplace:sync-orders
-                            {--account= : ID de conta específica (padrão: todas ativas)}
-                            {--days=1   : Quantos dias para trás sincronizar (quando sem last_synced_at)}';
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $description = 'Importa pedidos/vendas do Mercado Livre para o sistema';
+    public int $tries = 3;
+    public int $backoff = 30;
 
-    public function handle(): int
+    public function __construct(
+        public readonly int $accountId,
+        public readonly string $externalOrderId,
+    ) {}
+
+    public function handle(): void
     {
-        $accounts = $this->resolveAccounts();
+        $account = MarketplaceAccount::find($this->accountId);
 
-        if ($accounts->isEmpty()) {
-            $this->warn('Nenhuma conta ativa do Mercado Livre encontrada.');
-            return self::SUCCESS;
+        if (! $account || ! $account->credentials) {
+            Log::warning("SyncSingleOrder: conta {$this->accountId} não encontrada ou sem credenciais.");
+            return;
         }
 
-        foreach ($accounts as $account) {
-            $this->syncAccount($account);
+        if ($account->marketplace_type !== MarketplaceType::MercadoLivre) {
+            return;
         }
-
-        return self::SUCCESS;
-    }
-
-    private function resolveAccounts()
-    {
-        $query = MarketplaceAccount::active()
-            ->where('marketplace_type', MarketplaceType::MercadoLivre);
-
-        if ($id = $this->option('account')) {
-            $query->where('id', $id);
-        }
-
-        return $query->get();
-    }
-
-    private function syncAccount(MarketplaceAccount $account): void
-    {
-        $this->info("Sincronizando pedidos: [{$account->id}] {$account->account_name}");
-
-        $since = $account->last_synced_at
-            ? $account->last_synced_at->subHour()
-            : now()->subDays((int) $this->option('days'));
-
-        $service = new MercadoLivreService($account);
-        $synced  = 0;
-        $errors  = 0;
 
         try {
-            foreach ($service->getOrders($since) as $page) {
-                foreach ($page as $mlOrder) {
-                    try {
-                        $this->upsertOrder($account, $mlOrder, $service);
-                        $synced++;
-                    } catch (\Throwable $e) {
-                        $errors++;
-                        Log::error("SyncOrders: erro no pedido ML#{$mlOrder['id']}: " . $e->getMessage());
-                        $this->error("  Erro pedido #{$mlOrder['id']}: " . $e->getMessage());
-                    }
-                }
+            $service  = new MercadoLivreService($account);
+            $mlOrder  = $service->getOrder($this->externalOrderId);
+
+            if (empty($mlOrder['id'])) {
+                Log::warning("SyncSingleOrder: pedido ML#{$this->externalOrderId} retornou vazio.");
+                return;
             }
 
-            $account->update(['last_synced_at' => now()]);
+            $this->upsertOrder($account, $mlOrder, $service);
 
-            activity('marketplace')
-                ->performedOn($account)
-                ->withProperties(['synced' => $synced, 'errors' => $errors, 'since' => $since->toDateTimeString()])
-                ->log('Pedidos sincronizados');
-
-            $this->info("  ✓ {$synced} pedidos sincronizados" . ($errors ? ", {$errors} erros" : ''));
+            Log::info("SyncSingleOrder: pedido ML#{$this->externalOrderId} sincronizado com sucesso.");
 
         } catch (\Throwable $e) {
-            $account->update(['last_error' => $e->getMessage()]);
-            Log::error("SyncOrders: falha na conta {$account->id}: " . $e->getMessage());
-            $this->error("  Falha na conta {$account->account_name}: " . $e->getMessage());
+            Log::error("SyncSingleOrder: erro pedido ML#{$this->externalOrderId}: " . $e->getMessage());
+            throw $e;
         }
     }
 
@@ -104,13 +74,13 @@ class SyncMarketplaceOrders extends Command
         );
 
         // Shipping / tracking
-        $trackingCode      = null;
-        $shippingCost      = 0;
-        $shippingMethod    = null;
-        $shippingMode      = null;
-        $estimatedDelivery = null;
-        $dateDelivered     = null;
-        $shipment          = [];
+        $trackingCode       = null;
+        $shippingCost       = 0;
+        $shippingMethod     = null;
+        $shippingMode       = null;
+        $estimatedDelivery  = null;
+        $dateDelivered      = null;
+        $shipment           = [];
 
         if (! empty($ml['shipping']['id'])) {
             $shipment          = $service->getShipping((string) $ml['shipping']['id']);
@@ -141,18 +111,21 @@ class SyncMarketplaceOrders extends Command
         $customerEmail = ! empty($buyer['email']) ? $buyer['email'] : null;
         $mlUserId      = $buyer['id'] ?? null;
 
-        // Enriched ML data
-        $packId            = $ml['pack_id'] ?? null;
-        $tags              = $ml['tags'] ?? [];
-        $buyerFeedback     = $ml['feedback']['buyer'] ?? null;
-        $isFulfillment     = in_array('fulfillment', $tags);
+        // Pack ID (needed for messages)
+        $packId = $ml['pack_id'] ?? null;
+
+        // Tags
+        $tags = $ml['tags'] ?? [];
+
+        // Feedback
+        $buyerFeedback = $ml['feedback']['buyer'] ?? null;
 
         DB::transaction(function () use (
             $account, $ml, $buyer, $orderStatus, $paymentStatus, $payment,
             $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal,
             $customerName, $customerEmail, $mlUserId, $receiver,
             $shippingMethod, $shippingMode, $estimatedDelivery, $dateDelivered,
-            $packId, $tags, $buyerFeedback, $isFulfillment, $shipment
+            $packId, $tags, $buyerFeedback, $shipment
         ) {
             $customer = $this->upsertCustomer(
                 $account, $customerName, $customerEmail, $mlUserId, $buyer, $receiver
@@ -162,9 +135,7 @@ class SyncMarketplaceOrders extends Command
             if ($dateDelivered) {
                 $deliveredAt = now()->parse($dateDelivered);
             } elseif ($orderStatus === OrderStatus::Delivered) {
-                $deliveredAt = ! empty($ml['last_updated'])
-                    ? now()->parse($ml['last_updated'])
-                    : null;
+                $deliveredAt = now()->parse($ml['last_updated'] ?? now());
             }
 
             $order = Order::updateOrCreate(
@@ -192,21 +163,21 @@ class SyncMarketplaceOrders extends Command
                         : null,
                     'delivered_at'     => $deliveredAt,
                     'meta'             => [
-                        'ml_order_id'           => $ml['id'],
-                        'ml_status'             => $ml['status'],
-                        'ml_payment_id'         => $payment['id'] ?? null,
-                        'ml_payment_method'     => $payment['payment_method_id'] ?? null,
-                        'ml_payment_type'       => $payment['payment_type'] ?? null,
-                        'ml_installments'       => $payment['installments'] ?? null,
-                        'ml_shipping_id'        => $ml['shipping']['id'] ?? null,
-                        'ml_shipping_mode'      => $shippingMode,
-                        'ml_shipping_status'    => $shipment['status'] ?? null,
-                        'ml_estimated_delivery' => $estimatedDelivery,
-                        'ml_buyer_id'           => $mlUserId,
-                        'pack_id'               => $packId,
-                        'ml_tags'               => $tags,
-                        'ml_feedback'           => $buyerFeedback,
-                        'is_fulfillment'        => $isFulfillment,
+                        'ml_order_id'          => $ml['id'],
+                        'ml_status'            => $ml['status'],
+                        'ml_payment_id'        => $payment['id'] ?? null,
+                        'ml_payment_method'    => $payment['payment_method_id'] ?? null,
+                        'ml_payment_type'      => $payment['payment_type'] ?? null,
+                        'ml_installments'      => $payment['installments'] ?? null,
+                        'ml_shipping_id'       => $ml['shipping']['id'] ?? null,
+                        'ml_shipping_mode'     => $shippingMode,
+                        'ml_shipping_status'   => $shipment['status'] ?? null,
+                        'ml_estimated_delivery'=> $estimatedDelivery,
+                        'ml_buyer_id'          => $mlUserId,
+                        'pack_id'              => $packId,
+                        'ml_tags'              => $tags,
+                        'ml_feedback'          => $buyerFeedback,
+                        'is_fulfillment'       => in_array('fulfillment', $tags),
                     ],
                 ]
             );
@@ -237,10 +208,10 @@ class SyncMarketplaceOrders extends Command
                     'discount'   => 0,
                     'total'      => $unitPrice * $quantity,
                     'meta'       => [
-                        'ml_item_id'          => $mlItem['item']['id'] ?? null,
-                        'ml_category'         => $mlItem['item']['category_id'] ?? null,
-                        'ml_variation_id'     => $mlItem['item']['variation_id'] ?? null,
-                        'ml_variation_attrs'  => $mlItem['item']['variation_attributes'] ?? null,
+                        'ml_item_id'       => $mlItem['item']['id'] ?? null,
+                        'ml_category'      => $mlItem['item']['category_id'] ?? null,
+                        'ml_variation_id'  => $mlItem['item']['variation_id'] ?? null,
+                        'ml_variation_attrs' => $mlItem['item']['variation_attributes'] ?? null,
                     ],
                 ];
 

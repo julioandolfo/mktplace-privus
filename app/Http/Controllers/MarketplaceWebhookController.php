@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MarketplaceType;
+use App\Jobs\ProcessWebhookEvent;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -11,22 +12,25 @@ class MarketplaceWebhookController extends Controller
 {
     public function handle(string $type, Request $request): Response
     {
-        // Valida que o tipo é um marketplace conhecido
+        // Validate marketplace type
         try {
-            MarketplaceType::from($type);
+            $marketplaceType = MarketplaceType::from($type);
         } catch (\ValueError) {
             return response('', 404);
         }
 
-        // Loga o payload recebido para debug e auditoria
-        Log::info("Webhook marketplace [{$type}]", [
+        $payload = $request->all();
+
+        Log::debug("Webhook [{$type}] recebido", [
             'ip'      => $request->ip(),
-            'payload' => $request->all(),
+            'topic'   => $payload['topic'] ?? null,
+            'user_id' => $payload['user_id'] ?? null,
         ]);
 
-        // TODO: processar eventos por tipo (pedidos, estoque, cancelamentos...)
-        // Ex: dispatch(new ProcessMarketplaceWebhook($type, $request->all()));
+        // Dispatch async job to process the event (non-blocking)
+        ProcessWebhookEvent::dispatch($type, $payload)->onQueue('high');
 
+        // Always return 200 immediately so ML does not retry
         return response('', 200);
     }
 }

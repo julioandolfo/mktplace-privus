@@ -1,6 +1,12 @@
 <x-app-layout>
     <x-slot name="header">Anuncios</x-slot>
     <x-slot name="subtitle">Listings importados dos marketplaces</x-slot>
+    <x-slot name="actions">
+        <a href="{{ route('listings.publish-form') }}" class="btn-primary btn-sm">
+            <x-heroicon-o-rocket-launch class="w-4 h-4" />
+            Publicar Anuncio
+        </a>
+    </x-slot>
     <x-slot name="breadcrumbs">
         <li class="flex items-center gap-2">
             <x-heroicon-s-chevron-right class="w-4 h-4" />
