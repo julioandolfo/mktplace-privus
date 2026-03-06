@@ -97,10 +97,14 @@ class MarketplaceListingController extends Controller
                     }
                     if (in_array('fulfillment', $liveData['tags'] ?? [])) {
                         $metaPatch['is_fulfillment'] = true;
+                    } else {
+                        $metaPatch['is_fulfillment'] = false;
                     }
-                    if (! empty($metaPatch)) {
-                        $listing->update(['meta' => array_merge($listing->meta ?? [], $metaPatch)]);
-                    }
+
+                    // Clean up legacy lock flags that should not persist
+                    $cleanMeta = $listing->meta ?? [];
+                    unset($cleanMeta['handling_time_locked'], $cleanMeta['locked_fields']);
+                    $listing->update(['meta' => array_merge($cleanMeta, $metaPatch)]);
 
                     $step = 'api-attributes';
                     if (! empty($liveData['category_id'])) {
@@ -184,9 +188,9 @@ class MarketplaceListingController extends Controller
     {
         $meta = $listing->meta ?? [];
 
-        $isCatalogItem    = ! empty($meta['family_name']) || ! empty($meta['catalog_product_id']);
-        $isHandlingLocked = ! empty($meta['handling_time_locked']) || ! empty($meta['is_fulfillment']);
-        $hasVariations    = ! empty($meta['has_variations']);
+        $isCatalogItem = ! empty($meta['family_name']) || ! empty($meta['catalog_product_id']);
+        $isFulfillment = ! empty($meta['is_fulfillment']);
+        $hasVariations = ! empty($meta['has_variations']);
 
         $validated = $request->validate([
             'title'              => $isCatalogItem ? 'nullable|string|max:60' : 'required|string|max:60',
@@ -216,7 +220,7 @@ class MarketplaceListingController extends Controller
             $payload['available_quantity'] = (int) $validated['available_quantity'];
         }
 
-        if (! $isHandlingLocked) {
+        if (! $isFulfillment) {
             $payload['shipping'] = ['handling_time' => (int) $validated['handling_time']];
         }
 
@@ -338,7 +342,6 @@ class MarketplaceListingController extends Controller
                     if (empty($payload['shipping'])) {
                         unset($payload['shipping']);
                     }
-                    $metaUpdates['handling_time_locked'] = true;
                 } else {
                     unset($payload[$field]);
                 }
@@ -353,6 +356,11 @@ class MarketplaceListingController extends Controller
             if (! in_array('title', $removedFields)) {
                 $removedFields[] = 'title';
             }
+        }
+
+        // Only persist truly permanent locks (catalog items), not temporary API rejections
+        if (in_array('price', $removedFields) || in_array('available_quantity', $removedFields)) {
+            $metaUpdates['has_variations'] = true;
         }
 
         if (! empty($metaUpdates)) {

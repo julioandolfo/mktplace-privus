@@ -35,7 +35,7 @@
         $hasVariations    = !empty($live['variations']) || !empty($listingMeta['has_variations']);
         $variations       = $live['variations'] ?? [];
         $isFulfillment    = in_array('fulfillment', $live['tags'] ?? []);
-        $isHandlingLocked = $isFulfillment || !empty($listingMeta['handling_time_locked']);
+        $isHandlingLocked = $isFulfillment;
         $isPriceLocked    = $hasVariations;
         $isStockLocked    = $hasVariations;
         // Catalog items: title cannot be edited via API
