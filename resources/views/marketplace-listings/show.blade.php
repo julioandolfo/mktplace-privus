@@ -41,17 +41,21 @@
     @endif
 
     @php
-        $hasVariations  = !empty($liveData['variations']);
-        $variations     = $liveData['variations'] ?? [];
-        $isFulfillment  = in_array('fulfillment', $liveData['tags'] ?? []);
+        // Null-safe wrappers — $liveData can be null when API fails or has no credentials
+        $live        = $liveData ?? [];
+        $listingMeta = $listing->meta ?? [];
+
+        $hasVariations  = !empty($live['variations']);
+        $variations     = $live['variations'] ?? [];
+        $isFulfillment  = in_array('fulfillment', $live['tags'] ?? []);
         // Catalog items: title cannot be edited via API
-        $isCatalogItem  = !empty($listing->meta['family_name'])
-                       || !empty($listing->meta['catalog_product_id'])
-                       || !empty($liveData['family_name'])
-                       || !empty($liveData['catalog_product_id']);
+        $isCatalogItem  = !empty($listingMeta['family_name'])
+                       || !empty($listingMeta['catalog_product_id'])
+                       || !empty($live['family_name'])
+                       || !empty($live['catalog_product_id']);
 
         // Separate category attributes into editable vs read-only
-        $currentAttrsIndexed = collect($liveData['attributes'] ?? [])->keyBy('id');
+        $currentAttrsIndexed = collect($live['attributes'] ?? [])->keyBy('id');
 
         // Only count truly missing: required + editable + without any value (name, id or values[])
         $requiredAttrs   = collect($categoryAttributes)->filter(fn($a) =>
@@ -157,17 +161,17 @@
                         @if($isCatalogItem)
                             {{-- Catalog items: title is managed by ML, cannot be changed --}}
                             <input type="text"
-                                value="{{ $liveData['title'] ?? $listing->title }}"
+                                value="{{ $live['title'] ?? $listing->title }}"
                                 class="form-input bg-gray-100 dark:bg-zinc-800/60 text-gray-500 dark:text-zinc-400 cursor-not-allowed"
                                 disabled>
-                            <input type="hidden" name="title" value="{{ $liveData['title'] ?? $listing->title }}">
+                            <input type="hidden" name="title" value="{{ $live['title'] ?? $listing->title }}">
                             <p class="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
                                 <x-heroicon-o-lock-closed class="w-3 h-3" />
                                 Título bloqueado — este anúncio está vinculado ao catálogo do Mercado Livre.
                             </p>
                         @else
                             <input type="text" name="title" maxlength="60"
-                                value="{{ old('title', $liveData['title'] ?? $listing->title) }}"
+                                value="{{ old('title', $live['title'] ?? $listing->title) }}"
                                 class="form-input @error('title') border-red-500 @enderror" required>
                             @error('title') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
                         @endif
@@ -177,14 +181,14 @@
                         <div>
                             <label class="form-label">Preco (R$)</label>
                             <input type="number" name="price" step="0.01" min="0"
-                                value="{{ old('price', $liveData['price'] ?? $listing->price) }}"
+                                value="{{ old('price', $live['price'] ?? $listing->price) }}"
                                 class="form-input @error('price') border-red-500 @enderror" required>
                             @error('price') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
                         </div>
                         <div>
                             <label class="form-label">Estoque Disponivel</label>
                             <input type="number" name="available_quantity" min="0"
-                                value="{{ old('available_quantity', $liveData['available_quantity'] ?? $listing->available_quantity) }}"
+                                value="{{ old('available_quantity', $live['available_quantity'] ?? $listing->available_quantity) }}"
                                 class="form-input @error('available_quantity') border-red-500 @enderror" required
                                 @if($isFulfillment) disabled title="Gerenciado pelo Fulfillment ML" @endif>
                             @error('available_quantity') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
@@ -193,7 +197,7 @@
 
                     <div>
                         <label class="form-label">Prazo de Disponibilidade</label>
-                        @php $currentHandling = old('handling_time', $liveData['shipping']['handling_time'] ?? 0); @endphp
+                        @php $currentHandling = old('handling_time', $live['shipping']['handling_time'] ?? 0); @endphp
                         <select name="handling_time" class="form-input">
                             <option value="0" @selected((int)$currentHandling === 0)>Mesmo dia</option>
                             @for($d = 1; $d <= 20; $d++)
@@ -206,7 +210,7 @@
 
                     {{-- Shipping Dimensions --}}
                     @php
-                        $dims = $liveData['shipping']['dimensions'] ?? null;
+                        $dims = $live['shipping']['dimensions'] ?? null;
                     @endphp
                     <div>
                         <label class="form-label mb-2 block">Dimensões para Frete (Mercado Envios)</label>
@@ -252,24 +256,24 @@
             </div>
 
             {{-- Atributos por Categoria --}}
-            @if(!empty($liveData['attributes']) || !empty($categoryAttributes))
+            @if(!empty($live['attributes']) || !empty($categoryAttributes))
             <div id="atributos">
             <x-ui.card title="Atributos do Anuncio">
                 <form method="POST" action="{{ route('listings.update', $listing) }}" class="space-y-3">
                     @csrf
                     @method('PUT')
                     {{-- Hidden fields to keep main fields --}}
-                    <input type="hidden" name="title" value="{{ $liveData['title'] ?? $listing->title }}">
-                    <input type="hidden" name="price" value="{{ $liveData['price'] ?? $listing->price }}">
-                    <input type="hidden" name="available_quantity" value="{{ $liveData['available_quantity'] ?? $listing->available_quantity }}">
-                    <input type="hidden" name="handling_time" value="{{ $liveData['shipping']['handling_time'] ?? 0 }}">
+                    <input type="hidden" name="title" value="{{ $live['title'] ?? $listing->title }}">
+                    <input type="hidden" name="price" value="{{ $live['price'] ?? $listing->price }}">
+                    <input type="hidden" name="available_quantity" value="{{ $live['available_quantity'] ?? $listing->available_quantity }}">
+                    <input type="hidden" name="handling_time" value="{{ $live['shipping']['handling_time'] ?? 0 }}">
 
                     @php
-                        $currentAttrsMap = collect($liveData['attributes'] ?? [])->keyBy('id');
+                        $currentAttrsMap = collect($live['attributes'] ?? [])->keyBy('id');
                         // Prefer category attributes schema; fall back to live item attributes
                         $allAttrs = collect($categoryAttributes)->isNotEmpty()
                             ? collect($categoryAttributes)
-                            : collect($liveData['attributes'] ?? []);
+                            : collect($live['attributes'] ?? []);
                     @endphp
 
                     <div class="space-y-3">
@@ -729,34 +733,34 @@
                         <span class="text-gray-500 dark:text-zinc-400 text-xs">Conta</span>
                         <p class="mt-0.5">{{ $listing->marketplaceAccount?->account_name ?? '—' }}</p>
                     </div>
-                    @if($liveData['listing_type_id'] ?? null)
+                    @if($live['listing_type_id'] ?? null)
                     <div>
                         <span class="text-gray-500 dark:text-zinc-400 text-xs">Tipo de anuncio</span>
                         <p class="font-mono mt-0.5 text-xs">
-                            {{ match($liveData['listing_type_id']) {
+                            {{ match($live['listing_type_id']) {
                                 'gold_pro'     => 'Premium',
                                 'gold_special' => 'Classico',
                                 'free'         => 'Grátis',
-                                default        => $liveData['listing_type_id'],
+                                default        => $live['listing_type_id'],
                             } }}
                         </p>
                     </div>
                     @endif
-                    @if($liveData['category_id'] ?? null)
+                    @if($live['category_id'] ?? null)
                     <div>
                         <span class="text-gray-500 dark:text-zinc-400 text-xs">Categoria</span>
-                        <p class="font-mono mt-0.5 text-xs">{{ $liveData['category_id'] }}</p>
+                        <p class="font-mono mt-0.5 text-xs">{{ $live['category_id'] }}</p>
                     </div>
                     @endif
-                    @if($liveData['condition'] ?? null)
+                    @if($live['condition'] ?? null)
                     <div>
                         <span class="text-gray-500 dark:text-zinc-400 text-xs">Condicao</span>
                         <p class="mt-0.5 text-xs capitalize">
-                            {{ match($liveData['condition']) {
+                            {{ match($live['condition']) {
                                 'new'           => 'Novo',
                                 'used'          => 'Usado',
                                 'not_specified' => 'Não especificado',
-                                default         => $liveData['condition'],
+                                default         => $live['condition'],
                             } }}
                         </p>
                     </div>
@@ -767,8 +771,8 @@
                         <p class="mt-0.5 text-xs">{{ count($variations) }} variação{{ count($variations) !== 1 ? 'ões' : '' }}</p>
                     </div>
                     @endif
-                    @if($liveData['permalink'] ?? ($listing->meta['ml_permalink'] ?? null))
-                    <a href="{{ $liveData['permalink'] ?? $listing->meta['ml_permalink'] }}" target="_blank"
+                    @if($live['permalink'] ?? ($listingMeta['ml_permalink'] ?? null))
+                    <a href="{{ $live['permalink'] ?? $listingMeta['ml_permalink'] }}" target="_blank"
                        class="flex items-center gap-1 text-primary-500 hover:text-primary-400 mt-0.5 text-xs">
                         Ver no ML
                         <x-heroicon-o-arrow-top-right-on-square class="w-3 h-3 flex-shrink-0" />
@@ -778,10 +782,10 @@
             </x-ui.card>
 
             {{-- Frete --}}
-            @if(!empty($liveData['shipping']))
+            @if(!empty($live['shipping']))
             <x-ui.card title="Frete">
                 <div class="space-y-2 text-sm">
-                    @php $shipping = $liveData['shipping']; @endphp
+                    @php $shipping = $live['shipping']; @endphp
                     <div class="flex justify-between">
                         <span class="text-gray-500 dark:text-zinc-400">Modo</span>
                         <span>

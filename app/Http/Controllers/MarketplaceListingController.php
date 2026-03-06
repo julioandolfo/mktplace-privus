@@ -55,72 +55,107 @@ class MarketplaceListingController extends Controller
 
     public function show(MarketplaceListing $listing)
     {
-        $listing->load(['marketplaceAccount', 'product']);
-        $products = Product::active()->orderBy('name')->get(['id', 'name', 'sku', 'price']);
-
-        $liveData          = null;
-        $quality           = null;
-        $description       = null;
-        $categoryAttributes = [];
-        $apiError          = null;
-
-        $account = $listing->marketplaceAccount;
-        if ($account && $account->credentials) {
-            try {
-                $service     = new MercadoLivreService($account);
-                $liveData    = $service->getItemWithVariations($listing->external_id);
-                $quality     = $service->getItemQuality($listing->external_id);
-                $description = $service->getItemDescription($listing->external_id);
-
-                // Load category attributes for the enriched form
-                if (! empty($liveData['category_id'])) {
-                    $categoryAttributes = $service->getCategoryAttributes($liveData['category_id']);
-                }
-            } catch (\Throwable $e) {
-                Log::warning("ListingController show() API error: " . $e->getMessage());
-                $apiError = 'Não foi possível carregar dados em tempo real. Exibindo dados locais.';
-            }
-        }
-
-        // Sales stats — local DB, last 12 months (driver-agnostic)
+        $step = 'init';
         try {
-            $salesRaw = DB::table('order_items')
-                ->join('orders', 'orders.id', '=', 'order_items.order_id')
-                ->where('orders.created_at', '>=', now()->subMonths(12))
-                ->select('orders.created_at', 'order_items.total', 'order_items.meta')
-                ->get()
-                ->filter(function ($row) use ($listing) {
-                    $meta = $row->meta;
-                    if (is_string($meta)) {
-                        $meta = json_decode($meta, true);
+            $step = 'load-relations';
+            $listing->load(['marketplaceAccount', 'product']);
+
+            $step     = 'load-products';
+            $products = Product::active()->orderBy('name')->get(['id', 'name', 'sku', 'price']);
+
+            $liveData           = null;
+            $quality            = null;
+            $description        = null;
+            $categoryAttributes = [];
+            $apiError           = null;
+
+            $step    = 'check-account';
+            $account = $listing->marketplaceAccount;
+
+            if ($account && $account->credentials) {
+                try {
+                    $step     = 'api-item';
+                    $service  = new MercadoLivreService($account);
+                    $liveData = $service->getItemWithVariations($listing->external_id);
+
+                    $step    = 'api-quality';
+                    $quality = $service->getItemQuality($listing->external_id);
+
+                    $step        = 'api-description';
+                    $description = $service->getItemDescription($listing->external_id);
+
+                    $step = 'api-attributes';
+                    if (! empty($liveData['category_id'])) {
+                        $categoryAttributes = $service->getCategoryAttributes($liveData['category_id']);
                     }
-                    return ($meta['ml_item_id'] ?? null) === $listing->external_id;
-                });
+                } catch (\Throwable $e) {
+                    Log::warning("ListingController show() API error [{$listing->external_id}] step={$step}: " . $e->getMessage());
+                    $apiError = 'Não foi possível carregar dados em tempo real. Exibindo dados locais.';
+                }
+            }
 
-            $salesStats = $salesRaw
-                ->groupBy(fn ($row) => date('Y-m', strtotime($row->created_at)))
-                ->map(fn ($group, $month) => (object) [
-                    'month'   => $month,
-                    'qty'     => $group->count(),
-                    'revenue' => $group->sum('total'),
-                ])
-                ->values()
-                ->sortBy('month')
-                ->values();
+            // Sales stats — local DB, last 12 months (driver-agnostic)
+            $step = 'sales-stats';
+            try {
+                $salesRaw = DB::table('order_items')
+                    ->join('orders', 'orders.id', '=', 'order_items.order_id')
+                    ->where('orders.created_at', '>=', now()->subMonths(12))
+                    ->select('orders.created_at', 'order_items.total', 'order_items.meta')
+                    ->get()
+                    ->filter(function ($row) use ($listing) {
+                        $meta = $row->meta;
+                        if (is_string($meta)) {
+                            $meta = json_decode($meta, true);
+                        }
+                        return ($meta['ml_item_id'] ?? null) === $listing->external_id;
+                    });
+
+                $salesStats = $salesRaw
+                    ->groupBy(fn ($row) => date('Y-m', strtotime($row->created_at)))
+                    ->map(fn ($group, $month) => (object) [
+                        'month'   => $month,
+                        'qty'     => $group->count(),
+                        'revenue' => $group->sum('total'),
+                    ])
+                    ->values()
+                    ->sortBy('month')
+                    ->values();
+            } catch (\Throwable $e) {
+                Log::warning("ListingController sales stats error [{$listing->external_id}]: " . $e->getMessage());
+                $salesStats = collect();
+            }
+
+            $step         = 'compute-totals';
+            $totalQty     = $salesStats->sum('qty');
+            $totalRevenue = $salesStats->sum('revenue');
+            $avgTicket    = $totalQty > 0 ? $totalRevenue / $totalQty : 0;
+
+            $step = 'render-view';
+            return view('marketplace-listings.show', compact(
+                'listing', 'products',
+                'liveData', 'quality', 'description', 'categoryAttributes', 'apiError',
+                'salesStats', 'totalQty', 'totalRevenue', 'avgTicket'
+            ));
+
         } catch (\Throwable $e) {
-            Log::warning("ListingController sales stats error: " . $e->getMessage());
-            $salesStats = collect();
+            $context = [
+                'listing_id'  => $listing->id,
+                'external_id' => $listing->external_id,
+                'step'        => $step,
+                'error'       => $e->getMessage(),
+                'file'        => $e->getFile() . ':' . $e->getLine(),
+                'trace'       => collect(explode("\n", $e->getTraceAsString()))->take(10)->implode("\n"),
+            ];
+
+            Log::error("ListingController show() FALHOU no step=[{$step}] listing={$listing->external_id}: " . $e->getMessage(), $context);
+
+            activity('listings')
+                ->withProperties($context)
+                ->log("Erro 500 em listings/{$listing->id} (step: {$step}): " . $e->getMessage());
+
+            return back()->with('error', "Erro ao carregar anúncio (step: {$step}): " . $e->getMessage())
+                         ->withInput();
         }
-
-        $totalQty     = $salesStats->sum('qty');
-        $totalRevenue = $salesStats->sum('revenue');
-        $avgTicket    = $totalQty > 0 ? $totalRevenue / $totalQty : 0;
-
-        return view('marketplace-listings.show', compact(
-            'listing', 'products',
-            'liveData', 'quality', 'description', 'categoryAttributes', 'apiError',
-            'salesStats', 'totalQty', 'totalRevenue', 'avgTicket'
-        ));
     }
 
     public function update(Request $request, MarketplaceListing $listing)
