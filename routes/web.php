@@ -104,6 +104,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/listings/{listing}/create-product', [MarketplaceListingController::class, 'createProduct'])->name('listings.create-product');
     Route::delete('/listings/{listing}/unlink-product', [MarketplaceListingController::class, 'unlinkProduct'])->name('listings.unlink-product');
     Route::put('/listings/{listing}/variations/{variationId}', [MarketplaceListingController::class, 'updateVariation'])->name('listings.update-variation');
+    Route::delete('/listings/{listing}/variations/{variationId}', [MarketplaceListingController::class, 'deleteVariation'])->name('listings.delete-variation');
 
     // Logs
     Route::get('/logs', [ActivityLogController::class, 'index'])->name('logs.index');

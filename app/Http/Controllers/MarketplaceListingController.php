@@ -164,9 +164,10 @@ class MarketplaceListingController extends Controller
 
     public function update(Request $request, MarketplaceListing $listing)
     {
-        // Items linked to a ML catalog (family_name) cannot have their title modified
-        $isCatalogItem = ! empty($listing->meta['family_name'])
-            || ! empty($listing->meta['catalog_product_id']);
+        $meta = $listing->meta ?? [];
+
+        $isCatalogItem    = ! empty($meta['family_name']) || ! empty($meta['catalog_product_id']);
+        $isHandlingLocked = ! empty($meta['handling_time_locked']) || ! empty($meta['is_fulfillment']);
 
         $validated = $request->validate([
             'title'              => $isCatalogItem ? 'nullable|string|max:60' : 'required|string|max:60',
@@ -185,28 +186,34 @@ class MarketplaceListingController extends Controller
             return back()->with('error', 'Conta do marketplace não encontrada ou sem credenciais.');
         }
 
-        $payload = [
-            'price'              => (float) $validated['price'],
-            'available_quantity' => (int) $validated['available_quantity'],
-            'shipping'           => ['handling_time' => (int) $validated['handling_time']],
-        ];
+        // Build payload respecting known locked fields
+        $payload = [];
+        $lockedFields = $meta['locked_fields'] ?? [];
 
-        // Only include title for items NOT linked to a ML catalog
-        if (! $isCatalogItem && ! empty($validated['title'])) {
+        if (! in_array('price', $lockedFields)) {
+            $payload['price'] = (float) $validated['price'];
+        }
+        if (! in_array('available_quantity', $lockedFields)) {
+            $payload['available_quantity'] = (int) $validated['available_quantity'];
+        }
+        if (! $isHandlingLocked && ! in_array('shipping.handling_time', $lockedFields)) {
+            $payload['shipping'] = ['handling_time' => (int) $validated['handling_time']];
+        }
+        if (! $isCatalogItem && ! empty($validated['title']) && ! in_array('title', $lockedFields)) {
             $payload['title'] = $validated['title'];
         }
 
-        // Include dimensions if provided
         if (! empty($validated['shipping_width'])) {
-            $payload['shipping']['dimensions'] = [
-                'width'  => $validated['shipping_width'],
-                'height' => $validated['shipping_height'] ?? 0,
-                'length' => $validated['shipping_length'] ?? 0,
-                'weight' => $validated['shipping_weight'] ?? 0,
-            ];
+            $payload['shipping'] = array_merge($payload['shipping'] ?? [], [
+                'dimensions' => [
+                    'width'  => $validated['shipping_width'],
+                    'height' => $validated['shipping_height'] ?? 0,
+                    'length' => $validated['shipping_length'] ?? 0,
+                    'weight' => $validated['shipping_weight'] ?? 0,
+                ],
+            ]);
         }
 
-        // Include editable attributes if provided
         if (! empty($validated['attributes'])) {
             $payload['attributes'] = collect($validated['attributes'])
                 ->filter(fn ($v) => $v !== '' && $v !== null)
@@ -215,33 +222,40 @@ class MarketplaceListingController extends Controller
                 ->all();
         }
 
+        if (empty($payload)) {
+            return redirect()->route('listings.show', $listing)
+                ->with('info', 'Nenhum campo editável para enviar ao Mercado Livre. Todos os campos deste anúncio são gerenciados pelo ML.');
+        }
+
         try {
             $service = new MercadoLivreService($account);
             $service->updateItem($listing->external_id, $payload);
         } catch (\Throwable $e) {
             $errorBody = $e->getMessage();
 
-            // If ML rejects title (catalog item not detected locally), retry without title
-            if (str_contains($errorBody, 'family_name') || str_contains($errorBody, 'cannot modify the title')) {
-                unset($payload['title']);
+            // Parse ML validation errors and auto-retry without rejected fields
+            if (str_contains($errorBody, 'field_not_updatable') || str_contains($errorBody, 'not_modifiable') || str_contains($errorBody, 'family_name')) {
+                $removedFields = $this->removeRejectedFields($payload, $errorBody, $listing);
 
-                // Store in meta so future requests skip title automatically
-                $listing->update([
-                    'meta' => array_merge($listing->meta ?? [], ['family_name' => 'catalog']),
-                ]);
+                if (! empty($removedFields) && ! empty($payload)) {
+                    try {
+                        $service->updateItem($listing->external_id, $payload);
 
-                try {
-                    $service->updateItem($listing->external_id, $payload);
-                } catch (\Throwable $e2) {
-                    return back()->with('error', 'Erro ao atualizar no Mercado Livre: ' . $e2->getMessage());
+                        $fieldLabels = array_map(fn ($f) => self::FIELD_LABELS[$f] ?? $f, $removedFields);
+                        return redirect()->route('listings.show', $listing)
+                            ->with('success', 'Anúncio atualizado com sucesso.')
+                            ->with('info', 'Os campos a seguir são gerenciados pelo Mercado Livre e não foram alterados: ' . implode(', ', $fieldLabels) . '.');
+                    } catch (\Throwable $e2) {
+                        return back()->with('error', self::friendlyMlError($e2->getMessage()));
+                    }
                 }
-            } else {
-                return back()->with('error', 'Erro ao atualizar no Mercado Livre: ' . $errorBody);
             }
+
+            return back()->with('error', self::friendlyMlError($errorBody));
         }
 
         $listing->update([
-            'title'              => $validated['title'],
+            'title'              => $validated['title'] ?? $listing->title,
             'price'              => $validated['price'],
             'available_quantity' => $validated['available_quantity'],
         ]);
@@ -250,11 +264,103 @@ class MarketplaceListingController extends Controller
             ->with('success', 'Anúncio atualizado com sucesso.');
     }
 
+    private const FIELD_LABELS = [
+        'title'                  => 'Título',
+        'price'                  => 'Preço',
+        'available_quantity'     => 'Estoque',
+        'shipping.handling_time' => 'Prazo de disponibilidade',
+        'shipping'               => 'Frete',
+    ];
+
+    private function removeRejectedFields(array &$payload, string $errorBody, MarketplaceListing $listing): array
+    {
+        $removedFields = [];
+        $metaUpdates   = [];
+
+        $fieldsToCheck = [
+            'title'                  => fn () => isset($payload['title']),
+            'price'                  => fn () => isset($payload['price']),
+            'available_quantity'     => fn () => isset($payload['available_quantity']),
+            'shipping.handling_time' => fn () => isset($payload['shipping']['handling_time']),
+        ];
+
+        foreach ($fieldsToCheck as $field => $exists) {
+            if (str_contains($errorBody, $field) && $exists()) {
+                if ($field === 'shipping.handling_time') {
+                    unset($payload['shipping']['handling_time']);
+                    if (empty($payload['shipping'])) {
+                        unset($payload['shipping']);
+                    }
+                    $metaUpdates['handling_time_locked'] = true;
+                } else {
+                    unset($payload[$field]);
+                }
+
+                $removedFields[] = $field;
+            }
+        }
+
+        if (str_contains($errorBody, 'family_name') || str_contains($errorBody, 'cannot modify the title')) {
+            unset($payload['title']);
+            $metaUpdates['family_name'] = 'catalog';
+            if (! in_array('title', $removedFields)) {
+                $removedFields[] = 'title';
+            }
+        }
+
+        // Persist locked fields for future requests
+        if (! empty($removedFields)) {
+            $existing          = $listing->meta['locked_fields'] ?? [];
+            $merged            = array_unique(array_merge($existing, $removedFields));
+            $metaUpdates['locked_fields'] = array_values($merged);
+        }
+
+        if (! empty($metaUpdates)) {
+            $listing->update(['meta' => array_merge($listing->meta ?? [], $metaUpdates)]);
+        }
+
+        return $removedFields;
+    }
+
+    private static function friendlyMlError(string $rawError): string
+    {
+        // Try to extract the JSON from the raw error message
+        if (preg_match('/\{.*\}/s', $rawError, $m)) {
+            $data = json_decode($m[0], true);
+            if ($data) {
+                $causes = $data['cause'] ?? [];
+                if (! empty($causes)) {
+                    $messages = [];
+                    foreach ($causes as $cause) {
+                        $refs = implode(', ', array_map(
+                            fn ($r) => self::FIELD_LABELS[$r] ?? $r,
+                            $cause['references'] ?? []
+                        ));
+                        $msg = match ($cause['code'] ?? '') {
+                            'field_not_updatable'       => "O campo \"{$refs}\" não pode ser alterado neste anúncio (gerenciado pelo ML).",
+                            'item.price.not_modifiable' => "O preço não pode ser alterado neste anúncio (gerenciado pelo ML).",
+                            default                     => $cause['message'] ?? 'Erro desconhecido',
+                        };
+                        $messages[] = $msg;
+                    }
+                    return implode(' ', $messages);
+                }
+
+                return $data['error'] ?? $data['message'] ?? $rawError;
+            }
+        }
+
+        return 'Erro ao atualizar no Mercado Livre. Tente novamente em alguns instantes.';
+    }
+
     public function updateVariation(Request $request, MarketplaceListing $listing, string $variationId)
     {
         $validated = $request->validate([
             'price'              => 'nullable|numeric|min:0',
             'available_quantity' => 'required|integer|min:0',
+            'seller_custom_field' => 'nullable|string|max:100',
+            'picture_ids'        => 'nullable|array',
+            'picture_ids.*'      => 'string',
         ]);
 
         $account = $listing->marketplaceAccount;
@@ -268,12 +374,24 @@ class MarketplaceListingController extends Controller
 
             $variations = collect($liveData['variations'] ?? [])
                 ->map(function ($v) use ($variationId, $validated) {
-                    if ((string) $v['id'] === $variationId) {
-                        $v['available_quantity'] = (int) $validated['available_quantity'];
-                        if (! empty($validated['price'])) {
-                            $v['price'] = (float) $validated['price'];
-                        }
+                    if ((string) $v['id'] !== $variationId) {
+                        return $v;
                     }
+
+                    $v['available_quantity'] = (int) $validated['available_quantity'];
+
+                    if (! empty($validated['price'])) {
+                        $v['price'] = (float) $validated['price'];
+                    }
+
+                    if (array_key_exists('seller_custom_field', $validated)) {
+                        $v['seller_custom_field'] = $validated['seller_custom_field'] ?: null;
+                    }
+
+                    if (! empty($validated['picture_ids'])) {
+                        $v['picture_ids'] = $validated['picture_ids'];
+                    }
+
                     return $v;
                 })
                 ->values()
@@ -282,11 +400,40 @@ class MarketplaceListingController extends Controller
             $service->updateItem($listing->external_id, ['variations' => $variations]);
 
         } catch (\Throwable $e) {
-            return back()->with('error', 'Erro ao atualizar variação: ' . $e->getMessage());
+            return back()->with('error', 'Erro ao atualizar variação: ' . self::friendlyMlError($e->getMessage()));
         }
 
         return redirect()->route('listings.show', $listing)
             ->with('success', 'Variação atualizada com sucesso.');
+    }
+
+    public function deleteVariation(Request $request, MarketplaceListing $listing, string $variationId)
+    {
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta não encontrada ou sem credenciais.');
+        }
+
+        try {
+            $service  = new MercadoLivreService($account);
+            $liveData = $service->getItem($listing->external_id);
+
+            $variations = collect($liveData['variations'] ?? [])
+                ->reject(fn ($v) => (string) $v['id'] === $variationId)
+                ->values()
+                ->all();
+
+            if (empty($variations)) {
+                return back()->with('error', 'Não é possível remover a última variação. O anúncio precisa ter pelo menos uma.');
+            }
+
+            $service->updateItem($listing->external_id, ['variations' => $variations]);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao remover variação: ' . self::friendlyMlError($e->getMessage()));
+        }
+
+        return redirect()->route('listings.show', $listing)
+            ->with('success', 'Variação removida com sucesso.');
     }
 
     public function updateDescription(Request $request, MarketplaceListing $listing)
@@ -302,7 +449,7 @@ class MarketplaceListingController extends Controller
             $service = new MercadoLivreService($account);
             $service->updateDescription($listing->external_id, $text);
         } catch (\Throwable $e) {
-            return back()->with('error', 'Erro ao salvar descrição: ' . $e->getMessage());
+            return back()->with('error', 'Erro ao salvar descrição: ' . self::friendlyMlError($e->getMessage()));
         }
 
         return redirect()->route('listings.show', $listing)
@@ -344,7 +491,7 @@ class MarketplaceListingController extends Controller
             $service->updateItem($listing->external_id, ['pictures' => $pictures]);
 
         } catch (\Throwable $e) {
-            return back()->with('error', 'Erro ao adicionar imagem: ' . $e->getMessage());
+            return back()->with('error', 'Erro ao adicionar imagem: ' . self::friendlyMlError($e->getMessage()));
         }
 
         return redirect()->route('listings.show', $listing)
@@ -368,7 +515,7 @@ class MarketplaceListingController extends Controller
                 ->all();
             $service->updateItem($listing->external_id, ['pictures' => $pictures]);
         } catch (\Throwable $e) {
-            return back()->with('error', 'Erro ao remover imagem: ' . $e->getMessage());
+            return back()->with('error', 'Erro ao remover imagem: ' . self::friendlyMlError($e->getMessage()));
         }
 
         return redirect()->route('listings.show', $listing)
@@ -428,7 +575,7 @@ class MarketplaceListingController extends Controller
             $service = new MercadoLivreService($account);
             $service->updateItem($listing->external_id, ['status' => $newStatus]);
         } catch (\Throwable $e) {
-            return back()->with('error', 'Erro ao alterar status no Mercado Livre: ' . $e->getMessage());
+            return back()->with('error', 'Erro ao alterar status: ' . self::friendlyMlError($e->getMessage()));
         }
 
         $listing->update(['status' => $newStatus]);
@@ -577,7 +724,7 @@ class MarketplaceListingController extends Controller
 
         } catch (\Throwable $e) {
             Log::error("Publish listing error: " . $e->getMessage());
-            return back()->with('error', 'Erro ao publicar no Mercado Livre: ' . $e->getMessage());
+            return back()->with('error', 'Erro ao publicar no Mercado Livre: ' . self::friendlyMlError($e->getMessage()));
         }
 
         return redirect()->route('listings.show', $listing)

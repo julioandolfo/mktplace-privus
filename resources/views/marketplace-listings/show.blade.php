@@ -40,14 +40,25 @@
     </div>
     @endif
 
+    @if(session('info'))
+    <div class="mb-4 flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 text-sm text-blue-800 dark:text-blue-300">
+        <x-heroicon-o-information-circle class="w-4 h-4 flex-shrink-0" />
+        {{ session('info') }}
+    </div>
+    @endif
+
     @php
         // Null-safe wrappers — $liveData can be null when API fails or has no credentials
         $live        = $liveData ?? [];
         $listingMeta = $listing->meta ?? [];
 
-        $hasVariations  = !empty($live['variations']);
-        $variations     = $live['variations'] ?? [];
-        $isFulfillment  = in_array('fulfillment', $live['tags'] ?? []);
+        $hasVariations    = !empty($live['variations']);
+        $variations       = $live['variations'] ?? [];
+        $isFulfillment    = in_array('fulfillment', $live['tags'] ?? []);
+        $isHandlingLocked = $isFulfillment || !empty($listingMeta['handling_time_locked']);
+        $lockedFields     = $listingMeta['locked_fields'] ?? [];
+        $isPriceLocked    = in_array('price', $lockedFields);
+        $isStockLocked    = in_array('available_quantity', $lockedFields);
         // Catalog items: title cannot be edited via API
         $isCatalogItem  = !empty($listingMeta['family_name'])
                        || !empty($listingMeta['catalog_product_id'])
@@ -179,33 +190,64 @@
 
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="form-label">Preco (R$)</label>
-                            <input type="number" name="price" step="0.01" min="0"
-                                value="{{ old('price', $live['price'] ?? $listing->price) }}"
-                                class="form-input @error('price') border-red-500 @enderror" required>
-                            @error('price') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                            <label class="form-label">Preço (R$)</label>
+                            @if($isPriceLocked)
+                                <input type="number" value="{{ $live['price'] ?? $listing->price }}"
+                                    class="form-input bg-gray-100 dark:bg-zinc-800/60 text-gray-500 dark:text-zinc-400 cursor-not-allowed" disabled>
+                                <input type="hidden" name="price" value="{{ $live['price'] ?? $listing->price }}">
+                                <p class="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                                    <x-heroicon-o-lock-closed class="w-3 h-3" />
+                                    Preço gerenciado pelo ML (variações ou catálogo).
+                                </p>
+                            @else
+                                <input type="number" name="price" step="0.01" min="0"
+                                    value="{{ old('price', $live['price'] ?? $listing->price) }}"
+                                    class="form-input @error('price') border-red-500 @enderror" required>
+                                @error('price') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                            @endif
                         </div>
                         <div>
-                            <label class="form-label">Estoque Disponivel</label>
-                            <input type="number" name="available_quantity" min="0"
-                                value="{{ old('available_quantity', $live['available_quantity'] ?? $listing->available_quantity) }}"
-                                class="form-input @error('available_quantity') border-red-500 @enderror" required
-                                @if($isFulfillment) disabled title="Gerenciado pelo Fulfillment ML" @endif>
-                            @error('available_quantity') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                            <label class="form-label">Estoque Disponível</label>
+                            @if($isStockLocked)
+                                <input type="number" value="{{ $live['available_quantity'] ?? $listing->available_quantity }}"
+                                    class="form-input bg-gray-100 dark:bg-zinc-800/60 text-gray-500 dark:text-zinc-400 cursor-not-allowed" disabled>
+                                <input type="hidden" name="available_quantity" value="{{ $live['available_quantity'] ?? $listing->available_quantity }}">
+                                <p class="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                                    <x-heroicon-o-lock-closed class="w-3 h-3" />
+                                    Estoque gerenciado pelas variações.
+                                </p>
+                            @else
+                                <input type="number" name="available_quantity" min="0"
+                                    value="{{ old('available_quantity', $live['available_quantity'] ?? $listing->available_quantity) }}"
+                                    class="form-input @error('available_quantity') border-red-500 @enderror" required
+                                    @if($isFulfillment) disabled title="Gerenciado pelo Fulfillment ML" @endif>
+                                @error('available_quantity') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                            @endif
                         </div>
                     </div>
 
                     <div>
                         <label class="form-label">Prazo de Disponibilidade</label>
                         @php $currentHandling = old('handling_time', $live['shipping']['handling_time'] ?? 0); @endphp
-                        <select name="handling_time" class="form-input">
-                            <option value="0" @selected((int)$currentHandling === 0)>Mesmo dia</option>
-                            @for($d = 1; $d <= 20; $d++)
-                                <option value="{{ $d }}" @selected((int)$currentHandling === $d)>
-                                    {{ $d === 1 ? '1 dia útil' : "{$d} dias úteis" }}
-                                </option>
-                            @endfor
-                        </select>
+                        @if($isHandlingLocked)
+                            <select class="form-input bg-gray-100 dark:bg-zinc-800/60 text-gray-500 dark:text-zinc-400 cursor-not-allowed" disabled>
+                                <option>{{ (int)$currentHandling === 0 ? 'Mesmo dia' : ((int)$currentHandling . ' dia(s) útil(is)') }}</option>
+                            </select>
+                            <input type="hidden" name="handling_time" value="{{ (int)$currentHandling }}">
+                            <p class="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                                <x-heroicon-o-lock-closed class="w-3 h-3" />
+                                Prazo gerenciado pelo Mercado Livre — não pode ser alterado.
+                            </p>
+                        @else
+                            <select name="handling_time" class="form-input">
+                                <option value="0" @selected((int)$currentHandling === 0)>Mesmo dia</option>
+                                @for($d = 1; $d <= 20; $d++)
+                                    <option value="{{ $d }}" @selected((int)$currentHandling === $d)>
+                                        {{ $d === 1 ? '1 dia útil' : "{$d} dias úteis" }}
+                                    </option>
+                                @endfor
+                            </select>
+                        @endif
                     </div>
 
                     {{-- Shipping Dimensions --}}
@@ -356,66 +398,153 @@
 
             {{-- Variações --}}
             @if($hasVariations)
-            <x-ui.card title="Variações">
-                <div class="space-y-3">
-                    @foreach($variations as $variation)
+            <x-ui.card title="Variações ({{ count($variations) }})">
+                @php
+                    $allPictures = $live['pictures'] ?? [];
+                @endphp
+                <div class="space-y-4">
+                    @foreach($variations as $vi => $variation)
                     @php
                         $varAttrs = collect($variation['attribute_combinations'] ?? [])
                             ->map(fn($a) => ($a['name'] ?? '') . ': ' . ($a['value_name'] ?? ''))
                             ->join(' · ');
+                        $varPicIds   = $variation['picture_ids'] ?? [];
+                        $varPictures = collect($allPictures)->whereIn('id', $varPicIds);
+                        $varSku      = $variation['seller_custom_field'] ?? '';
+                        $varQty      = $variation['available_quantity'] ?? 0;
+                        $varPrice    = $variation['price'] ?? null;
                     @endphp
-                    <div class="border border-gray-200 dark:border-zinc-700 rounded-lg p-4">
-                        <div class="flex items-start justify-between gap-4">
-                            <div>
-                                <p class="font-medium text-sm">{{ $varAttrs ?: "Variação #{$variation['id']}" }}</p>
-                                <div class="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-zinc-400">
-                                    <span>Estoque: <strong class="text-gray-900 dark:text-white">{{ $variation['available_quantity'] ?? 0 }}</strong></span>
-                                    @if(isset($variation['price']))
-                                    <span>Preço: <strong class="font-mono text-gray-900 dark:text-white">R$ {{ number_format($variation['price'], 2, ',', '.') }}</strong></span>
+                    <div class="border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden"
+                         x-data="{ open: false }">
+                        {{-- Header --}}
+                        <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50/60 dark:hover:bg-zinc-800/40 transition-colors"
+                             @click="open = !open">
+                            {{-- Thumbnail --}}
+                            <div class="w-10 h-10 rounded-md overflow-hidden bg-gray-100 dark:bg-zinc-800 flex-shrink-0 border border-gray-200 dark:border-zinc-700">
+                                @if($varPictures->isNotEmpty())
+                                    <img src="{{ $varPictures->first()['url'] ?? '' }}" class="w-full h-full object-cover" loading="lazy">
+                                @else
+                                    <div class="w-full h-full flex items-center justify-center">
+                                        <x-heroicon-o-photo class="w-4 h-4 text-gray-300 dark:text-zinc-600" />
+                                    </div>
+                                @endif
+                            </div>
+
+                            {{-- Info --}}
+                            <div class="flex-1 min-w-0">
+                                <p class="font-medium text-sm text-gray-900 dark:text-white truncate">
+                                    {{ $varAttrs ?: "Variação #{$variation['id']}" }}
+                                </p>
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-xs text-gray-500 dark:text-zinc-400">
+                                    @if($varPrice !== null)
+                                    <span class="font-mono">R$ {{ number_format($varPrice, 2, ',', '.') }}</span>
                                     @endif
-                                    @if(!empty($variation['seller_custom_field']))
-                                    <span>SKU: <span class="font-mono">{{ $variation['seller_custom_field'] }}</span></span>
+                                    <span class="{{ $varQty <= 3 ? 'text-red-500 font-semibold' : '' }}">
+                                        Est: {{ $varQty }}
+                                    </span>
+                                    @if($varSku)
+                                    <span class="font-mono text-gray-400 dark:text-zinc-500">SKU: {{ $varSku }}</span>
                                     @endif
+                                    <span class="text-gray-400 dark:text-zinc-600">{{ count($varPicIds) }} foto(s)</span>
                                 </div>
                             </div>
-                            <button type="button"
-                                onclick="document.getElementById('var-form-{{ $variation['id'] }}').classList.toggle('hidden')"
-                                class="btn-ghost btn-sm text-xs flex-shrink-0">
-                                <x-heroicon-o-pencil class="w-3.5 h-3.5" />
-                                Editar
-                            </button>
+
+                            {{-- Expand icon --}}
+                            <x-heroicon-o-chevron-down class="w-4 h-4 text-gray-400 dark:text-zinc-500 transition-transform flex-shrink-0"
+                                                       ::class="open ? 'rotate-180' : ''" />
                         </div>
 
-                        {{-- Edit form (hidden by default) --}}
-                        <form id="var-form-{{ $variation['id'] }}" method="POST"
-                              action="{{ route('listings.update-variation', [$listing, $variation['id']]) }}"
-                              class="hidden mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800">
-                            @csrf
-                            @method('PUT')
-                            <div class="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Preço (R$)</label>
-                                    <input type="number" name="price" step="0.01" min="0"
-                                        value="{{ $variation['price'] ?? '' }}"
-                                        class="form-input text-sm" placeholder="Mesmo do anúncio">
+                        {{-- Expanded edit form --}}
+                        <div x-show="open" x-collapse x-cloak
+                             class="border-t border-gray-100 dark:border-zinc-800 px-4 py-4 bg-gray-50/30 dark:bg-zinc-800/20">
+
+                            <form method="POST" action="{{ route('listings.update-variation', [$listing, $variation['id']]) }}">
+                                @csrf
+                                @method('PUT')
+
+                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                    <div>
+                                        <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Preço (R$)</label>
+                                        <input type="number" name="price" step="0.01" min="0"
+                                            value="{{ $varPrice ?? '' }}"
+                                            class="form-input text-sm" placeholder="Igual ao anúncio">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Estoque *</label>
+                                        <input type="number" name="available_quantity" min="0"
+                                            value="{{ $varQty }}"
+                                            class="form-input text-sm" required>
+                                    </div>
+                                    <div class="col-span-2">
+                                        <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">SKU do Vendedor</label>
+                                        <input type="text" name="seller_custom_field" maxlength="100"
+                                            value="{{ $varSku }}"
+                                            class="form-input text-sm" placeholder="Código interno">
+                                    </div>
                                 </div>
-                                <div>
-                                    <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Estoque *</label>
-                                    <input type="number" name="available_quantity" min="0"
-                                        value="{{ $variation['available_quantity'] ?? 0 }}"
-                                        class="form-input text-sm" required>
+
+                                {{-- Pictures linked to this variation --}}
+                                @if(!empty($allPictures))
+                                <div class="mb-4">
+                                    <label class="text-xs text-gray-500 dark:text-zinc-400 mb-2 block">
+                                        Imagens desta variação
+                                        <span class="text-gray-400 dark:text-zinc-600">(selecione quais fotos pertencem a esta variação)</span>
+                                    </label>
+                                    <div class="flex flex-wrap gap-2">
+                                        @foreach($allPictures as $pic)
+                                        @php $isLinked = in_array($pic['id'], $varPicIds); @endphp
+                                        <label class="relative cursor-pointer group">
+                                            <input type="checkbox" name="picture_ids[]" value="{{ $pic['id'] }}"
+                                                {{ $isLinked ? 'checked' : '' }}
+                                                class="sr-only peer">
+                                            <div class="w-14 h-14 rounded-md overflow-hidden border-2 transition-colors
+                                                        peer-checked:border-primary-500 peer-checked:ring-2 peer-checked:ring-primary-500/30
+                                                        border-gray-200 dark:border-zinc-700 hover:border-gray-400 dark:hover:border-zinc-500">
+                                                <img src="{{ $pic['url'] }}" class="w-full h-full object-cover" loading="lazy">
+                                            </div>
+                                            <div class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary-500 text-white items-center justify-center text-[8px] hidden peer-checked:flex shadow-sm">
+                                                <x-heroicon-s-check class="w-3 h-3" />
+                                            </div>
+                                        </label>
+                                        @endforeach
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="flex justify-end mt-3 gap-2">
-                                <button type="button"
-                                    onclick="document.getElementById('var-form-{{ $variation['id'] }}').classList.add('hidden')"
-                                    class="btn-ghost btn-sm text-xs">Cancelar</button>
-                                <button type="submit" class="btn-primary btn-sm text-xs">
-                                    <x-heroicon-o-cloud-arrow-up class="w-3.5 h-3.5" />
-                                    Salvar
-                                </button>
-                            </div>
-                        </form>
+                                @endif
+
+                                {{-- Attributes (read-only display) --}}
+                                @if(!empty($variation['attribute_combinations']))
+                                <div class="mb-4 flex flex-wrap gap-2">
+                                    @foreach($variation['attribute_combinations'] as $combo)
+                                    <span class="text-[11px] px-2 py-1 rounded-md bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400">
+                                        {{ $combo['name'] ?? $combo['id'] }}: <strong>{{ $combo['value_name'] ?? '—' }}</strong>
+                                    </span>
+                                    @endforeach
+                                </div>
+                                @endif
+
+                                <div class="flex items-center justify-between">
+                                    {{-- Delete variation --}}
+                                    @if(count($variations) > 1)
+                                    <form method="POST" action="{{ route('listings.delete-variation', [$listing, $variation['id']]) }}"
+                                          class="inline" onsubmit="return confirm('Remover esta variação permanentemente do ML?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn-ghost btn-sm text-xs text-red-500 hover:text-red-600">
+                                            <x-heroicon-o-trash class="w-3.5 h-3.5" />
+                                            Remover variação
+                                        </button>
+                                    </form>
+                                    @else
+                                    <span></span>
+                                    @endif
+
+                                    <button type="submit" class="btn-primary btn-sm text-xs">
+                                        <x-heroicon-o-cloud-arrow-up class="w-3.5 h-3.5" />
+                                        Salvar variação
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                     @endforeach
                 </div>
