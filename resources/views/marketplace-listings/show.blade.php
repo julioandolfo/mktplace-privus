@@ -281,11 +281,11 @@
                         @php
                             $attrId        = $attr['id'] ?? null;
                             $attrName      = $attr['name'] ?? $attrId;
-                            $currentVal    = $currentAttrsMap->get($attrId);
+                            $currentVal    = $currentAttrsMap->get($attrId) ?? [];
                             // Resolve current display value: prefer value_name, else first from values[], else value_id
                             $currentValue  = $currentVal['value_name']
                                 ?? ($currentVal['values'][0]['name'] ?? null)
-                                ?? ($currentVal['value_id'] ? (string)$currentVal['value_id'] : '');
+                                ?? (!empty($currentVal['value_id']) ? (string)$currentVal['value_id'] : '');
                             $isRequired    = in_array('required', $attr['tags'] ?? []);
                             $isMissing     = $isRequired && empty($currentValue);
                             $valueType     = $attr['value_type'] ?? 'string';
@@ -313,8 +313,8 @@
                                 {{-- Boolean: always render as Sim/Não select --}}
                                 <select name="attributes[{{ $attrId }}]" class="form-input flex-1 text-sm py-1.5">
                                     <option value="">Selecione...</option>
-                                    <option value="Sim" @selected(in_array(strtolower($currentValue), ['sim', 'yes', '1', 'true']))>Sim</option>
-                                    <option value="Não" @selected(in_array(strtolower($currentValue), ['não', 'nao', 'no', '0', 'false']))>Não</option>
+                                    <option value="Sim" @selected(in_array(strtolower((string) $currentValue), ['sim', 'yes', '1', 'true']))>Sim</option>
+                                    <option value="Não" @selected(in_array(strtolower((string) $currentValue), ['não', 'nao', 'no', '0', 'false']))>Não</option>
                                 </select>
                             @elseif(!empty($allowedValues))
                                 {{-- List of allowed values: render as select --}}

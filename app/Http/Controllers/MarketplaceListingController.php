@@ -131,30 +131,34 @@ class MarketplaceListingController extends Controller
             $avgTicket    = $totalQty > 0 ? $totalRevenue / $totalQty : 0;
 
             $step = 'render-view';
-            return view('marketplace-listings.show', compact(
+            $viewData = compact(
                 'listing', 'products',
                 'liveData', 'quality', 'description', 'categoryAttributes', 'apiError',
                 'salesStats', 'totalQty', 'totalRevenue', 'avgTicket'
-            ));
+            );
+
+            // Force render inside try-catch so Blade errors are captured
+            $html = view('marketplace-listings.show', $viewData)->render();
+            return response($html);
 
         } catch (\Throwable $e) {
             $context = [
-                'listing_id'  => $listing->id,
-                'external_id' => $listing->external_id,
+                'listing_id'  => $listing->id ?? null,
+                'external_id' => $listing->external_id ?? null,
                 'step'        => $step,
                 'error'       => $e->getMessage(),
-                'file'        => $e->getFile() . ':' . $e->getLine(),
-                'trace'       => collect(explode("\n", $e->getTraceAsString()))->take(10)->implode("\n"),
+                'file'        => basename($e->getFile()) . ':' . $e->getLine(),
+                'trace'       => collect(explode("\n", $e->getTraceAsString()))->take(15)->implode("\n"),
             ];
 
-            Log::error("ListingController show() FALHOU no step=[{$step}] listing={$listing->external_id}: " . $e->getMessage(), $context);
+            Log::error("ListingController show() FALHOU step=[{$step}]: " . $e->getMessage(), $context);
 
             activity('listings')
                 ->withProperties($context)
                 ->log("Erro 500 em listings/{$listing->id} (step: {$step}): " . $e->getMessage());
 
-            return back()->with('error', "Erro ao carregar anúncio (step: {$step}): " . $e->getMessage())
-                         ->withInput();
+            return redirect()->route('listings.index')
+                ->with('error', "Erro ao carregar anúncio (step: {$step}): " . $e->getMessage());
         }
     }
 
