@@ -26,39 +26,18 @@
     </div>
     @endif
 
-    @if(session('success'))
-    <div class="mb-4 flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg px-4 py-3 text-sm text-emerald-800 dark:text-emerald-300">
-        <x-heroicon-o-check-circle class="w-4 h-4 flex-shrink-0" />
-        {{ session('success') }}
-    </div>
-    @endif
-
-    @if(session('error'))
-    <div class="mb-4 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-4 py-3 text-sm text-red-800 dark:text-red-300">
-        <x-heroicon-o-x-circle class="w-4 h-4 flex-shrink-0" />
-        {{ session('error') }}
-    </div>
-    @endif
-
-    @if(session('info'))
-    <div class="mb-4 flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 text-sm text-blue-800 dark:text-blue-300">
-        <x-heroicon-o-information-circle class="w-4 h-4 flex-shrink-0" />
-        {{ session('info') }}
-    </div>
-    @endif
 
     @php
         // Null-safe wrappers — $liveData can be null when API fails or has no credentials
         $live        = $liveData ?? [];
         $listingMeta = $listing->meta ?? [];
 
-        $hasVariations    = !empty($live['variations']);
+        $hasVariations    = !empty($live['variations']) || !empty($listingMeta['has_variations']);
         $variations       = $live['variations'] ?? [];
         $isFulfillment    = in_array('fulfillment', $live['tags'] ?? []);
         $isHandlingLocked = $isFulfillment || !empty($listingMeta['handling_time_locked']);
-        $lockedFields     = $listingMeta['locked_fields'] ?? [];
-        $isPriceLocked    = in_array('price', $lockedFields);
-        $isStockLocked    = in_array('available_quantity', $lockedFields);
+        $isPriceLocked    = $hasVariations;
+        $isStockLocked    = $hasVariations;
         // Catalog items: title cannot be edited via API
         $isCatalogItem  = !empty($listingMeta['family_name'])
                        || !empty($listingMeta['catalog_product_id'])
@@ -196,8 +175,8 @@
                                     class="form-input bg-gray-100 dark:bg-zinc-800/60 text-gray-500 dark:text-zinc-400 cursor-not-allowed" disabled>
                                 <input type="hidden" name="price" value="{{ $live['price'] ?? $listing->price }}">
                                 <p class="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
-                                    <x-heroicon-o-lock-closed class="w-3 h-3" />
-                                    Preço gerenciado pelo ML (variações ou catálogo).
+                                    <x-heroicon-o-information-circle class="w-3 h-3" />
+                                    Edite o preço em cada variação abaixo.
                                 </p>
                             @else
                                 <input type="number" name="price" step="0.01" min="0"
@@ -213,8 +192,8 @@
                                     class="form-input bg-gray-100 dark:bg-zinc-800/60 text-gray-500 dark:text-zinc-400 cursor-not-allowed" disabled>
                                 <input type="hidden" name="available_quantity" value="{{ $live['available_quantity'] ?? $listing->available_quantity }}">
                                 <p class="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
-                                    <x-heroicon-o-lock-closed class="w-3 h-3" />
-                                    Estoque gerenciado pelas variações.
+                                    <x-heroicon-o-information-circle class="w-3 h-3" />
+                                    Edite o estoque em cada variação abaixo.
                                 </p>
                             @else
                                 <input type="number" name="available_quantity" min="0"
@@ -548,6 +527,99 @@
                     </div>
                     @endforeach
                 </div>
+
+                {{-- Add new variation --}}
+                @php
+                    $varAttrKeys = collect($variations)
+                        ->flatMap(fn($v) => collect($v['attribute_combinations'] ?? []))
+                        ->unique('id')
+                        ->values();
+                @endphp
+                @if($varAttrKeys->isNotEmpty())
+                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-zinc-700" x-data="{ showNewVar: false }">
+                    <button type="button" @click="showNewVar = !showNewVar"
+                        class="btn-ghost btn-sm text-xs w-full flex items-center justify-center gap-1.5 py-2">
+                        <x-heroicon-o-plus-circle class="w-4 h-4" />
+                        <span x-text="showNewVar ? 'Cancelar' : 'Adicionar nova variação'"></span>
+                    </button>
+
+                    <div x-show="showNewVar" x-collapse x-cloak class="mt-3">
+                        <form method="POST" action="{{ route('listings.add-variation', $listing) }}"
+                              class="bg-white dark:bg-zinc-900 border border-dashed border-gray-300 dark:border-zinc-600 rounded-lg p-4 space-y-4">
+                            @csrf
+
+                            <p class="text-xs font-semibold text-gray-600 dark:text-zinc-400 uppercase tracking-wider">
+                                Atributos da Variação
+                            </p>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                @foreach($varAttrKeys as $attrKey)
+                                <div>
+                                    <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">
+                                        {{ $attrKey['name'] ?? $attrKey['id'] }} *
+                                    </label>
+                                    <input type="hidden" name="combinations[{{ $loop->index }}][id]" value="{{ $attrKey['id'] }}">
+                                    <input type="text" name="combinations[{{ $loop->index }}][value_name]"
+                                        class="form-input text-sm" required
+                                        placeholder="Ex: {{ collect($variations)->flatMap(fn($v) => collect($v['attribute_combinations'] ?? []))->where('id', $attrKey['id'])->pluck('value_name')->unique()->take(3)->join(', ') }}">
+                                </div>
+                                @endforeach
+                            </div>
+
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div>
+                                    <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Preço (R$)</label>
+                                    <input type="number" name="price" step="0.01" min="0"
+                                        class="form-input text-sm" placeholder="Igual ao anúncio">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Estoque *</label>
+                                    <input type="number" name="available_quantity" min="0" value="1"
+                                        class="form-input text-sm" required>
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">SKU do Vendedor</label>
+                                    <input type="text" name="seller_custom_field" maxlength="100"
+                                        class="form-input text-sm" placeholder="Código interno">
+                                </div>
+                            </div>
+
+                            {{-- Select pictures for the new variation --}}
+                            @if(!empty($allPictures))
+                            <div>
+                                <label class="text-xs text-gray-500 dark:text-zinc-400 mb-2 block">
+                                    Imagens da nova variação
+                                    <span class="text-gray-400 dark:text-zinc-600">(opcional)</span>
+                                </label>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach($allPictures as $pic)
+                                    <label class="relative cursor-pointer group">
+                                        <input type="checkbox" name="picture_ids[]" value="{{ $pic['id'] }}"
+                                            class="sr-only peer">
+                                        <div class="w-14 h-14 rounded-md overflow-hidden border-2 transition-colors
+                                                    peer-checked:border-primary-500 peer-checked:ring-2 peer-checked:ring-primary-500/30
+                                                    border-gray-200 dark:border-zinc-700 hover:border-gray-400 dark:hover:border-zinc-500">
+                                            <img src="{{ $pic['url'] }}" class="w-full h-full object-cover" loading="lazy">
+                                        </div>
+                                        <div class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary-500 text-white items-center justify-center text-[8px] hidden peer-checked:flex shadow-sm">
+                                            <x-heroicon-s-check class="w-3 h-3" />
+                                        </div>
+                                    </label>
+                                    @endforeach
+                                </div>
+                            </div>
+                            @endif
+
+                            <div class="flex justify-end">
+                                <button type="submit" class="btn-primary btn-sm text-xs">
+                                    <x-heroicon-o-plus class="w-3.5 h-3.5" />
+                                    Adicionar variação
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                @endif
             </x-ui.card>
             @endif
 

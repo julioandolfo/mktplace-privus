@@ -88,6 +88,20 @@
                     </div>
                     @endif
 
+                    @if (session('info'))
+                    <div class="mb-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400" x-data="{ show: true }" x-show="show" x-transition>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <x-heroicon-s-information-circle class="w-5 h-5" />
+                                <span>{{ session('info') }}</span>
+                            </div>
+                            <button @click="show = false" class="text-blue-500 hover:text-blue-700">
+                                <x-heroicon-s-x-mark class="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                    @endif
+
                     {{ $slot }}
                 </main>
             </div>

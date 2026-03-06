@@ -84,6 +84,24 @@ class MarketplaceListingController extends Controller
                     $step        = 'api-description';
                     $description = $service->getItemDescription($listing->external_id);
 
+                    $step = 'sync-meta';
+                    $metaPatch = [];
+                    if (! empty($liveData['variations'])) {
+                        $metaPatch['has_variations'] = true;
+                    }
+                    if (! empty($liveData['family_name'])) {
+                        $metaPatch['family_name'] = $liveData['family_name'];
+                    }
+                    if (! empty($liveData['catalog_product_id'])) {
+                        $metaPatch['catalog_product_id'] = $liveData['catalog_product_id'];
+                    }
+                    if (in_array('fulfillment', $liveData['tags'] ?? [])) {
+                        $metaPatch['is_fulfillment'] = true;
+                    }
+                    if (! empty($metaPatch)) {
+                        $listing->update(['meta' => array_merge($listing->meta ?? [], $metaPatch)]);
+                    }
+
                     $step = 'api-attributes';
                     if (! empty($liveData['category_id'])) {
                         $categoryAttributes = $service->getCategoryAttributes($liveData['category_id']);
@@ -168,6 +186,7 @@ class MarketplaceListingController extends Controller
 
         $isCatalogItem    = ! empty($meta['family_name']) || ! empty($meta['catalog_product_id']);
         $isHandlingLocked = ! empty($meta['handling_time_locked']) || ! empty($meta['is_fulfillment']);
+        $hasVariations    = ! empty($meta['has_variations']);
 
         $validated = $request->validate([
             'title'              => $isCatalogItem ? 'nullable|string|max:60' : 'required|string|max:60',
@@ -186,20 +205,22 @@ class MarketplaceListingController extends Controller
             return back()->with('error', 'Conta do marketplace não encontrada ou sem credenciais.');
         }
 
-        // Build payload respecting known locked fields
         $payload = [];
-        $lockedFields = $meta['locked_fields'] ?? [];
+        $skippedReasons = [];
 
-        if (! in_array('price', $lockedFields)) {
-            $payload['price'] = (float) $validated['price'];
-        }
-        if (! in_array('available_quantity', $lockedFields)) {
+        // Items with variations: price & stock are managed per-variation
+        if ($hasVariations) {
+            $skippedReasons[] = 'Preço e Estoque são gerenciados por variação — edite cada variação individualmente abaixo.';
+        } else {
+            $payload['price']              = (float) $validated['price'];
             $payload['available_quantity'] = (int) $validated['available_quantity'];
         }
-        if (! $isHandlingLocked && ! in_array('shipping.handling_time', $lockedFields)) {
+
+        if (! $isHandlingLocked) {
             $payload['shipping'] = ['handling_time' => (int) $validated['handling_time']];
         }
-        if (! $isCatalogItem && ! empty($validated['title']) && ! in_array('title', $lockedFields)) {
+
+        if (! $isCatalogItem && ! empty($validated['title'])) {
             $payload['title'] = $validated['title'];
         }
 
@@ -223,8 +244,8 @@ class MarketplaceListingController extends Controller
         }
 
         if (empty($payload)) {
-            return redirect()->route('listings.show', $listing)
-                ->with('info', 'Nenhum campo editável para enviar ao Mercado Livre. Todos os campos deste anúncio são gerenciados pelo ML.');
+            $info = ! empty($skippedReasons) ? implode(' ', $skippedReasons) : 'Todos os campos deste anúncio são gerenciados pelo ML.';
+            return redirect()->route('listings.show', $listing)->with('info', $info);
         }
 
         try {
@@ -233,7 +254,6 @@ class MarketplaceListingController extends Controller
         } catch (\Throwable $e) {
             $errorBody = $e->getMessage();
 
-            // Parse ML validation errors and auto-retry without rejected fields
             if (str_contains($errorBody, 'field_not_updatable') || str_contains($errorBody, 'not_modifiable') || str_contains($errorBody, 'family_name')) {
                 $removedFields = $this->removeRejectedFields($payload, $errorBody, $listing);
 
@@ -242,26 +262,53 @@ class MarketplaceListingController extends Controller
                         $service->updateItem($listing->external_id, $payload);
 
                         $fieldLabels = array_map(fn ($f) => self::FIELD_LABELS[$f] ?? $f, $removedFields);
+                        $infoMsg = 'Alguns campos não puderam ser alterados: ' . implode(', ', $fieldLabels) . '.';
+                        if (in_array('price', $removedFields) || in_array('available_quantity', $removedFields)) {
+                            $infoMsg .= ' Para anúncios com variações, edite Preço e Estoque em cada variação.';
+                            $listing->update(['meta' => array_merge($listing->meta ?? [], ['has_variations' => true])]);
+                        }
                         return redirect()->route('listings.show', $listing)
                             ->with('success', 'Anúncio atualizado com sucesso.')
-                            ->with('info', 'Os campos a seguir são gerenciados pelo Mercado Livre e não foram alterados: ' . implode(', ', $fieldLabels) . '.');
+                            ->with('info', $infoMsg);
                     } catch (\Throwable $e2) {
                         return back()->with('error', self::friendlyMlError($e2->getMessage()));
                     }
+                }
+
+                if (! empty($removedFields) && empty($payload)) {
+                    $fieldLabels = array_map(fn ($f) => self::FIELD_LABELS[$f] ?? $f, $removedFields);
+                    $infoMsg = 'Nenhum campo pôde ser alterado no nível do anúncio: ' . implode(', ', $fieldLabels) . '.';
+                    if (in_array('price', $removedFields) || in_array('available_quantity', $removedFields)) {
+                        $infoMsg .= ' Para anúncios com variações, edite Preço e Estoque em cada variação.';
+                        $listing->update(['meta' => array_merge($listing->meta ?? [], ['has_variations' => true])]);
+                    }
+                    return redirect()->route('listings.show', $listing)->with('info', $infoMsg);
                 }
             }
 
             return back()->with('error', self::friendlyMlError($errorBody));
         }
 
-        $listing->update([
-            'title'              => $validated['title'] ?? $listing->title,
-            'price'              => $validated['price'],
-            'available_quantity' => $validated['available_quantity'],
-        ]);
+        if (! $hasVariations) {
+            $listing->update([
+                'title'              => $validated['title'] ?? $listing->title,
+                'price'              => $validated['price'],
+                'available_quantity' => $validated['available_quantity'],
+            ]);
+        } else {
+            if (! empty($validated['title']) && ! $isCatalogItem) {
+                $listing->update(['title' => $validated['title']]);
+            }
+        }
 
-        return redirect()->route('listings.show', $listing)
-            ->with('success', 'Anúncio atualizado com sucesso.');
+        $successMsg = 'Anúncio atualizado com sucesso.';
+        $redirect   = redirect()->route('listings.show', $listing)->with('success', $successMsg);
+
+        if (! empty($skippedReasons)) {
+            $redirect = $redirect->with('info', implode(' ', $skippedReasons));
+        }
+
+        return $redirect;
     }
 
     private const FIELD_LABELS = [
@@ -306,13 +353,6 @@ class MarketplaceListingController extends Controller
             if (! in_array('title', $removedFields)) {
                 $removedFields[] = 'title';
             }
-        }
-
-        // Persist locked fields for future requests
-        if (! empty($removedFields)) {
-            $existing          = $listing->meta['locked_fields'] ?? [];
-            $merged            = array_unique(array_merge($existing, $removedFields));
-            $metaUpdates['locked_fields'] = array_values($merged);
         }
 
         if (! empty($metaUpdates)) {
@@ -434,6 +474,60 @@ class MarketplaceListingController extends Controller
 
         return redirect()->route('listings.show', $listing)
             ->with('success', 'Variação removida com sucesso.');
+    }
+
+    public function addVariation(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'price'              => 'nullable|numeric|min:0',
+            'available_quantity' => 'required|integer|min:0',
+            'seller_custom_field' => 'nullable|string|max:100',
+            'picture_ids'        => 'nullable|array',
+            'picture_ids.*'      => 'string',
+            'combinations'       => 'required|array|min:1',
+            'combinations.*.id'         => 'required|string',
+            'combinations.*.value_name' => 'required|string|max:255',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta não encontrada ou sem credenciais.');
+        }
+
+        try {
+            $service  = new MercadoLivreService($account);
+            $liveData = $service->getItem($listing->external_id);
+
+            $existingVariations = $liveData['variations'] ?? [];
+
+            $newVariation = [
+                'attribute_combinations' => collect($validated['combinations'])
+                    ->map(fn ($c) => ['id' => $c['id'], 'value_name' => $c['value_name']])
+                    ->values()
+                    ->all(),
+                'available_quantity' => (int) $validated['available_quantity'],
+            ];
+
+            if (! empty($validated['price'])) {
+                $newVariation['price'] = (float) $validated['price'];
+            }
+            if (! empty($validated['seller_custom_field'])) {
+                $newVariation['seller_custom_field'] = $validated['seller_custom_field'];
+            }
+            if (! empty($validated['picture_ids'])) {
+                $newVariation['picture_ids'] = $validated['picture_ids'];
+            }
+
+            $existingVariations[] = $newVariation;
+
+            $service->updateItem($listing->external_id, ['variations' => $existingVariations]);
+
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao adicionar variação: ' . self::friendlyMlError($e->getMessage()));
+        }
+
+        return redirect()->route('listings.show', $listing)
+            ->with('success', 'Nova variação adicionada com sucesso.');
     }
 
     public function updateDescription(Request $request, MarketplaceListing $listing)

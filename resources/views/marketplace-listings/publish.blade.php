@@ -11,12 +11,6 @@
         </li>
     </x-slot>
 
-    @if(session('error'))
-    <div class="mb-4 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-4 py-3 text-sm text-red-800 dark:text-red-300">
-        <x-heroicon-o-x-circle class="w-4 h-4 flex-shrink-0" />
-        {{ session('error') }}
-    </div>
-    @endif
 
     <form method="POST" action="{{ route('listings.publish') }}"
           x-data="publishForm()"

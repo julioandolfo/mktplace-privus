@@ -8,19 +8,6 @@
         </li>
     </x-slot>
 
-    {{-- Flash messages --}}
-    @if(session('success'))
-        <div class="mb-6 flex items-center gap-3 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300">
-            <x-heroicon-s-check-circle class="w-5 h-5 flex-shrink-0" />
-            {{ session('success') }}
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="mb-6 flex items-center gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300">
-            <x-heroicon-s-exclamation-circle class="w-5 h-5 flex-shrink-0" />
-            {{ session('error') }}
-        </div>
-    @endif
 
     {{-- Marketplace type cards --}}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
