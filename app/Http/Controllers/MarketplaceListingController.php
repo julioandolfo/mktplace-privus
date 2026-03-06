@@ -538,6 +538,114 @@ class MarketplaceListingController extends Controller
             ->with('success', 'Nova variação adicionada com sucesso.');
     }
 
+    public function updateListingType(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'listing_type_id' => 'required|string|in:gold_special,gold_premium,bronze,silver,free',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta não encontrada ou sem credenciais.');
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+            $service->updateListingType($listing->external_id, $validated['listing_type_id']);
+
+            $listing->update([
+                'meta' => array_merge($listing->meta ?? [], [
+                    'listing_type_id' => $validated['listing_type_id'],
+                ]),
+            ]);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao alterar tipo de anúncio: ' . self::friendlyMlError($e->getMessage()));
+        }
+
+        $typeLabels = [
+            'gold_premium' => 'Premium',
+            'gold_special' => 'Clássico',
+            'bronze'       => 'Grátis',
+            'silver'       => 'Prata',
+            'free'         => 'Grátis',
+        ];
+        $label = $typeLabels[$validated['listing_type_id']] ?? $validated['listing_type_id'];
+
+        return redirect()->route('listings.show', $listing)
+            ->with('success', "Tipo de anúncio alterado para {$label} com sucesso.");
+    }
+
+    public function updateShipping(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'free_shipping'  => 'nullable|boolean',
+            'local_pick_up'  => 'nullable|boolean',
+            'handling_time'  => 'nullable|integer|min:0|max:20',
+            'shipping_width'  => 'nullable|numeric|min:0',
+            'shipping_height' => 'nullable|numeric|min:0',
+            'shipping_length' => 'nullable|numeric|min:0',
+            'shipping_weight' => 'nullable|numeric|min:0',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta não encontrada ou sem credenciais.');
+        }
+
+        $shippingPayload = [];
+
+        if (isset($validated['free_shipping'])) {
+            $shippingPayload['free_shipping'] = (bool) $validated['free_shipping'];
+        }
+        if (isset($validated['local_pick_up'])) {
+            $shippingPayload['local_pick_up'] = (bool) $validated['local_pick_up'];
+        }
+        if (! empty($validated['handling_time']) || $validated['handling_time'] === 0) {
+            $shippingPayload['handling_time'] = (int) $validated['handling_time'];
+        }
+        if (! empty($validated['shipping_width'])) {
+            $shippingPayload['dimensions'] = sprintf(
+                '%dx%dx%d,%d',
+                (int) $validated['shipping_height'],
+                (int) $validated['shipping_width'],
+                (int) $validated['shipping_length'],
+                (int) ($validated['shipping_weight'] * 1000) // g
+            );
+        }
+
+        if (empty($shippingPayload)) {
+            return back()->with('info', 'Nenhuma configuração de envio para atualizar.');
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+            $service->updateShipping($listing->external_id, $shippingPayload);
+        } catch (\Throwable $e) {
+            $errorMsg = self::friendlyMlError($e->getMessage());
+
+            // If handling_time rejected, retry without it
+            if (str_contains($e->getMessage(), 'handling_time')) {
+                unset($shippingPayload['handling_time']);
+                if (! empty($shippingPayload)) {
+                    try {
+                        $service->updateShipping($listing->external_id, $shippingPayload);
+                        return redirect()->route('listings.show', $listing)
+                            ->with('success', 'Configurações de envio atualizadas.')
+                            ->with('info', 'O prazo de disponibilidade não pôde ser alterado via API neste anúncio. Altere diretamente no Mercado Livre.');
+                    } catch (\Throwable $e2) {
+                        return back()->with('error', 'Erro ao atualizar envio: ' . self::friendlyMlError($e2->getMessage()));
+                    }
+                }
+                return back()->with('error', 'O prazo de disponibilidade não pode ser alterado via API neste anúncio. Altere diretamente no Mercado Livre.');
+            }
+
+            return back()->with('error', 'Erro ao atualizar configurações de envio: ' . $errorMsg);
+        }
+
+        return redirect()->route('listings.show', $listing)
+            ->with('success', 'Configurações de envio atualizadas com sucesso.');
+    }
+
     public function updateDescription(Request $request, MarketplaceListing $listing)
     {
         $text = $request->validate(['description' => 'required|string'])['description'];

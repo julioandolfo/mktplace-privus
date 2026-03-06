@@ -269,6 +269,37 @@ class MercadoLivreService
     }
 
     /**
+     * Upgrade/downgrade listing type (Classic/Premium).
+     * ML requires a POST to /items/{id}/listing_type — cannot be done via PUT.
+     * The seller must have contracted a listing package (gold_special or gold_premium).
+     */
+    public function updateListingType(string $itemId, string $listingTypeId): array
+    {
+        return $this->post("/items/{$itemId}/listing_type", ['id' => $listingTypeId]);
+    }
+
+    /**
+     * Update shipping settings: free_shipping, local_pick_up, handling_time, dimensions.
+     */
+    public function updateShipping(string $itemId, array $shippingData): array
+    {
+        return $this->put("/items/{$itemId}", ['shipping' => $shippingData]);
+    }
+
+    /**
+     * Get available listing types for MLB (Brazil).
+     */
+    public function getListingTypes(): array
+    {
+        try {
+            return $this->get('/sites/MLB/listing_types');
+        } catch (\Throwable $e) {
+            Log::warning("ML getListingTypes() failed: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
      * Upload a picture file directly to ML and return the picture ID.
      * Supports JPG/PNG, max 10MB.
      */

@@ -98,6 +98,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/listings/{listing}', [MarketplaceListingController::class, 'update'])->name('listings.update');
     Route::post('/listings/{listing}/toggle-status', [MarketplaceListingController::class, 'toggleStatus'])->name('listings.toggle-status');
     Route::post('/listings/{listing}/update-description', [MarketplaceListingController::class, 'updateDescription'])->name('listings.update-description');
+    Route::post('/listings/{listing}/listing-type', [MarketplaceListingController::class, 'updateListingType'])->name('listings.update-listing-type');
+    Route::post('/listings/{listing}/shipping', [MarketplaceListingController::class, 'updateShipping'])->name('listings.update-shipping');
     Route::post('/listings/{listing}/pictures', [MarketplaceListingController::class, 'addPicture'])->name('listings.add-picture');
     Route::delete('/listings/{listing}/pictures/{pictureId}', [MarketplaceListingController::class, 'removePicture'])->name('listings.remove-picture');
     Route::post('/listings/{listing}/link-product', [MarketplaceListingController::class, 'linkProduct'])->name('listings.link-product');

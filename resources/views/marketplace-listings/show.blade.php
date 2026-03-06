@@ -982,45 +982,226 @@
                 </div>
             </x-ui.card>
 
-            {{-- Frete --}}
-            @if(!empty($live['shipping']))
-            <x-ui.card title="Frete">
-                <div class="space-y-2 text-sm">
-                    @php $shipping = $live['shipping']; @endphp
-                    <div class="flex justify-between">
-                        <span class="text-gray-500 dark:text-zinc-400">Modo</span>
-                        <span>
-                            {{ match($shipping['mode'] ?? '') {
-                                'me2'           => 'Mercado Envios',
-                                'me1'           => 'Mercado Envios 1',
-                                'custom'        => 'Personalizado',
-                                'not_specified' => 'Não especificado',
-                                default         => $shipping['mode'] ?? '—',
-                            } }}
-                        </span>
+            {{-- Tipo de Anúncio (editável) --}}
+            @if($liveData !== null)
+            <x-ui.card>
+                <div x-data="{ editing: false }">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-semibold text-gray-800 dark:text-white">Tipo de Anúncio</h3>
+                        <button type="button" @click="editing = !editing"
+                            class="text-xs text-primary-500 hover:text-primary-400 flex items-center gap-1">
+                            <x-heroicon-o-pencil-square class="w-3.5 h-3.5" />
+                            <span x-text="editing ? 'Cancelar' : 'Alterar'"></span>
+                        </button>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500 dark:text-zinc-400">Frete Grátis</span>
-                        <x-ui.badge :color="($shipping['free_shipping'] ?? false) ? 'success' : 'neutral'">
-                            {{ ($shipping['free_shipping'] ?? false) ? 'Sim' : 'Não' }}
-                        </x-ui.badge>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500 dark:text-zinc-400">Retirada</span>
-                        <x-ui.badge :color="($shipping['local_pick_up'] ?? false) ? 'success' : 'neutral'">
-                            {{ ($shipping['local_pick_up'] ?? false) ? 'Sim' : 'Não' }}
-                        </x-ui.badge>
-                    </div>
-                    @if(!empty($shipping['dimensions']))
-                    <div class="pt-2 border-t border-gray-100 dark:border-zinc-800">
-                        <p class="text-xs text-gray-500 dark:text-zinc-400 mb-1">Dimensões</p>
-                        @php $dims = $shipping['dimensions']; @endphp
-                        <p class="text-xs font-mono">
-                            {{ $dims['width'] ?? '?' }}×{{ $dims['height'] ?? '?' }}×{{ $dims['length'] ?? '?' }} cm
-                            · {{ $dims['weight'] ?? '?' }}g
+
+                    @php
+                        $currentListingType = $live['listing_type_id'] ?? $listingMeta['listing_type_id'] ?? null;
+                        $listingTypeLabels  = [
+                            'gold_premium' => ['label' => 'Premium', 'color' => 'text-yellow-600 dark:text-yellow-400'],
+                            'gold_pro'     => ['label' => 'Premium', 'color' => 'text-yellow-600 dark:text-yellow-400'],
+                            'gold_special' => ['label' => 'Clássico', 'color' => 'text-blue-600 dark:text-blue-400'],
+                            'gold'         => ['label' => 'Clássico', 'color' => 'text-blue-600 dark:text-blue-400'],
+                            'silver'       => ['label' => 'Prata', 'color' => 'text-gray-500 dark:text-zinc-400'],
+                            'bronze'       => ['label' => 'Bronze', 'color' => 'text-orange-500 dark:text-orange-400'],
+                            'free'         => ['label' => 'Grátis', 'color' => 'text-gray-400 dark:text-zinc-500'],
+                        ];
+                        $typeInfo = $listingTypeLabels[$currentListingType] ?? ['label' => $currentListingType ?? '—', 'color' => 'text-gray-500'];
+                    @endphp
+
+                    <div x-show="!editing" class="text-sm">
+                        <span class="font-semibold {{ $typeInfo['color'] }}">{{ $typeInfo['label'] }}</span>
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-0.5 font-mono">{{ $currentListingType }}</p>
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-2 leading-relaxed">
+                            Clássico = maior visibilidade. Premium = máxima visibilidade (requer pacote contratado no ML).
                         </p>
                     </div>
-                    @endif
+
+                    <form x-show="editing" x-cloak method="POST"
+                          action="{{ route('listings.update-listing-type', $listing) }}">
+                        @csrf
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1.5 block">Novo tipo</label>
+                                <select name="listing_type_id" class="form-input text-sm">
+                                    <option value="gold_special" {{ $currentListingType === 'gold_special' ? 'selected' : '' }}>
+                                        Clássico (gold_special)
+                                    </option>
+                                    <option value="gold_premium" {{ $currentListingType === 'gold_premium' ? 'selected' : '' }}>
+                                        Premium (gold_premium)
+                                    </option>
+                                    <option value="free" {{ $currentListingType === 'free' ? 'selected' : '' }}>
+                                        Grátis
+                                    </option>
+                                </select>
+                            </div>
+                            <p class="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1">
+                                <x-heroicon-o-exclamation-triangle class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                Para alterar para Premium, o vendedor precisa ter um pacote contratado no Mercado Livre.
+                            </p>
+                            <button type="submit" class="btn-primary btn-sm text-xs w-full">
+                                <x-heroicon-o-arrow-path class="w-3.5 h-3.5" />
+                                Atualizar tipo
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </x-ui.card>
+            @endif
+
+            {{-- Frete (editável) --}}
+            @if(!empty($live['shipping']))
+            <x-ui.card>
+                @php
+                    $shipping = $live['shipping'];
+                    $isMandatoryFreeShipping = in_array('mandatory_free_shipping', $shipping['tags'] ?? []);
+                    $dims = $shipping['dimensions'] ?? null;
+                    $currentHandlingTime = $shipping['handling_time'] ?? 0;
+                @endphp
+                <div x-data="{ editing: false }">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-semibold text-gray-800 dark:text-white">Frete</h3>
+                        <button type="button" @click="editing = !editing"
+                            class="text-xs text-primary-500 hover:text-primary-400 flex items-center gap-1">
+                            <x-heroicon-o-pencil-square class="w-3.5 h-3.5" />
+                            <span x-text="editing ? 'Cancelar' : 'Editar'"></span>
+                        </button>
+                    </div>
+
+                    {{-- Display mode --}}
+                    <div x-show="!editing" class="space-y-2 text-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-500 dark:text-zinc-400">Modo</span>
+                            <span class="text-xs font-mono">
+                                {{ match($shipping['mode'] ?? '') {
+                                    'me2'           => 'Mercado Envios',
+                                    'me1'           => 'Mercado Envios 1',
+                                    'custom'        => 'Personalizado',
+                                    'not_specified' => 'Não especificado',
+                                    default         => $shipping['mode'] ?? '—',
+                                } }}
+                            </span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-500 dark:text-zinc-400">Frete Grátis</span>
+                            <x-ui.badge :color="($shipping['free_shipping'] ?? false) ? 'success' : 'neutral'">
+                                {{ ($shipping['free_shipping'] ?? false) ? 'Sim' : 'Não' }}
+                            </x-ui.badge>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-500 dark:text-zinc-400">Retirada</span>
+                            <x-ui.badge :color="($shipping['local_pick_up'] ?? false) ? 'success' : 'neutral'">
+                                {{ ($shipping['local_pick_up'] ?? false) ? 'Sim' : 'Não' }}
+                            </x-ui.badge>
+                        </div>
+                        @if($currentHandlingTime > 0)
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-500 dark:text-zinc-400">Prazo disponib.</span>
+                            <span class="text-xs">{{ $currentHandlingTime }} dia{{ $currentHandlingTime !== 1 ? 's' : '' }}</span>
+                        </div>
+                        @endif
+                        @if($dims)
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-500 dark:text-zinc-400">Dimensões</span>
+                            <span class="text-xs font-mono">
+                                {{ $dims['width'] ?? '?' }}×{{ $dims['height'] ?? '?' }}×{{ $dims['length'] ?? '?' }}cm · {{ $dims['weight'] ?? '?' }}g
+                            </span>
+                        </div>
+                        @endif
+                        @if($isMandatoryFreeShipping)
+                        <p class="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 pt-1">
+                            <x-heroicon-o-information-circle class="w-3 h-3" />
+                            Frete grátis obrigatório pelo ML (preço acima do limite).
+                        </p>
+                        @endif
+                    </div>
+
+                    {{-- Edit mode --}}
+                    <form x-show="editing" x-cloak method="POST"
+                          action="{{ route('listings.update-shipping', $listing) }}"
+                          class="space-y-3">
+                        @csrf
+
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs text-gray-600 dark:text-zinc-400">Frete Grátis</label>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="hidden" name="free_shipping" value="0">
+                                <input type="checkbox" name="free_shipping" value="1" class="sr-only peer"
+                                    {{ ($shipping['free_shipping'] ?? false) ? 'checked' : '' }}
+                                    {{ $isMandatoryFreeShipping ? 'disabled' : '' }}>
+                                <div class="w-9 h-5 bg-gray-200 dark:bg-zinc-700 rounded-full peer
+                                            peer-checked:bg-primary-500 after:content-[''] after:absolute
+                                            after:top-0.5 after:left-0.5 after:bg-white after:rounded-full
+                                            after:h-4 after:w-4 after:transition-all
+                                            peer-checked:after:translate-x-4"></div>
+                            </label>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs text-gray-600 dark:text-zinc-400">Retirada na Mão</label>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="hidden" name="local_pick_up" value="0">
+                                <input type="checkbox" name="local_pick_up" value="1" class="sr-only peer"
+                                    {{ ($shipping['local_pick_up'] ?? false) ? 'checked' : '' }}>
+                                <div class="w-9 h-5 bg-gray-200 dark:bg-zinc-700 rounded-full peer
+                                            peer-checked:bg-primary-500 after:content-[''] after:absolute
+                                            after:top-0.5 after:left-0.5 after:bg-white after:rounded-full
+                                            after:h-4 after:w-4 after:transition-all
+                                            peer-checked:after:translate-x-4"></div>
+                            </label>
+                        </div>
+
+                        @if(!$isFulfillment)
+                        <div>
+                            <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">
+                                Prazo de Disponibilidade (dias)
+                            </label>
+                            <select name="handling_time" class="form-input text-sm">
+                                @foreach([0,1,2,3,5,7,10,14,20] as $days)
+                                <option value="{{ $days }}" {{ $currentHandlingTime == $days ? 'selected' : '' }}>
+                                    {{ $days === 0 ? 'No mesmo dia' : "{$days} dia(s)" }}
+                                </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        @else
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 flex items-center gap-1">
+                            <x-heroicon-o-lock-closed class="w-3 h-3" />
+                            Prazo gerenciado pelo Fulfillment ML.
+                        </p>
+                        @endif
+
+                        <div class="pt-2 border-t border-gray-100 dark:border-zinc-800">
+                            <p class="text-xs text-gray-500 dark:text-zinc-400 mb-2">Dimensões (Mercado Envios)</p>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-[10px] text-gray-400 dark:text-zinc-600">Larg. (cm)</label>
+                                    <input type="number" name="shipping_width" step="0.1" min="0"
+                                        value="{{ $dims['width'] ?? '' }}" class="form-input text-sm">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-400 dark:text-zinc-600">Alt. (cm)</label>
+                                    <input type="number" name="shipping_height" step="0.1" min="0"
+                                        value="{{ $dims['height'] ?? '' }}" class="form-input text-sm">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-400 dark:text-zinc-600">Comp. (cm)</label>
+                                    <input type="number" name="shipping_length" step="0.1" min="0"
+                                        value="{{ $dims['length'] ?? '' }}" class="form-input text-sm">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-400 dark:text-zinc-600">Peso (kg)</label>
+                                    <input type="number" name="shipping_weight" step="0.001" min="0"
+                                        value="{{ isset($dims['weight']) ? $dims['weight']/1000 : '' }}" class="form-input text-sm">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary btn-sm text-xs w-full">
+                            <x-heroicon-o-cloud-arrow-up class="w-3.5 h-3.5" />
+                            Salvar configurações de envio
+                        </button>
+                    </form>
                 </div>
             </x-ui.card>
             @endif
