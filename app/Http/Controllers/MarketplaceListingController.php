@@ -82,15 +82,35 @@ class MarketplaceListingController extends Controller
             }
         }
 
-        // Sales stats — local DB, last 12 months
-        $salesStats = DB::table('order_items')
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->whereRaw("order_items.meta->>'ml_item_id' = ?", [$listing->external_id])
-            ->where('orders.created_at', '>=', now()->subMonths(12))
-            ->selectRaw("to_char(orders.created_at, 'YYYY-MM') as month, COUNT(*) as qty, SUM(order_items.total) as revenue")
-            ->groupBy('month')
-            ->orderBy('month')
-            ->get();
+        // Sales stats — local DB, last 12 months (driver-agnostic)
+        try {
+            $salesRaw = DB::table('order_items')
+                ->join('orders', 'orders.id', '=', 'order_items.order_id')
+                ->where('orders.created_at', '>=', now()->subMonths(12))
+                ->select('orders.created_at', 'order_items.total', 'order_items.meta')
+                ->get()
+                ->filter(function ($row) use ($listing) {
+                    $meta = $row->meta;
+                    if (is_string($meta)) {
+                        $meta = json_decode($meta, true);
+                    }
+                    return ($meta['ml_item_id'] ?? null) === $listing->external_id;
+                });
+
+            $salesStats = $salesRaw
+                ->groupBy(fn ($row) => date('Y-m', strtotime($row->created_at)))
+                ->map(fn ($group, $month) => (object) [
+                    'month'   => $month,
+                    'qty'     => $group->count(),
+                    'revenue' => $group->sum('total'),
+                ])
+                ->values()
+                ->sortBy('month')
+                ->values();
+        } catch (\Throwable $e) {
+            Log::warning("ListingController sales stats error: " . $e->getMessage());
+            $salesStats = collect();
+        }
 
         $totalQty     = $salesStats->sum('qty');
         $totalRevenue = $salesStats->sum('revenue');
@@ -314,6 +334,46 @@ class MarketplaceListingController extends Controller
 
         return redirect()->route('listings.show', $listing)
             ->with('success', 'Imagem removida com sucesso.');
+    }
+
+    public function bulkAction(Request $request)
+    {
+        $validated = $request->validate([
+            'ids'    => 'required|array|min:1',
+            'ids.*'  => 'integer|exists:marketplace_listings,id',
+            'action' => 'required|in:pause,activate',
+        ]);
+
+        $listings   = MarketplaceListing::whereIn('id', $validated['ids'])->get();
+        $newStatus  = $validated['action'] === 'pause' ? 'paused' : 'active';
+        $successCnt = 0;
+        $errorCnt   = 0;
+
+        foreach ($listings as $listing) {
+            $account = $listing->marketplaceAccount;
+            if (! $account || ! $account->credentials) {
+                $errorCnt++;
+                continue;
+            }
+
+            try {
+                $service = new MercadoLivreService($account);
+                $service->updateItem($listing->external_id, ['status' => $newStatus]);
+                $listing->update(['status' => $newStatus]);
+                $successCnt++;
+            } catch (\Throwable $e) {
+                Log::warning("BulkAction {$newStatus} listing {$listing->external_id}: " . $e->getMessage());
+                $errorCnt++;
+            }
+        }
+
+        $label = $newStatus === 'active' ? 'ativados' : 'pausados';
+        $msg   = "{$successCnt} anúncio(s) {$label} com sucesso.";
+        if ($errorCnt > 0) {
+            $msg .= " {$errorCnt} erro(s).";
+        }
+
+        return redirect()->route('listings.index')->with('success', $msg);
     }
 
     public function toggleStatus(MarketplaceListing $listing)

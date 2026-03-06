@@ -5,6 +5,8 @@
 @tailwind components;
 @tailwind utilities;
 
+[x-cloak] { display: none !important; }
+
 @layer base {
     :root {
         --sidebar-width: 16rem;

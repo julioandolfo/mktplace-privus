@@ -101,6 +101,11 @@ class SyncMarketplaceListings extends Command
                 'has_variations'     => ! empty($ml['variations']),
                 'family_name'        => $ml['family_name'] ?? null,
                 'catalog_product_id' => $ml['catalog_product_id'] ?? null,
+                'thumbnail'          => $ml['pictures'][0]['url'] ?? ($ml['thumbnail'] ?? null),
+                'sold_quantity'      => $ml['sold_quantity'] ?? 0,
+                'is_free_shipping'   => $ml['shipping']['free_shipping'] ?? false,
+                'is_fulfillment'     => in_array('fulfillment', $ml['tags'] ?? []),
+                'condition'          => $ml['condition'] ?? null,
             ],
         ];
 

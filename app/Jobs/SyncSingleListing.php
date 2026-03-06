@@ -68,6 +68,11 @@ class SyncSingleListing implements ShouldQueue
                         'variations_count'    => count($item['variations'] ?? []),
                         'family_name'         => $item['family_name'] ?? null,
                         'catalog_product_id'  => $item['catalog_product_id'] ?? null,
+                        'thumbnail'           => $item['pictures'][0]['url'] ?? ($item['thumbnail'] ?? null),
+                        'sold_quantity'       => $item['sold_quantity'] ?? 0,
+                        'is_free_shipping'    => $item['shipping']['free_shipping'] ?? false,
+                        'is_fulfillment'      => in_array('fulfillment', $item['tags'] ?? []),
+                        'condition'           => $item['condition'] ?? null,
                     ],
                 ]
             );
