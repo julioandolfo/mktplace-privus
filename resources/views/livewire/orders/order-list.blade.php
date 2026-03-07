@@ -46,12 +46,12 @@
             <div x-show="showAdvanced" x-transition class="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {{-- Data criação: de --}}
                 <div>
-                    <label class="block text-xs text-gray-500 dark:text-zinc-400 mb-1">Pedido a partir de</label>
+                    <label class="block text-xs text-gray-500 dark:text-zinc-400 mb-1">Pago a partir de</label>
                     <input type="date" wire:model.live="dateFrom" class="form-input w-full text-sm" />
                 </div>
                 {{-- Data criação: até --}}
                 <div>
-                    <label class="block text-xs text-gray-500 dark:text-zinc-400 mb-1">Pedido até</label>
+                    <label class="block text-xs text-gray-500 dark:text-zinc-400 mb-1">Pago até</label>
                     <input type="date" wire:model.live="dateTo" class="form-input w-full text-sm" />
                 </div>
                 {{-- Data envio: de --}}
@@ -147,9 +147,9 @@
                         <th>Status</th>
                         <th>Pagamento</th>
                         <th>
-                            <button wire:click="sortBy('created_at')" class="flex items-center gap-1 hover:text-gray-700 dark:hover:text-zinc-200">
+                            <button wire:click="sortBy('paid_at')" class="flex items-center gap-1 hover:text-gray-700 dark:hover:text-zinc-200">
                                 Pedido em
-                                @if($sortField === 'created_at')
+                                @if($sortField === 'paid_at')
                                     <x-heroicon-s-chevron-up class="w-3 h-3 {{ $sortDirection === 'desc' ? 'rotate-180' : '' }}" />
                                 @endif
                             </button>
@@ -217,8 +217,8 @@
 
                         {{-- Data pedido --}}
                         <td class="text-sm text-gray-500 dark:text-zinc-400 whitespace-nowrap">
-                            {{ $order->created_at->format('d/m/Y') }}
-                            <br><span class="text-xs">{{ $order->created_at->format('H:i') }}</span>
+                            {{ ($order->paid_at ?? $order->created_at)->format('d/m/Y') }}
+                            <br><span class="text-xs">{{ ($order->paid_at ?? $order->created_at)->format('H:i') }}</span>
                         </td>
 
                         {{-- Data envio --}}

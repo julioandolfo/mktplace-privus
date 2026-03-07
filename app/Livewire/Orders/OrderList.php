@@ -23,7 +23,7 @@ class OrderList extends Component
     public string $shippedTo       = '';
     public string $hasTracking     = '';
     public string $isFulfillment   = '';
-    public string $sortField       = 'created_at';
+    public string $sortField       = 'paid_at';
     public string $sortDirection   = 'desc';
 
     protected $queryString = [
@@ -108,15 +108,19 @@ class OrderList extends Component
             ->when($this->status, fn ($q) => $q->where('status', $this->status))
             ->when($this->paymentStatus, fn ($q) => $q->where('payment_status', $this->paymentStatus))
             ->when($this->marketplaceId, fn ($q) => $q->where('marketplace_account_id', $this->marketplaceId))
-            ->when($this->dateFrom, fn ($q) => $q->whereDate('created_at', '>=', $this->dateFrom))
-            ->when($this->dateTo,   fn ($q) => $q->whereDate('created_at', '<=', $this->dateTo))
+            ->when($this->dateFrom, fn ($q) => $q->whereDate('paid_at', '>=', $this->dateFrom))
+            ->when($this->dateTo,   fn ($q) => $q->whereDate('paid_at', '<=', $this->dateTo))
             ->when($this->shippedFrom, fn ($q) => $q->whereDate('shipped_at', '>=', $this->shippedFrom))
             ->when($this->shippedTo,   fn ($q) => $q->whereDate('shipped_at', '<=', $this->shippedTo))
             ->when($this->hasTracking === '1', fn ($q) => $q->whereNotNull('tracking_code'))
             ->when($this->hasTracking === '0', fn ($q) => $q->whereNull('tracking_code'))
             ->when($this->isFulfillment === '1', fn ($q) => $q->whereRaw("meta->>'is_fulfillment' = 'true'"))
             ->when($this->isFulfillment === '0', fn ($q) => $q->whereRaw("(meta->>'is_fulfillment' IS NULL OR meta->>'is_fulfillment' = 'false')"))
-            ->orderBy($this->sortField, $this->sortDirection)
+            ->when(
+                $this->sortField === 'paid_at',
+                fn ($q) => $q->orderByRaw("paid_at {$this->sortDirection} NULLS LAST")->orderBy('id', 'desc'),
+                fn ($q) => $q->orderBy($this->sortField, $this->sortDirection)->orderBy('id', 'desc'),
+            )
             ->paginate(25);
 
         $marketplaceAccounts = MarketplaceAccount::orderBy('account_name')->get(['id', 'account_name', 'marketplace_type']);
