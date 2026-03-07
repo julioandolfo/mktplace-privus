@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ProductStatus;
+use App\Jobs\SyncListingQualityScore;
 use App\Models\MarketplaceAccount;
 use App\Models\MarketplaceListing;
 use App\Models\Product;
@@ -1227,6 +1228,36 @@ SYS;
         }
 
         return redirect()->route('listings.index')->with('success', $msg);
+    }
+
+    /**
+     * Dispatches background jobs to sync quality scores for all ML listings
+     * that have credentials. Optionally filtered by account.
+     */
+    public function syncQuality(Request $request)
+    {
+        $accountId = $request->input('account');
+
+        $query = MarketplaceListing::with('marketplaceAccount')
+            ->whereHas('marketplaceAccount', fn ($q) => $q->whereNotNull('credentials'));
+
+        if ($accountId) {
+            $query->where('marketplace_account_id', $accountId);
+        }
+
+        $listings = $query->select('id', 'marketplace_account_id', 'external_id')->get();
+
+        $dispatched = 0;
+        foreach ($listings as $listing) {
+            SyncListingQualityScore::dispatch($listing->id)->onQueue('default');
+            $dispatched++;
+        }
+
+        $msg = $dispatched > 0
+            ? "Sincronização de qualidade iniciada para {$dispatched} anúncio(s). Aguarde alguns minutos e recarregue a página."
+            : 'Nenhum anúncio encontrado para sincronizar.';
+
+        return redirect()->back()->with('info', $msg);
     }
 
     public function toggleStatus(MarketplaceListing $listing)

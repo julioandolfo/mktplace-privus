@@ -2,6 +2,20 @@
     <x-slot name="header">Anúncios</x-slot>
     <x-slot name="subtitle">Gerencie seus anúncios do Mercado Livre</x-slot>
     <x-slot name="actions">
+        {{-- Sync quality scores in background --}}
+        <form method="POST" action="{{ route('listings.sync-quality') }}" class="inline">
+            @csrf
+            @if(request('account'))
+                <input type="hidden" name="account" value="{{ request('account') }}">
+            @endif
+            <button type="submit"
+                class="btn-secondary btn-sm"
+                title="Sincronizar pontuação de qualidade de todos os anúncios em background"
+                onclick="return confirm('Isso vai sincronizar a qualidade de todos os anúncios em background. Pode levar alguns minutos. Continuar?')">
+                <x-heroicon-o-star class="w-4 h-4" />
+                Sincronizar Qualidade
+            </button>
+        </form>
         <a href="{{ route('listings.publish-form') }}" class="btn-primary btn-sm">
             <x-heroicon-o-rocket-launch class="w-4 h-4" />
             Publicar Anúncio

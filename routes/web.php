@@ -90,6 +90,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Marketplace Listings (Anuncios)
     Route::get('/listings', [MarketplaceListingController::class, 'index'])->name('listings.index');
     Route::post('/listings/bulk-action', [MarketplaceListingController::class, 'bulkAction'])->name('listings.bulk-action');
+    Route::post('/listings/sync-quality', [MarketplaceListingController::class, 'syncQuality'])->name('listings.sync-quality');
     Route::get('/listings/publish', [MarketplaceListingController::class, 'publishForm'])->name('listings.publish-form');
     Route::post('/listings/publish', [MarketplaceListingController::class, 'publish'])->name('listings.publish');
     Route::get('/listings/categories/search', [MarketplaceListingController::class, 'searchCategories'])->name('listings.search-categories');
