@@ -131,6 +131,26 @@ class SyncSingleOrder implements ShouldQueue
         $customerEmail = ! empty($buyer['email']) ? $buyer['email'] : null;
         $mlUserId      = $buyer['id'] ?? null;
 
+        // Phone: combine area_code + number from buyer, fallback to receiver_address
+        $customerPhone = null;
+        $buyerAreaCode = $buyer['phone']['area_code'] ?? null;
+        $buyerNumber   = $buyer['phone']['number'] ?? null;
+        if ($buyerAreaCode && $buyerNumber) {
+            $customerPhone = '(' . $buyerAreaCode . ') ' . $buyerNumber;
+        } elseif ($buyerNumber) {
+            $customerPhone = $buyerNumber;
+        }
+        // Fallback: phone from shipment receiver_address
+        if (! $customerPhone) {
+            $rcvAreaCode = $receiver['phone']['area_code'] ?? null;
+            $rcvNumber   = $receiver['phone']['number'] ?? null;
+            if ($rcvAreaCode && $rcvNumber) {
+                $customerPhone = '(' . $rcvAreaCode . ') ' . $rcvNumber;
+            } elseif ($rcvNumber) {
+                $customerPhone = $rcvNumber;
+            }
+        }
+
         // Pack ID (needed for messages)
         $packId = $ml['pack_id'] ?? null;
 
@@ -143,7 +163,7 @@ class SyncSingleOrder implements ShouldQueue
         DB::transaction(function () use (
             $account, $ml, $buyer, $orderStatus, $paymentStatus, $payment,
             $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal,
-            $customerName, $customerEmail, $mlUserId, $receiver,
+            $customerName, $customerEmail, $customerPhone, $mlUserId, $receiver,
             $shippingMethod, $shippingMode, $estimatedDelivery, $dateDelivered,
             $packId, $tags, $buyerFeedback, $shipment, $dateShipped
         ) {
@@ -171,6 +191,7 @@ class SyncSingleOrder implements ShouldQueue
                     'payment_method'   => $payment['payment_method_id'] ?? $payment['payment_type'] ?? null,
                     'customer_name'    => $customerName,
                     'customer_email'   => $customerEmail,
+                    'customer_phone'   => $customerPhone,
                     'shipping_address' => $shippingAddress,
                     'subtotal'         => $subtotal,
                     'shipping_cost'    => $shippingCost,
@@ -255,15 +276,37 @@ class SyncSingleOrder implements ShouldQueue
     ): ?Customer {
         $companyId = $account->company_id;
 
+        // Build phone with DDD
+        $phone = null;
+        $areaCode = $buyer['phone']['area_code'] ?? null;
+        $number   = $buyer['phone']['number'] ?? null;
+        if ($areaCode && $number) {
+            $phone = '(' . $areaCode . ') ' . $number;
+        } elseif ($number) {
+            $phone = $number;
+        }
+        // Fallback to receiver phone
+        if (! $phone) {
+            $rcvArea = $receiver['phone']['area_code'] ?? null;
+            $rcvNum  = $receiver['phone']['number'] ?? null;
+            if ($rcvArea && $rcvNum) {
+                $phone = '(' . $rcvArea . ') ' . $rcvNum;
+            } elseif ($rcvNum) {
+                $phone = $rcvNum;
+            }
+        }
+
         $newData = array_filter([
             'name'    => $name,
             'email'   => $email,
-            'phone'   => $buyer['phone']['number'] ?? null,
+            'phone'   => $phone,
             'address' => ! empty($receiver) ? [
-                'street'  => trim(($receiver['street_name'] ?? '') . ' ' . ($receiver['street_number'] ?? '')),
-                'city'    => $receiver['city']['name'] ?? '',
-                'state'   => $receiver['state']['name'] ?? '',
-                'zip'     => $receiver['zip_code'] ?? '',
+                'street'       => trim(($receiver['street_name'] ?? '') . ' ' . ($receiver['street_number'] ?? '')),
+                'complement'   => $receiver['comment'] ?? null,
+                'neighborhood' => $receiver['neighborhood']['name'] ?? null,
+                'city'         => $receiver['city']['name'] ?? '',
+                'state'        => $receiver['state']['name'] ?? '',
+                'zip'          => $receiver['zip_code'] ?? '',
             ] : null,
             'meta'    => $mlUserId ? ['ml_user_id' => $mlUserId] : null,
         ]);

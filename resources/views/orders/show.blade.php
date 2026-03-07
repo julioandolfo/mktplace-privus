@@ -37,14 +37,14 @@
         } elseif ($order->tracking_code) {
             $trackingUrl = 'https://rastreamento.correios.com.br/app/index.php?objeto=' . $order->tracking_code;
         }
-        // ML item → listing lookup for thumbnail/URL
+        // ML item → listing lookup for thumbnail/URL/internal ID
         $mlListings = [];
-        if ($isFromML && $order->marketplaceAccount) {
+        if ($order->marketplaceAccount) {
             $mlItemIds = $order->items->map(fn($i) => $i->meta['ml_item_id'] ?? null)->filter()->values()->toArray();
             if (!empty($mlItemIds)) {
                 $mlListings = \App\Models\MarketplaceListing::where('marketplace_account_id', $order->marketplaceAccount->id)
                     ->whereIn('external_id', $mlItemIds)
-                    ->get(['external_id', 'meta'])
+                    ->get(['id', 'external_id', 'meta'])
                     ->keyBy('external_id')
                     ->toArray();
             }
@@ -81,12 +81,16 @@
                         @php
                             $itemMeta       = $item->meta ?? [];
                             $variationAttrs = $itemMeta['ml_variation_attrs'] ?? [];
-                            $mlItemId       = $itemMeta['ml_item_id'] ?? null;
-                            $mlItemUrl      = $mlItemId ? 'https://www.mercadolivre.com.br/p/' . $mlItemId : null;
+                            $mlItemId      = $itemMeta['ml_item_id'] ?? null;
+                            $listingRecord = $mlItemId ? ($mlListings[$mlItemId] ?? null) : null;
+                            // Internal listing URL (prefer) or external ML URL as fallback
+                            $listingUrl = $listingRecord
+                                ? route('listings.show', $listingRecord['id'])
+                                : null;
                             // Thumbnail: ML listing meta → product primary image → placeholder
                             $thumbUrl = null;
-                            if ($mlItemId && isset($mlListings[$mlItemId])) {
-                                $listingMeta = $mlListings[$mlItemId]['meta'] ?? [];
+                            if ($listingRecord) {
+                                $listingMeta = $listingRecord['meta'] ?? [];
                                 $thumbUrl = $listingMeta['thumbnail'] ?? ($listingMeta['live']['thumbnail'] ?? null);
                             }
                             if (!$thumbUrl && $item->product?->primaryImage) {
@@ -108,10 +112,13 @@
                             {{-- Nome + variações + link --}}
                             <td>
                                 <div class="flex items-start gap-1">
+                                    @if($listingUrl)
+                                    <a href="{{ $listingUrl }}" class="font-medium leading-tight hover:text-primary-600 dark:hover:text-primary-400 transition-colors">{{ $item->name }}</a>
+                                    @else
                                     <div class="font-medium leading-tight">{{ $item->name }}</div>
-                                    @if($mlItemUrl)
-                                    <a href="{{ $mlItemUrl }}" target="_blank"
-                                       class="flex-shrink-0 text-gray-400 hover:text-primary-500 transition-colors mt-0.5" title="Ver anúncio no ML">
+                                    @endif
+                                    @if($listingUrl)
+                                    <a href="{{ $listingUrl }}" class="flex-shrink-0 text-gray-400 hover:text-primary-500 transition-colors mt-0.5" title="Ver anúncio no sistema">
                                         <x-heroicon-o-arrow-top-right-on-square class="w-3.5 h-3.5" />
                                     </a>
                                     @endif

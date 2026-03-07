@@ -186,11 +186,14 @@
                                 <td class="text-sm text-gray-500 dark:text-zinc-400 whitespace-nowrap">
                                     {{ $order->created_at->format('d/m/Y') }}
                                 </td>
-                                <td class="text-sm text-gray-500 dark:text-zinc-400 whitespace-nowrap">
+                                <td class="text-sm whitespace-nowrap">
                                     @if($order->shipped_at)
-                                        {{ $order->shipped_at->format('d/m/Y') }}
-                                    @elseif($order->tracking_code)
-                                        <span class="text-xs font-mono">{{ $order->tracking_code }}</span>
+                                        <span class="text-gray-500 dark:text-zinc-400">{{ $order->shipped_at->format('d/m/Y') }}</span>
+                                    @elseif(!in_array($order->status->value, ['cancelled', 'delivered', 'returned']))
+                                        <span class="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                                            <x-heroicon-o-clock class="w-3 h-3" />
+                                            A ENVIAR
+                                        </span>
                                     @else
                                         <span class="text-gray-300 dark:text-zinc-600">—</span>
                                     @endif

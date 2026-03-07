@@ -153,6 +153,7 @@ class Order extends Model
     public function getIsCancellableAttribute(): bool
     {
         return ! in_array($this->status, [
+            OrderStatus::Shipped,
             OrderStatus::Delivered,
             OrderStatus::Cancelled,
             OrderStatus::Returned,
