@@ -16,137 +16,158 @@ class MarketplaceListingController extends Controller
 {
     public function index(Request $request)
     {
-        $query = MarketplaceListing::with(['marketplaceAccount.company', 'product']);
+        try {
+            $query = MarketplaceListing::with(['marketplaceAccount', 'product']);
 
-        // ── Basic filters ──────────────────────────────────────────────────────
-        if ($accountId = $request->input('account')) {
-            $query->where('marketplace_account_id', $accountId);
-        }
+            // ── Basic filters ──────────────────────────────────────────────────────
+            if ($accountId = $request->input('account')) {
+                $query->where('marketplace_account_id', $accountId);
+            }
 
-        if ($status = $request->input('status')) {
-            $query->where('status', $status);
-        }
+            if ($status = $request->input('status')) {
+                $query->where('status', $status);
+            }
 
-        if ($request->input('linked') === '1') {
-            $query->linked();
-        } elseif ($request->input('linked') === '0') {
-            $query->unlinked();
-        }
+            if ($request->input('linked') === '1') {
+                $query->linked();
+            } elseif ($request->input('linked') === '0') {
+                $query->unlinked();
+            }
 
-        if ($search = $request->input('search')) {
-            $query->search($search);
-        }
+            if ($search = $request->input('search')) {
+                $query->search($search);
+            }
 
-        // Quality
-        if ($quality = $request->input('quality')) {
-            match ($quality) {
-                'none'   => $query->whereRaw("(meta->>'quality_score') IS NULL"),
-                'low'    => $query->whereRaw("(meta->>'quality_score')::int < 50"),
-                'medium' => $query->whereRaw("(meta->>'quality_score')::int >= 50 AND (meta->>'quality_score')::int < 66"),
-                'high'   => $query->whereRaw("(meta->>'quality_score')::int >= 66"),
-                default  => null,
+            // Quality
+            if ($quality = $request->input('quality')) {
+                match ($quality) {
+                    'none'   => $query->whereRaw("(meta->>'quality_score') IS NULL"),
+                    'low'    => $query->whereRaw("(meta->>'quality_score')::int < 50"),
+                    'medium' => $query->whereRaw("(meta->>'quality_score')::int >= 50 AND (meta->>'quality_score')::int < 66"),
+                    'high'   => $query->whereRaw("(meta->>'quality_score')::int >= 66"),
+                    default  => null,
+                };
+            }
+
+            // ── Advanced filters ───────────────────────────────────────────────────
+
+            // Price range
+            if ($priceMin = $request->input('price_min')) {
+                $query->where('price', '>=', (float) $priceMin);
+            }
+            if ($priceMax = $request->input('price_max')) {
+                $query->where('price', '<=', (float) $priceMax);
+            }
+
+            // Stock presets
+            if ($stock = $request->input('stock')) {
+                match ($stock) {
+                    'zero'  => $query->where('available_quantity', 0),
+                    'low'   => $query->whereBetween('available_quantity', [1, 5]),
+                    'ok'    => $query->where('available_quantity', '>', 5),
+                    default => null,
+                };
+            }
+
+            // Marketplace platform (join on marketplace_accounts)
+            if ($platform = $request->input('platform')) {
+                $query->whereHas('marketplaceAccount', fn ($q) => $q->where('marketplace_type', $platform));
+            }
+
+            // Company filter
+            if ($companyId = $request->input('company')) {
+                $query->whereHas('marketplaceAccount', fn ($q) => $q->where('company_id', $companyId));
+            }
+
+            // Condition (new/used)
+            if ($condition = $request->input('condition')) {
+                $query->whereRaw("meta->>'condition' = ?", [$condition]);
+            }
+
+            // Listing type
+            if ($listingType = $request->input('listing_type')) {
+                $query->whereRaw("meta->>'listing_type_id' = ?", [$listingType]);
+            }
+
+            // Free shipping — use JSON boolean check without risky ::boolean cast
+            if ($request->input('free_shipping') === '1') {
+                $query->whereRaw("meta->>'is_free_shipping' = 'true'");
+            }
+
+            // Fulfillment
+            if ($request->input('fulfillment') === '1') {
+                $query->whereRaw("meta->>'is_fulfillment' = 'true'");
+            }
+
+            // Kit (listing requires multiple product units)
+            if ($request->input('kit') === '1') {
+                $query->where('product_quantity', '>', 1);
+            }
+
+            // Category
+            if ($category = $request->input('category')) {
+                $query->whereRaw("meta->>'category_name' = ?", [$category]);
+            }
+
+            // ── Sorting ────────────────────────────────────────────────────────────
+            match ($request->input('sort', 'newest')) {
+                'oldest'      => $query->oldest(),
+                'price_asc'   => $query->orderBy('price'),
+                'price_desc'  => $query->orderByDesc('price'),
+                'stock_asc'   => $query->orderBy('available_quantity'),
+                'stock_desc'  => $query->orderByDesc('available_quantity'),
+                'title_asc'   => $query->orderBy('title'),
+                'sold_desc'   => $query->orderByRaw("(meta->>'sold_quantity')::int DESC NULLS LAST"),
+                default       => $query->latest(),
             };
+
+            $listings = $query->paginate(25)->withQueryString();
+            $accounts = MarketplaceAccount::orderBy('account_name')->get();
+
+            // Data for advanced filter selects — wrapped in try-catch so filter
+            // data failure never blocks the main listing
+            try {
+                $companies = \App\Models\Company::orderBy('name')->get(['id', 'name']);
+            } catch (\Throwable $e) {
+                Log::warning('listings.index: could not load companies', ['error' => $e->getMessage()]);
+                $companies = collect();
+            }
+
+            try {
+                $categoryOptions = DB::table('marketplace_listings')
+                    ->whereRaw("meta->>'category_name' IS NOT NULL AND meta->>'category_name' != ''")
+                    ->selectRaw("meta->>'category_name' as category_name")
+                    ->distinct()
+                    ->orderByRaw("meta->>'category_name'")
+                    ->pluck('category_name');
+            } catch (\Throwable $e) {
+                Log::warning('listings.index: could not load categories', ['error' => $e->getMessage()]);
+                $categoryOptions = collect();
+            }
+
+            $totalListings = MarketplaceListing::count();
+            $activeCount   = MarketplaceListing::where('status', 'active')->count();
+            $pausedCount   = MarketplaceListing::where('status', 'paused')->count();
+            $unlinkedCount = MarketplaceListing::unlinked()->count();
+            $perAccount    = MarketplaceListing::with('marketplaceAccount')
+                ->selectRaw("marketplace_account_id, count(*) as total, sum(case when status = 'active' then 1 else 0 end) as active_count")
+                ->groupBy('marketplace_account_id')
+                ->get();
+
+            return view('marketplace-listings.index', compact(
+                'listings', 'accounts', 'companies', 'categoryOptions',
+                'totalListings', 'activeCount', 'pausedCount', 'unlinkedCount', 'perAccount'
+            ));
+
+        } catch (\Throwable $e) {
+            Log::error('listings.index 500', [
+                'error'   => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => collect($e->getTrace())->take(8)->toArray(),
+            ]);
+            throw $e;
         }
-
-        // ── Advanced filters ───────────────────────────────────────────────────
-
-        // Price range
-        if ($priceMin = $request->input('price_min')) {
-            $query->where('price', '>=', (float) $priceMin);
-        }
-        if ($priceMax = $request->input('price_max')) {
-            $query->where('price', '<=', (float) $priceMax);
-        }
-
-        // Stock presets
-        if ($stock = $request->input('stock')) {
-            match ($stock) {
-                'zero'  => $query->where('available_quantity', 0),
-                'low'   => $query->whereBetween('available_quantity', [1, 5]),
-                'ok'    => $query->where('available_quantity', '>', 5),
-                default => null,
-            };
-        }
-
-        // Marketplace platform (join on marketplace_accounts)
-        if ($platform = $request->input('platform')) {
-            $query->whereHas('marketplaceAccount', fn ($q) => $q->where('marketplace_type', $platform));
-        }
-
-        // Specific ML/marketplace account (already handled above but also supported here)
-        // Company filter
-        if ($companyId = $request->input('company')) {
-            $query->whereHas('marketplaceAccount', fn ($q) => $q->where('company_id', $companyId));
-        }
-
-        // Condition (new/used)
-        if ($condition = $request->input('condition')) {
-            $query->whereRaw("meta->>'condition' = ?", [$condition]);
-        }
-
-        // Listing type (gold_pro / gold_special / free)
-        if ($listingType = $request->input('listing_type')) {
-            $query->whereRaw("meta->>'listing_type_id' = ?", [$listingType]);
-        }
-
-        // Free shipping
-        if ($request->input('free_shipping') === '1') {
-            $query->whereRaw("(meta->>'is_free_shipping')::boolean = true");
-        }
-
-        // Fulfillment
-        if ($request->input('fulfillment') === '1') {
-            $query->whereRaw("(meta->>'is_fulfillment')::boolean = true");
-        }
-
-        // Kit (listing requires multiple product units)
-        if ($request->input('kit') === '1') {
-            $query->where('product_quantity', '>', 1);
-        }
-
-        // Category (stored in meta as category_name)
-        if ($category = $request->input('category')) {
-            $query->whereRaw("meta->>'category_name' = ?", [$category]);
-        }
-
-        // ── Sorting ────────────────────────────────────────────────────────────
-        match ($request->input('sort', 'newest')) {
-            'oldest'      => $query->oldest(),
-            'price_asc'   => $query->orderBy('price'),
-            'price_desc'  => $query->orderByDesc('price'),
-            'stock_asc'   => $query->orderBy('available_quantity'),
-            'stock_desc'  => $query->orderByDesc('available_quantity'),
-            'title_asc'   => $query->orderBy('title'),
-            'sold_desc'   => $query->orderByRaw("(meta->>'sold_quantity')::int DESC NULLS LAST"),
-            default       => $query->latest(),
-        };
-
-        $listings  = $query->paginate(25)->withQueryString();
-        $accounts  = MarketplaceAccount::orderBy('account_name')->get();
-
-        // Data for advanced filter selects
-        $companies = \App\Models\Company::where('is_active', true)->orderBy('name')->get(['id', 'name']);
-
-        $categoryOptions = DB::table('marketplace_listings')
-            ->whereRaw("meta->>'category_name' IS NOT NULL AND meta->>'category_name' != ''")
-            ->selectRaw("meta->>'category_name' as category_name")
-            ->distinct()
-            ->orderByRaw("meta->>'category_name'")
-            ->pluck('category_name');
-
-        $totalListings  = MarketplaceListing::count();
-        $activeCount    = MarketplaceListing::where('status', 'active')->count();
-        $pausedCount    = MarketplaceListing::where('status', 'paused')->count();
-        $unlinkedCount  = MarketplaceListing::unlinked()->count();
-        $perAccount     = MarketplaceListing::with('marketplaceAccount')
-            ->selectRaw("marketplace_account_id, count(*) as total, sum(case when status = 'active' then 1 else 0 end) as active_count")
-            ->groupBy('marketplace_account_id')
-            ->get();
-
-        return view('marketplace-listings.index', compact(
-            'listings', 'accounts', 'companies', 'categoryOptions',
-            'totalListings', 'activeCount', 'pausedCount', 'unlinkedCount', 'perAccount'
-        ));
     }
 
     public function show(MarketplaceListing $listing)
