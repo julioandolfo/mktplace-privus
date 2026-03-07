@@ -963,8 +963,9 @@
             <x-ui.card>
                 @php
                     // New /performance endpoint: score=0-100, level_wording in PT, buckets[]
-                    $hasQuality     = !empty($quality) && isset($quality['score']);
-                    $qScore         = $hasQuality ? (int) ($quality['score'] ?? 0) : 0;
+                    $qualityUnavailable = !empty($quality['_unavailable']); // ML returned 404 (not generated yet)
+                    $hasQuality         = !empty($quality) && isset($quality['score']);
+                    $qScore             = $hasQuality ? (int) ($quality['score'] ?? 0) : 0;
                     $qLevelWord     = $quality['level_wording'] ?? ($quality['level'] ?? '');
                     // Normalize level label for MLB (PT-BR)
                     $qLevelLabel    = match(strtolower($qLevelWord)) {
@@ -1096,20 +1097,45 @@
                 </div>
                 @endif
 
+                @elseif($qualityUnavailable)
+                {{-- 404: ML ainda não calculou o score para este anúncio --}}
+                <div class="flex items-start gap-3 text-xs text-gray-500 dark:text-zinc-400">
+                    <div class="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <x-heroicon-o-clock class="w-4 h-4 text-amber-500" />
+                    </div>
+                    <div class="space-y-1.5">
+                        <p class="font-semibold text-gray-700 dark:text-zinc-300">Pontuação ainda não calculada pelo Mercado Livre</p>
+                        <p class="leading-relaxed">O ML pode levar algumas horas para gerar o score de qualidade de anúncios novos ou recém atualizados. Recarregue esta página mais tarde.</p>
+                        <div class="flex items-center gap-3 mt-2">
+                            <a href="{{ route('listings.show', $listing) }}"
+                               class="inline-flex items-center gap-1.5 text-primary-500 hover:text-primary-600 font-medium">
+                                <x-heroicon-o-arrow-path class="w-3.5 h-3.5" />
+                                Verificar novamente
+                            </a>
+                            @if(!empty($live['permalink']))
+                            <a href="{{ $live['permalink'] }}" target="_blank"
+                               class="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-zinc-200">
+                                <x-heroicon-o-arrow-top-right-on-square class="w-3.5 h-3.5" />
+                                Ver no ML
+                            </a>
+                            @endif
+                        </div>
+                    </div>
+                </div>
                 @else
-                {{-- Qualidade ainda não disponível (404 = dados não gerados ainda pelo ML) --}}
-                <div class="flex items-start gap-2 text-xs text-gray-500 dark:text-zinc-400">
-                    <x-heroicon-o-clock class="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
+                {{-- Erro ao buscar qualidade (API falhou ou sem credenciais) --}}
+                <div class="flex items-start gap-3 text-xs text-gray-500 dark:text-zinc-400">
+                    <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <x-heroicon-o-signal-slash class="w-4 h-4 text-gray-400" />
+                    </div>
                     <div class="space-y-1">
-                        <p class="font-medium text-gray-600 dark:text-zinc-300">Pontuação ainda não calculada</p>
-                        <p>O Mercado Livre pode levar algumas horas para gerar o score de qualidade de anúncios novos ou recém atualizados.</p>
-                        @if(!empty($live['permalink']))
-                        <a href="{{ $live['permalink'] }}" target="_blank"
-                            class="text-primary-500 hover:underline mt-1 inline-flex items-center gap-1">
-                            <x-heroicon-o-arrow-top-right-on-square class="w-3 h-3" />
-                            Ver no Mercado Livre
+                        <p class="font-semibold text-gray-600 dark:text-zinc-300">Não foi possível carregar a qualidade</p>
+                        <p>Verifique os logs ou tente recarregar a página.</p>
+                        <a href="{{ route('listings.show', $listing) }}"
+                           class="inline-flex items-center gap-1.5 text-primary-500 hover:text-primary-600 font-medium mt-1">
+                            <x-heroicon-o-arrow-path class="w-3.5 h-3.5" />
+                            Tentar novamente
                         </a>
-                        @endif
                     </div>
                 </div>
                 @endif
