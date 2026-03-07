@@ -292,23 +292,25 @@ class MercadoLivreService
      * Create or update item description via ML API.
      *
      * ML uses two different methods:
-     *  - POST /items/{id}/description  → create (when no description exists yet)
-     *  - PUT  /items/{id}/description  → update (when description already exists)
+     *  - POST /items/{id}/description             → create (no description yet)
+     *  - PUT  /items/{id}/description?api_version=2 → update existing (api_version=2 is REQUIRED)
      *
-     * We first try PUT; if ML returns 404 (no description yet), we fall back to POST.
+     * Without ?api_version=2, ML accepts the PUT but silently ignores the change.
+     * @see https://developers.mercadolivre.com.br/en_us/item-description-2#Replacing
      */
     public function updateDescription(string $itemId, string $plainText): array
     {
         $payload = ['plain_text' => $plainText];
         $path    = "/items/{$itemId}/description";
 
+        // PUT with mandatory api_version=2 for existing descriptions
         $response = Http::withToken($this->token())
             ->timeout(30)
-            ->put(self::BASE_URL . $path, $payload);
+            ->put(self::BASE_URL . $path . '?api_version=2', $payload);
 
-        // 404 means the description doesn't exist yet → use POST to create it
+        // 404 = description doesn't exist yet → POST to create it
         if ($response->status() === 404) {
-            Log::info("ML updateDescription({$itemId}): PUT returned 404, falling back to POST.");
+            Log::info("ML updateDescription({$itemId}): PUT 404, falling back to POST (create).");
             $response = Http::withToken($this->token())
                 ->timeout(30)
                 ->post(self::BASE_URL . $path, $payload);
