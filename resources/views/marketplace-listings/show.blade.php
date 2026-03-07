@@ -205,64 +205,20 @@
                         </div>
                     </div>
 
-                    <div>
-                        <label class="form-label">Prazo de Disponibilidade</label>
-                        @php $currentHandling = old('handling_time', $live['shipping']['handling_time'] ?? 0); @endphp
-                        @if($isHandlingLocked)
-                            <select class="form-input bg-gray-100 dark:bg-zinc-800/60 text-gray-500 dark:text-zinc-400 cursor-not-allowed" disabled>
-                                <option>{{ (int)$currentHandling === 0 ? 'Mesmo dia' : ((int)$currentHandling . ' dia(s) útil(is)') }}</option>
-                            </select>
-                            <input type="hidden" name="handling_time" value="{{ (int)$currentHandling }}">
-                            <p class="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
-                                <x-heroicon-o-lock-closed class="w-3 h-3" />
-                                Prazo gerenciado pelo Mercado Livre — não pode ser alterado.
-                            </p>
-                        @else
-                            <select name="handling_time" class="form-input">
-                                <option value="0" @selected((int)$currentHandling === 0)>Mesmo dia</option>
-                                @for($d = 1; $d <= 20; $d++)
-                                    <option value="{{ $d }}" @selected((int)$currentHandling === $d)>
-                                        {{ $d === 1 ? '1 dia útil' : "{$d} dias úteis" }}
-                                    </option>
-                                @endfor
-                            </select>
-                        @endif
-                    </div>
+                    {{-- handling_time não é editável via API ML para anúncios ativos --}}
+                    @php $currentHandling = $live['shipping']['handling_time'] ?? 0; @endphp
+                    <input type="hidden" name="handling_time" value="{{ (int)$currentHandling }}">
 
-                    {{-- Shipping Dimensions --}}
-                    @php
-                        $dims = $live['shipping']['dimensions'] ?? null;
-                    @endphp
-                    <div>
-                        <label class="form-label mb-2 block">Dimensões para Frete (Mercado Envios)</label>
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div>
-                                <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Largura (cm)</label>
-                                <input type="number" name="shipping_width" step="0.1" min="0"
-                                    value="{{ old('shipping_width', $dims['width'] ?? '') }}"
-                                    class="form-input text-sm" placeholder="0">
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Altura (cm)</label>
-                                <input type="number" name="shipping_height" step="0.1" min="0"
-                                    value="{{ old('shipping_height', $dims['height'] ?? '') }}"
-                                    class="form-input text-sm" placeholder="0">
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Comprimento (cm)</label>
-                                <input type="number" name="shipping_length" step="0.1" min="0"
-                                    value="{{ old('shipping_length', $dims['length'] ?? '') }}"
-                                    class="form-input text-sm" placeholder="0">
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">Peso (g)</label>
-                                <input type="number" name="shipping_weight" step="1" min="0"
-                                    value="{{ old('shipping_weight', $dims['weight'] ?? '') }}"
-                                    class="form-input text-sm" placeholder="0">
-                            </div>
-                        </div>
-                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">
-                            Necessário para calcular o frete do Mercado Envios corretamente.
+                    <div class="flex items-start gap-2 text-xs bg-gray-50 dark:bg-zinc-800/40 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2.5">
+                        <x-heroicon-o-information-circle class="w-4 h-4 flex-shrink-0 text-gray-400 dark:text-zinc-500 mt-0.5" />
+                        <p class="text-gray-500 dark:text-zinc-400">
+                            <strong>Prazo de disponibilidade</strong> (atual: {{ $currentHandling === 0 ? 'mesmo dia' : $currentHandling . ' dia(s)' }})
+                            não pode ser alterado via API ML. Edite diretamente no
+                            @if(!empty($live['permalink']))
+                                <a href="{{ $live['permalink'] }}" target="_blank" class="text-primary-500 underline">painel do ML</a>.
+                            @else
+                                painel do Mercado Livre.
+                            @endif
                         </p>
                     </div>
 
@@ -625,7 +581,21 @@
 
             {{-- Imagens --}}
             @if($liveData !== null)
-            <x-ui.card title="Imagens">
+            <div id="imagens">
+            <x-ui.card>
+                <x-slot name="title">
+                    <div class="flex items-center justify-between">
+                        <span>Imagens</span>
+                        @if($aiConfigured)
+                        <button type="button" id="btn-gen-img"
+                            class="btn-secondary btn-sm text-xs flex items-center gap-1.5 ai-gen-btn">
+                            <x-heroicon-o-sparkles class="w-3.5 h-3.5 text-purple-500" />
+                            Gerar com IA
+                        </button>
+                        @endif
+                    </div>
+                </x-slot>
+
                 @if(!empty($liveData['pictures']))
                 <div class="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-4">
                     @foreach($liveData['pictures'] as $pic)
@@ -651,6 +621,62 @@
                 </div>
                 @else
                 <p class="text-sm text-gray-400 dark:text-zinc-500 mb-4">Nenhuma imagem cadastrada.</p>
+                @endif
+
+                {{-- AI Image generation panel --}}
+                @if($aiConfigured)
+                <div id="ai-img-panel" class="hidden mb-4 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 space-y-3">
+                    <div class="flex items-center gap-2">
+                        <x-heroicon-o-sparkles class="w-4 h-4 text-purple-500 flex-shrink-0" />
+                        <p class="text-xs font-medium text-purple-700 dark:text-purple-300">Gerar imagem com IA</p>
+                    </div>
+                    <p class="text-xs text-purple-600 dark:text-purple-400">
+                        Descreva a imagem que deseja gerar. Quanto mais detalhado o prompt, melhor o resultado.
+                    </p>
+                    <textarea id="ai-img-prompt" rows="2"
+                        class="form-input w-full text-sm"
+                        placeholder="Ex: Foto profissional do produto em fundo branco, iluminação de estúdio...">Foto profissional de produto para e-commerce: {{ $listing->title }}. Fundo branco puro, iluminação de estúdio, alta resolução, vista frontal, sem texto.</textarea>
+
+                    <div class="flex items-center gap-3">
+                        <button type="button" id="btn-run-ai-img"
+                            class="btn-primary btn-sm text-xs flex items-center gap-1.5">
+                            <x-heroicon-o-sparkles class="w-3.5 h-3.5" />
+                            <span id="ai-img-btn-text">Gerar imagem</span>
+                        </button>
+                        <div id="ai-img-spinner" class="hidden">
+                            <svg class="animate-spin w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                        </div>
+                        <p id="ai-img-status" class="text-xs text-purple-600 dark:text-purple-400 hidden">Gerando imagem (pode levar ~15s)...</p>
+                    </div>
+
+                    <div id="ai-img-error" class="hidden text-xs text-red-500 flex items-start gap-1">
+                        <x-heroicon-o-exclamation-circle class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        <span id="ai-img-error-text"></span>
+                    </div>
+
+                    {{-- Preview of generated image --}}
+                    <div id="ai-img-result" class="hidden space-y-2">
+                        <p class="text-xs font-medium text-purple-700 dark:text-purple-300">Imagem gerada — aprovada?</p>
+                        <img id="ai-img-preview" src="" alt="Imagem gerada pela IA"
+                            class="max-w-xs rounded-lg border border-purple-200 dark:border-purple-700 shadow-sm">
+                        <div class="flex gap-2">
+                            <button type="button" id="btn-ai-img-upload"
+                                class="btn-primary btn-sm text-xs flex items-center gap-1.5">
+                                <x-heroicon-o-cloud-arrow-up class="w-3.5 h-3.5" />
+                                <span id="ai-img-upload-text">Adicionar ao anúncio no ML</span>
+                            </button>
+                            <button type="button" id="btn-ai-img-regen"
+                                class="btn-secondary btn-sm text-xs flex items-center gap-1.5">
+                                <x-heroicon-o-arrow-path class="w-3.5 h-3.5" />
+                                Gerar outra
+                            </button>
+                        </div>
+                        <div id="ai-img-upload-status" class="hidden text-xs font-medium"></div>
+                    </div>
+                </div>
                 @endif
 
                 {{-- Add image: URL or file upload --}}
@@ -696,13 +722,66 @@
                     </div>
                 </form>
             </x-ui.card>
+            </div>
             @endif
 
             {{-- Descricao --}}
-            <x-ui.card title="Descricao">
+            <div id="descricao">
+            <x-ui.card>
+                <x-slot name="title">
+                    <div class="flex items-center justify-between">
+                        <span>Descrição</span>
+                        @if($aiConfigured)
+                        <button type="button" id="btn-gen-desc"
+                            class="btn-secondary btn-sm text-xs flex items-center gap-1.5 ai-gen-btn">
+                            <x-heroicon-o-sparkles class="w-3.5 h-3.5 text-purple-500" />
+                            Gerar com IA
+                        </button>
+                        @else
+                        <a href="{{ route('settings.index', ['tab' => 'ai']) }}"
+                            class="text-xs text-gray-400 dark:text-zinc-500 flex items-center gap-1 hover:text-purple-500 transition-colors">
+                            <x-heroicon-o-sparkles class="w-3.5 h-3.5" />
+                            Configurar IA
+                        </a>
+                        @endif
+                    </div>
+                </x-slot>
+
+                {{-- AI description panel --}}
+                @if($aiConfigured)
+                <div id="ai-desc-panel" class="hidden mb-4 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 space-y-2">
+                    <div class="flex items-center gap-2">
+                        <x-heroicon-o-sparkles class="w-4 h-4 text-purple-500 flex-shrink-0" />
+                        <p class="text-xs font-medium text-purple-700 dark:text-purple-300">Gerar descrição com IA</p>
+                    </div>
+                    <p class="text-xs text-purple-600 dark:text-purple-400">
+                        A IA irá criar uma descrição profissional baseada no título e atributos do anúncio.
+                        A descrição atual será usada como base se preenchida.
+                    </p>
+                    <div class="flex items-center gap-2 pt-1">
+                        <button type="button" id="btn-run-ai-desc"
+                            class="btn-primary btn-sm text-xs flex items-center gap-1.5">
+                            <x-heroicon-o-sparkles class="w-3.5 h-3.5" />
+                            <span id="ai-desc-btn-text">Gerar agora</span>
+                        </button>
+                        <div id="ai-desc-spinner" class="hidden">
+                            <svg class="animate-spin w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                        </div>
+                        <p id="ai-desc-status" class="text-xs text-purple-600 dark:text-purple-400 hidden">Gerando descrição, aguarde...</p>
+                    </div>
+                    <div id="ai-desc-error" class="hidden text-xs text-red-500 mt-1 flex items-center gap-1">
+                        <x-heroicon-o-exclamation-circle class="w-3.5 h-3.5 flex-shrink-0" />
+                        <span id="ai-desc-error-text"></span>
+                    </div>
+                </div>
+                @endif
+
                 <form method="POST" action="{{ route('listings.update-description', $listing) }}" class="space-y-3">
                     @csrf
-                    <textarea name="description" rows="8"
+                    <textarea id="listing-description" name="description" rows="8"
                         class="form-input w-full text-sm leading-relaxed resize-y @error('description') border-red-500 @enderror"
                         placeholder="Descrição do anúncio...">{{ old('description', $description['plain_text'] ?? '') }}</textarea>
                     @error('description') <p class="text-xs text-red-500">{{ $message }}</p> @enderror
@@ -714,6 +793,7 @@
                     </div>
                 </form>
             </x-ui.card>
+            </div>
 
             {{-- Vincular Produto --}}
             @if($listing->product)
@@ -842,46 +922,116 @@
         {{-- ═══ Sidebar ══════════════════════════════════════════════════════ --}}
         <div class="space-y-6">
 
-            {{-- Saude do Anuncio --}}
+            {{-- Qualidade do Anúncio (ML /health endpoint) --}}
             @if(!empty($quality))
-            <x-ui.card title="Saude do Anuncio">
+            <x-ui.card>
                 @php
                     $health    = $quality['health'] ?? 0;
                     $pct       = round($health * 100);
-                    $color     = $pct >= 70 ? 'bg-emerald-500' : ($pct >= 40 ? 'bg-amber-500' : 'bg-red-500');
-                    $textColor = $pct >= 70 ? 'text-emerald-500' : ($pct >= 40 ? 'text-amber-500' : 'text-red-500');
+                    $qLevel    = $quality['level'] ?? 'basic';
+                    $qLevelLabel = match($qLevel) {
+                        'professional' => 'Profissional',
+                        'standard'     => 'Satisfatório',
+                        default        => 'Básico',
+                    };
+                    $isProfessional = $pct >= 66;
+                    $isStandard     = $pct >= 50 && $pct < 66;
+                    $isBasic        = $pct < 50;
                 @endphp
-                <div class="mb-4">
-                    <div class="flex items-center justify-between mb-1.5">
-                        <span class="text-sm text-gray-500 dark:text-zinc-400">Pontuacao</span>
-                        <span class="text-lg font-bold {{ $textColor }}">{{ $pct }}%</span>
+                <x-slot name="title">
+                    <div class="flex items-center justify-between">
+                        <span>Qualidade do Anúncio</span>
+                        <span class="text-sm font-bold
+                            {{ $isProfessional ? 'text-emerald-500' : ($isStandard ? 'text-amber-500' : 'text-red-500') }}">
+                            {{ $pct }}%
+                        </span>
                     </div>
-                    <div class="h-2.5 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
-                        <div class="{{ $color }} h-full rounded-full transition-all" style="width: {{ $pct }}%"></div>
+                </x-slot>
+
+                {{-- Progress bar --}}
+                <div class="mb-3">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs text-gray-500 dark:text-zinc-400">
+                            Nível:
+                            <strong class="{{ $isProfessional ? 'text-emerald-500' : ($isStandard ? 'text-amber-500' : 'text-red-500') }}">
+                                {{ $qLevelLabel }}
+                            </strong>
+                        </span>
+                        <span class="text-xs text-gray-400 dark:text-zinc-500">{{ $pct }}/100</span>
+                    </div>
+                    <div class="h-2 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500
+                            {{ $isProfessional ? 'bg-emerald-500' : ($isStandard ? 'bg-amber-500' : 'bg-red-500') }}"
+                             style="width: {{ $pct }}%"></div>
+                    </div>
+                    {{-- Level bands reference --}}
+                    <div class="flex text-[10px] text-gray-400 dark:text-zinc-600 mt-1 justify-between px-0.5">
+                        <span>Básico &lt;50%</span>
+                        <span>Satisfatório ≥50%</span>
+                        <span>Profissional ≥66%</span>
                     </div>
                 </div>
 
-                @if(!empty($quality['issues']))
-                <div class="space-y-2">
-                    <p class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Problemas</p>
-                    @foreach($quality['issues'] as $issue)
-                    <div class="flex items-start gap-2 text-sm">
-                        <x-heroicon-o-x-circle class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                        <span class="text-gray-700 dark:text-zinc-300">{{ $issue['text'] ?? $issue['id'] ?? '' }}</span>
+                {{-- Goals list --}}
+                @if(!empty($quality['goals']))
+                @php
+                    $goalLabels = [
+                        'picture'              => ['icon' => 'photo', 'label' => 'Fotos do produto'],
+                        'description'          => ['icon' => 'document-text', 'label' => 'Descrição'],
+                        'price'                => ['icon' => 'currency-dollar', 'label' => 'Preço competitivo'],
+                        'video'                => ['icon' => 'video-camera', 'label' => 'Vídeo do produto'],
+                        'verification'         => ['icon' => 'shield-check', 'label' => 'Verificação de dados'],
+                        'whatsapp'             => ['icon' => 'chat-bubble-left-right', 'label' => 'WhatsApp'],
+                        'technical_specification' => ['icon' => 'clipboard-document-list', 'label' => 'Especificações técnicas'],
+                        'upgrade_listing'      => ['icon' => 'arrow-trending-up', 'label' => 'Upgrade de tipo de anúncio'],
+                        'publish'              => ['icon' => 'rocket-launch', 'label' => 'Anúncio publicado'],
+                    ];
+                    $applicableGoals = collect($quality['goals'])->where('apply', true);
+                    $pendingActions  = collect($healthActions['actions'] ?? []);
+                @endphp
+                <div class="space-y-1.5">
+                    <p class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Fatores de qualidade</p>
+                    @foreach($applicableGoals as $goal)
+                    @php
+                        $goalId    = $goal['id'] ?? '';
+                        $goalInfo  = $goalLabels[$goalId] ?? ['icon' => 'check-circle', 'label' => ucfirst(str_replace('_', ' ', $goalId))];
+                        $completed = ($goal['progress'] ?? 0) >= ($goal['progress_max'] ?? 1);
+                        $isPending = $pendingActions->contains('id', $goalId);
+                    @endphp
+                    <div class="flex items-center gap-2 py-1 px-1.5 rounded-md
+                        {{ $completed ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'bg-red-50/50 dark:bg-red-900/10' }}">
+                        @if($completed)
+                            <x-heroicon-s-check-circle class="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                        @else
+                            <x-heroicon-o-x-circle class="w-4 h-4 text-red-400 flex-shrink-0" />
+                        @endif
+                        <span class="text-xs {{ $completed ? 'text-gray-600 dark:text-zinc-400' : 'text-gray-700 dark:text-zinc-300 font-medium' }} flex-1">
+                            {{ $goalInfo['label'] }}
+                        </span>
+                        @if(!$completed)
+                            @if($goalId === 'description')
+                                <a href="#descricao" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">Editar</a>
+                            @elseif($goalId === 'picture')
+                                <a href="#imagens" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">Editar</a>
+                            @elseif($goalId === 'upgrade_listing')
+                                <a href="#tipo-anuncio" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">Alterar</a>
+                            @elseif(!empty($live['permalink']))
+                                <a href="{{ $live['permalink'] }}" target="_blank" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">ML</a>
+                            @endif
+                        @endif
                     </div>
                     @endforeach
                 </div>
                 @endif
 
-                @if(!empty($quality['recommendations']))
-                <div class="mt-3 space-y-2">
-                    <p class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Recomendacoes</p>
-                    @foreach($quality['recommendations'] as $rec)
-                    <div class="flex items-start gap-2 text-sm">
-                        <x-heroicon-o-light-bulb class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                        <span class="text-gray-700 dark:text-zinc-300">{{ $rec['text'] ?? $rec }}</span>
-                    </div>
-                    @endforeach
+                {{-- Link to ML for full quality management --}}
+                @if(!empty($live['permalink']))
+                <div class="mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800">
+                    <a href="{{ $live['permalink'] }}" target="_blank"
+                        class="text-xs text-gray-400 dark:text-zinc-500 hover:text-primary-500 flex items-center gap-1">
+                        <x-heroicon-o-arrow-top-right-on-square class="w-3.5 h-3.5" />
+                        Ver anúncio no Mercado Livre
+                    </a>
                 </div>
                 @endif
             </x-ui.card>
@@ -985,59 +1135,65 @@
             {{-- Tipo de Anúncio (editável) --}}
             @if($liveData !== null)
             <x-ui.card>
+                @php
+                    $currentListingType = $live['listing_type_id'] ?? $listingMeta['listing_type_id'] ?? null;
+                    $listingTypeLabels  = [
+                        'gold_pro'     => ['label' => 'Premium',  'color' => 'text-yellow-600 dark:text-yellow-400'],
+                        'gold_premium' => ['label' => 'Premium',  'color' => 'text-yellow-600 dark:text-yellow-400'],
+                        'gold_special' => ['label' => 'Clássico', 'color' => 'text-blue-600 dark:text-blue-400'],
+                        'gold'         => ['label' => 'Ouro',     'color' => 'text-yellow-500 dark:text-yellow-300'],
+                        'silver'       => ['label' => 'Prata',    'color' => 'text-gray-500 dark:text-zinc-400'],
+                        'bronze'       => ['label' => 'Bronze',   'color' => 'text-orange-500 dark:text-orange-400'],
+                        'free'         => ['label' => 'Grátis',   'color' => 'text-gray-400 dark:text-zinc-500'],
+                    ];
+                    $typeInfo = $listingTypeLabels[$currentListingType] ?? ['label' => $currentListingType ?? '—', 'color' => 'text-gray-500'];
+                    // $availableListingTypes comes from controller (GET /items/{id}/available_listing_types)
+                    $canChangeType = !empty($availableListingTypes);
+                @endphp
                 <div x-data="{ editing: false }">
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="text-sm font-semibold text-gray-800 dark:text-white">Tipo de Anúncio</h3>
+                        @if($canChangeType)
                         <button type="button" @click="editing = !editing"
                             class="text-xs text-primary-500 hover:text-primary-400 flex items-center gap-1">
                             <x-heroicon-o-pencil-square class="w-3.5 h-3.5" />
                             <span x-text="editing ? 'Cancelar' : 'Alterar'"></span>
                         </button>
+                        @endif
                     </div>
-
-                    @php
-                        $currentListingType = $live['listing_type_id'] ?? $listingMeta['listing_type_id'] ?? null;
-                        $listingTypeLabels  = [
-                            'gold_premium' => ['label' => 'Premium', 'color' => 'text-yellow-600 dark:text-yellow-400'],
-                            'gold_pro'     => ['label' => 'Premium', 'color' => 'text-yellow-600 dark:text-yellow-400'],
-                            'gold_special' => ['label' => 'Clássico', 'color' => 'text-blue-600 dark:text-blue-400'],
-                            'gold'         => ['label' => 'Clássico', 'color' => 'text-blue-600 dark:text-blue-400'],
-                            'silver'       => ['label' => 'Prata', 'color' => 'text-gray-500 dark:text-zinc-400'],
-                            'bronze'       => ['label' => 'Bronze', 'color' => 'text-orange-500 dark:text-orange-400'],
-                            'free'         => ['label' => 'Grátis', 'color' => 'text-gray-400 dark:text-zinc-500'],
-                        ];
-                        $typeInfo = $listingTypeLabels[$currentListingType] ?? ['label' => $currentListingType ?? '—', 'color' => 'text-gray-500'];
-                    @endphp
 
                     <div x-show="!editing" class="text-sm">
                         <span class="font-semibold {{ $typeInfo['color'] }}">{{ $typeInfo['label'] }}</span>
                         <p class="text-xs text-gray-400 dark:text-zinc-500 mt-0.5 font-mono">{{ $currentListingType }}</p>
-                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-2 leading-relaxed">
-                            Clássico = maior visibilidade. Premium = máxima visibilidade (requer pacote contratado no ML).
-                        </p>
+                        @if(!$canChangeType)
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-2">Nenhuma alteração disponível para este anúncio.</p>
+                        @endif
                     </div>
 
+                    @if($canChangeType)
                     <form x-show="editing" x-cloak method="POST"
                           action="{{ route('listings.update-listing-type', $listing) }}">
                         @csrf
                         <div class="space-y-3">
                             <div>
-                                <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1.5 block">Novo tipo</label>
+                                <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1.5 block">
+                                    Tipos disponíveis para este anúncio
+                                </label>
                                 <select name="listing_type_id" class="form-input text-sm">
-                                    <option value="gold_special" {{ $currentListingType === 'gold_special' ? 'selected' : '' }}>
-                                        Clássico (gold_special)
+                                    @foreach($availableListingTypes as $lt)
+                                    @php
+                                        $ltLabel = $listingTypeLabels[$lt['id']] ?? ['label' => $lt['name'] ?? $lt['id']];
+                                    @endphp
+                                    <option value="{{ $lt['id'] }}" {{ $currentListingType === $lt['id'] ? 'selected' : '' }}>
+                                        {{ $ltLabel['label'] }} ({{ $lt['id'] }})
+                                        {{ $currentListingType === $lt['id'] ? '— atual' : '' }}
                                     </option>
-                                    <option value="gold_premium" {{ $currentListingType === 'gold_premium' ? 'selected' : '' }}>
-                                        Premium (gold_premium)
-                                    </option>
-                                    <option value="free" {{ $currentListingType === 'free' ? 'selected' : '' }}>
-                                        Grátis
-                                    </option>
+                                    @endforeach
                                 </select>
                             </div>
                             <p class="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1">
-                                <x-heroicon-o-exclamation-triangle class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                                Para alterar para Premium, o vendedor precisa ter um pacote contratado no Mercado Livre.
+                                <x-heroicon-o-information-circle class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                A troca entre Clássico e Premium é gratuita via API. Para Premium, é necessário ter pacote contratado no ML.
                             </p>
                             <button type="submit" class="btn-primary btn-sm text-xs w-full">
                                 <x-heroicon-o-arrow-path class="w-3.5 h-3.5" />
@@ -1045,6 +1201,7 @@
                             </button>
                         </div>
                     </form>
+                    @endif
                 </div>
             </x-ui.card>
             @endif
@@ -1121,6 +1278,12 @@
                           action="{{ route('listings.update-shipping', $listing) }}"
                           class="space-y-3">
                         @csrf
+                        @php
+                            $shippingMode = $shipping['mode'] ?? 'me2';
+                            $isME2        = $shippingMode === 'me2';
+                            $isME1        = $shippingMode === 'me1';
+                        @endphp
+                        <input type="hidden" name="shipping_mode" value="{{ $shippingMode }}">
 
                         <div class="flex items-center justify-between">
                             <label class="text-xs text-gray-600 dark:text-zinc-400">Frete Grátis</label>
@@ -1151,50 +1314,66 @@
                             </label>
                         </div>
 
-                        @if(!$isFulfillment)
-                        <div>
-                            <label class="text-xs text-gray-500 dark:text-zinc-400 mb-1 block">
-                                Prazo de Disponibilidade (dias)
-                            </label>
-                            <select name="handling_time" class="form-input text-sm">
-                                @foreach([0,1,2,3,5,7,10,14,20] as $days)
-                                <option value="{{ $days }}" {{ $currentHandlingTime == $days ? 'selected' : '' }}>
-                                    {{ $days === 0 ? 'No mesmo dia' : "{$days} dia(s)" }}
-                                </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        @else
-                        <p class="text-xs text-gray-400 dark:text-zinc-500 flex items-center gap-1">
-                            <x-heroicon-o-lock-closed class="w-3 h-3" />
-                            Prazo gerenciado pelo Fulfillment ML.
-                        </p>
-                        @endif
-
-                        <div class="pt-2 border-t border-gray-100 dark:border-zinc-800">
-                            <p class="text-xs text-gray-500 dark:text-zinc-400 mb-2">Dimensões (Mercado Envios)</p>
-                            <div class="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label class="text-[10px] text-gray-400 dark:text-zinc-600">Larg. (cm)</label>
-                                    <input type="number" name="shipping_width" step="0.1" min="0"
-                                        value="{{ $dims['width'] ?? '' }}" class="form-input text-sm">
-                                </div>
-                                <div>
-                                    <label class="text-[10px] text-gray-400 dark:text-zinc-600">Alt. (cm)</label>
-                                    <input type="number" name="shipping_height" step="0.1" min="0"
-                                        value="{{ $dims['height'] ?? '' }}" class="form-input text-sm">
-                                </div>
-                                <div>
-                                    <label class="text-[10px] text-gray-400 dark:text-zinc-600">Comp. (cm)</label>
-                                    <input type="number" name="shipping_length" step="0.1" min="0"
-                                        value="{{ $dims['length'] ?? '' }}" class="form-input text-sm">
-                                </div>
-                                <div>
-                                    <label class="text-[10px] text-gray-400 dark:text-zinc-600">Peso (kg)</label>
-                                    <input type="number" name="shipping_weight" step="0.001" min="0"
-                                        value="{{ isset($dims['weight']) ? $dims['weight']/1000 : '' }}" class="form-input text-sm">
-                                </div>
+                        {{-- handling_time: NOT in ML's list of updatable fields via PUT --}}
+                        <div class="flex items-start gap-2 text-xs bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700/30 rounded-lg p-3">
+                            <x-heroicon-o-information-circle class="w-4 h-4 flex-shrink-0 text-amber-500 mt-0.5" />
+                            <div>
+                                <p class="font-medium text-amber-700 dark:text-amber-400 mb-0.5">Prazo de disponibilidade</p>
+                                <p class="text-amber-600 dark:text-amber-500 leading-relaxed">
+                                    @if($isFulfillment)
+                                        Gerenciado automaticamente pelo Fulfillment ML. Não pode ser alterado.
+                                    @else
+                                        O Mercado Livre <strong>não permite</strong> alterar o prazo de disponibilidade (<code>handling_time</code>) via API para anúncios ativos.
+                                        Para alterar, acesse: <a href="{{ $live['permalink'] ?? '#' }}" target="_blank" class="underline">ML → Meus Anúncios → Editar</a>.
+                                    @endif
+                                </p>
                             </div>
+                        </div>
+
+                        {{-- Dimensões: apenas ME1 aceita via API --}}
+                        <div class="pt-2 border-t border-gray-100 dark:border-zinc-800">
+                            @if($isME1)
+                                <p class="text-xs text-gray-500 dark:text-zinc-400 mb-2">
+                                    Dimensões <span class="text-gray-400">(ME1 — formato: alt × larg × comp, peso)</span>
+                                </p>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="text-[10px] text-gray-400 dark:text-zinc-600">Alt. (cm)</label>
+                                        <input type="number" name="shipping_height" step="1" min="0"
+                                            value="{{ $dims['height'] ?? '' }}" class="form-input text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="text-[10px] text-gray-400 dark:text-zinc-600">Larg. (cm)</label>
+                                        <input type="number" name="shipping_width" step="1" min="0"
+                                            value="{{ $dims['width'] ?? '' }}" class="form-input text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="text-[10px] text-gray-400 dark:text-zinc-600">Comp. (cm)</label>
+                                        <input type="number" name="shipping_length" step="1" min="0"
+                                            value="{{ $dims['length'] ?? '' }}" class="form-input text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="text-[10px] text-gray-400 dark:text-zinc-600">Peso (kg)</label>
+                                        <input type="number" name="shipping_weight" step="0.001" min="0"
+                                            value="{{ isset($dims['weight']) ? round($dims['weight']/1000, 3) : '' }}"
+                                            class="form-input text-sm">
+                                    </div>
+                                </div>
+                            @else
+                                <div class="flex items-start gap-2 text-xs text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/50 rounded-lg p-3">
+                                    <x-heroicon-o-information-circle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p class="font-medium text-gray-500 dark:text-zinc-400 mb-0.5">Dimensões não editáveis via API</p>
+                                        <p class="leading-relaxed">
+                                            Este anúncio usa <strong>{{ $isME2 ? 'Mercado Envios 2 (ME2)' : ucfirst($shippingMode) }}</strong>.
+                                            @if($isME2)
+                                                No ME2, as dimensões são calculadas automaticamente pelo Mercado Livre e não podem ser alteradas via API.
+                                                Para ajustar, acesse o painel do ML → "Meus Anúncios" → edite diretamente.
+                                            @endif
+                                        </p>
+                                    </div>
+                                </div>
+                            @endif
                         </div>
 
                         <button type="submit" class="btn-primary btn-sm text-xs w-full">
@@ -1222,4 +1401,215 @@
 
         </div>
     </div>
+
+@if($aiConfigured)
+<script>
+(function () {
+    const CSRF = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
+    // ─── Description AI ───────────────────────────────────────────────────────
+    const btnGenDesc    = document.getElementById('btn-gen-desc');
+    const aiDescPanel   = document.getElementById('ai-desc-panel');
+    const btnRunAiDesc  = document.getElementById('btn-run-ai-desc');
+    const descBtnText   = document.getElementById('ai-desc-btn-text');
+    const descSpinner   = document.getElementById('ai-desc-spinner');
+    const descStatus    = document.getElementById('ai-desc-status');
+    const descError     = document.getElementById('ai-desc-error');
+    const descErrorText = document.getElementById('ai-desc-error-text');
+    const descTextarea  = document.getElementById('listing-description');
+
+    if (btnGenDesc && aiDescPanel) {
+        btnGenDesc.addEventListener('click', () => {
+            const visible = !aiDescPanel.classList.contains('hidden');
+            aiDescPanel.classList.toggle('hidden', visible);
+            btnGenDesc.classList.toggle('btn-primary', !visible);
+            btnGenDesc.classList.toggle('btn-secondary', visible);
+        });
+    }
+
+    if (btnRunAiDesc) {
+        btnRunAiDesc.addEventListener('click', async () => {
+            descBtnText.textContent = 'Gerando...';
+            btnRunAiDesc.disabled = true;
+            descSpinner.classList.remove('hidden');
+            descStatus.classList.remove('hidden');
+            descError.classList.add('hidden');
+
+            try {
+                const res = await fetch('{{ route('listings.ai-description', $listing) }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': CSRF,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        existing_description: descTextarea?.value ?? '',
+                    }),
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    descErrorText.textContent = data.error;
+                    descError.classList.remove('hidden');
+                } else if (data.description) {
+                    descTextarea.value = data.description;
+                    // Visual feedback: flash the textarea
+                    descTextarea.classList.add('ring-2', 'ring-purple-400');
+                    setTimeout(() => descTextarea.classList.remove('ring-2', 'ring-purple-400'), 2000);
+                    // Hide panel after success
+                    aiDescPanel.classList.add('hidden');
+                    btnGenDesc.classList.remove('btn-primary');
+                    btnGenDesc.classList.add('btn-secondary');
+                }
+            } catch (e) {
+                descErrorText.textContent = 'Erro ao conectar com a IA. Tente novamente.';
+                descError.classList.remove('hidden');
+            } finally {
+                descBtnText.textContent = 'Gerar agora';
+                btnRunAiDesc.disabled = false;
+                descSpinner.classList.add('hidden');
+                descStatus.classList.add('hidden');
+            }
+        });
+    }
+
+    // ─── Image AI ─────────────────────────────────────────────────────────────
+    const btnGenImg      = document.getElementById('btn-gen-img');
+    const aiImgPanel     = document.getElementById('ai-img-panel');
+    const btnRunAiImg    = document.getElementById('btn-run-ai-img');
+    const imgBtnText     = document.getElementById('ai-img-btn-text');
+    const imgSpinner     = document.getElementById('ai-img-spinner');
+    const imgStatus      = document.getElementById('ai-img-status');
+    const imgError       = document.getElementById('ai-img-error');
+    const imgErrorText   = document.getElementById('ai-img-error-text');
+    const imgResult      = document.getElementById('ai-img-result');
+    const imgPreview     = document.getElementById('ai-img-preview');
+    const btnUploadImg   = document.getElementById('btn-ai-img-upload');
+    const imgUploadText  = document.getElementById('ai-img-upload-text');
+    const imgUploadStatus= document.getElementById('ai-img-upload-status');
+    const btnRegenImg    = document.getElementById('btn-ai-img-regen');
+    const imgPrompt      = document.getElementById('ai-img-prompt');
+
+    let lastGeneratedUrl = null;
+
+    if (btnGenImg && aiImgPanel) {
+        btnGenImg.addEventListener('click', () => {
+            const visible = !aiImgPanel.classList.contains('hidden');
+            aiImgPanel.classList.toggle('hidden', visible);
+            btnGenImg.classList.toggle('btn-primary', !visible);
+            btnGenImg.classList.toggle('btn-secondary', visible);
+        });
+    }
+
+    async function runImageGeneration() {
+        imgBtnText.textContent = 'Gerando...';
+        btnRunAiImg.disabled = true;
+        imgSpinner.classList.remove('hidden');
+        imgStatus.classList.remove('hidden');
+        imgError.classList.add('hidden');
+        imgResult.classList.add('hidden');
+        lastGeneratedUrl = null;
+
+        try {
+            const res = await fetch('{{ route('listings.ai-image', $listing) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': CSRF,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    prompt: imgPrompt?.value ?? '',
+                    upload_to_ml: false,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (data.error) {
+                imgErrorText.textContent = data.error;
+                imgError.classList.remove('hidden');
+            } else if (data.url) {
+                lastGeneratedUrl = data.url;
+                imgPreview.src = data.url;
+                imgResult.classList.remove('hidden');
+                imgUploadText.textContent = 'Adicionar ao anúncio no ML';
+                imgUploadStatus.classList.add('hidden');
+                imgUploadStatus.className = 'hidden text-xs font-medium';
+            }
+        } catch (e) {
+            imgErrorText.textContent = 'Erro ao conectar com a IA. Tente novamente.';
+            imgError.classList.remove('hidden');
+        } finally {
+            imgBtnText.textContent = 'Gerar imagem';
+            btnRunAiImg.disabled = false;
+            imgSpinner.classList.add('hidden');
+            imgStatus.classList.add('hidden');
+        }
+    }
+
+    if (btnRunAiImg) {
+        btnRunAiImg.addEventListener('click', runImageGeneration);
+    }
+
+    if (btnRegenImg) {
+        btnRegenImg.addEventListener('click', runImageGeneration);
+    }
+
+    if (btnUploadImg) {
+        btnUploadImg.addEventListener('click', async () => {
+            if (! lastGeneratedUrl) return;
+
+            imgUploadText.textContent = 'Enviando para o ML...';
+            btnUploadImg.disabled = true;
+
+            try {
+                const res = await fetch('{{ route('listings.ai-image', $listing) }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': CSRF,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        prompt: imgPrompt?.value ?? '',
+                        upload_to_ml: true,
+                    }),
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    imgUploadStatus.textContent = '❌ ' + data.error;
+                    imgUploadStatus.className = 'text-xs font-medium text-red-500';
+                    imgUploadStatus.classList.remove('hidden');
+                } else if (data.uploaded) {
+                    imgUploadStatus.textContent = '✅ Imagem adicionada ao anúncio! Recarregue a página para ver.';
+                    imgUploadStatus.className = 'text-xs font-medium text-emerald-600';
+                    imgUploadStatus.classList.remove('hidden');
+                    btnUploadImg.disabled = true;
+                } else {
+                    const msg = data.upload_error ?? 'Erro desconhecido ao enviar.';
+                    imgUploadStatus.textContent = '⚠️ ' + msg;
+                    imgUploadStatus.className = 'text-xs font-medium text-amber-600';
+                    imgUploadStatus.classList.remove('hidden');
+                }
+            } catch (e) {
+                imgUploadStatus.textContent = '❌ Erro ao enviar. Tente novamente.';
+                imgUploadStatus.className = 'text-xs font-medium text-red-500';
+                imgUploadStatus.classList.remove('hidden');
+            } finally {
+                if (! imgUploadStatus.textContent.includes('✅')) {
+                    imgUploadText.textContent = 'Adicionar ao anúncio no ML';
+                    btnUploadImg.disabled = false;
+                }
+            }
+        });
+    }
+})();
+</script>
+@endif
+
 </x-app-layout>

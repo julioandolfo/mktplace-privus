@@ -215,13 +215,29 @@ class MercadoLivreService
 
     /**
      * Get item quality/health score from ML API.
+     * Endpoint: GET /items/{id}/health
+     * Returns: health (0-1), level (basic|standard|professional), goals[]
      */
     public function getItemQuality(string $itemId): array
     {
         try {
-            return $this->get("/items/{$itemId}/quality");
+            return $this->get("/items/{$itemId}/health");
         } catch (\Throwable $e) {
             Log::warning("ML getItemQuality({$itemId}) failed: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get pending health actions (goals not yet completed) for an item.
+     * Endpoint: GET /items/{id}/health/actions
+     */
+    public function getItemHealthActions(string $itemId): array
+    {
+        try {
+            return $this->get("/items/{$itemId}/health/actions");
+        } catch (\Throwable $e) {
+            Log::warning("ML getItemHealthActions({$itemId}) failed: " . $e->getMessage());
             return [];
         }
     }
@@ -287,14 +303,40 @@ class MercadoLivreService
     }
 
     /**
-     * Get available listing types for MLB (Brazil).
+     * Get available listing types for a specific item (upgrades + current).
      */
-    public function getListingTypes(): array
+    public function getAvailableListingTypes(string $itemId): array
     {
         try {
-            return $this->get('/sites/MLB/listing_types');
+            return $this->get("/items/{$itemId}/available_listing_types");
         } catch (\Throwable $e) {
-            Log::warning("ML getListingTypes() failed: " . $e->getMessage());
+            Log::warning("ML getAvailableListingTypes({$itemId}) failed: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get possible upgrades for a specific item.
+     */
+    public function getAvailableUpgrades(string $itemId): array
+    {
+        try {
+            return $this->get("/items/{$itemId}/available_upgrades");
+        } catch (\Throwable $e) {
+            Log::warning("ML getAvailableUpgrades({$itemId}) failed: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get possible downgrades for a specific item.
+     */
+    public function getAvailableDowngrades(string $itemId): array
+    {
+        try {
+            return $this->get("/items/{$itemId}/available_downgrades");
+        } catch (\Throwable $e) {
+            Log::warning("ML getAvailableDowngrades({$itemId}) failed: " . $e->getMessage());
             return [];
         }
     }

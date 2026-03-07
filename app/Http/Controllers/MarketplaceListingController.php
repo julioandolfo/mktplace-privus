@@ -6,6 +6,7 @@ use App\Enums\ProductStatus;
 use App\Models\MarketplaceAccount;
 use App\Models\MarketplaceListing;
 use App\Models\Product;
+use App\Services\AiService;
 use App\Services\Marketplaces\MercadoLivreService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -65,9 +66,11 @@ class MarketplaceListingController extends Controller
 
             $liveData           = null;
             $quality            = null;
-            $description        = null;
-            $categoryAttributes = [];
-            $apiError           = null;
+            $healthActions      = [];
+            $description           = null;
+            $categoryAttributes    = [];
+            $availableListingTypes = [];
+            $apiError              = null;
 
             $step    = 'check-account';
             $account = $listing->marketplaceAccount;
@@ -81,8 +84,14 @@ class MarketplaceListingController extends Controller
                     $step    = 'api-quality';
                     $quality = $service->getItemQuality($listing->external_id);
 
+                    $step          = 'api-health-actions';
+                    $healthActions = $service->getItemHealthActions($listing->external_id);
+
                     $step        = 'api-description';
                     $description = $service->getItemDescription($listing->external_id);
+
+                    $step = 'api-listing-types';
+                    $availableListingTypes = $service->getAvailableListingTypes($listing->external_id);
 
                     $step = 'sync-meta';
                     $metaPatch = [];
@@ -153,10 +162,13 @@ class MarketplaceListingController extends Controller
             $avgTicket    = $totalQty > 0 ? $totalRevenue / $totalQty : 0;
 
             $step = 'render-view';
+            $aiConfigured = (new AiService())->isConfigured();
+
             $viewData = compact(
                 'listing', 'products',
-                'liveData', 'quality', 'description', 'categoryAttributes', 'apiError',
-                'salesStats', 'totalQty', 'totalRevenue', 'avgTicket'
+                'liveData', 'quality', 'healthActions', 'description', 'categoryAttributes', 'availableListingTypes', 'apiError',
+                'salesStats', 'totalQty', 'totalRevenue', 'avgTicket',
+                'aiConfigured'
             );
 
             // Force render inside try-catch so Blade errors are captured
@@ -196,12 +208,8 @@ class MarketplaceListingController extends Controller
             'title'              => $isCatalogItem ? 'nullable|string|max:60' : 'required|string|max:60',
             'price'              => 'required|numeric|min:0',
             'available_quantity' => 'required|integer|min:0',
-            'handling_time'      => 'required|integer|min:0|max:20',
+            'handling_time'      => 'nullable|integer|min:0|max:20', // read-only, kept for reference
             'attributes'         => 'nullable|array',
-            'shipping_width'     => 'nullable|numeric|min:0',
-            'shipping_height'    => 'nullable|numeric|min:0',
-            'shipping_length'    => 'nullable|numeric|min:0',
-            'shipping_weight'    => 'nullable|numeric|min:0',
         ]);
 
         $account = $listing->marketplaceAccount;
@@ -220,23 +228,10 @@ class MarketplaceListingController extends Controller
             $payload['available_quantity'] = (int) $validated['available_quantity'];
         }
 
-        if (! $isFulfillment) {
-            $payload['shipping'] = ['handling_time' => (int) $validated['handling_time']];
-        }
+        // handling_time is NOT in ML's list of updatable fields for active items — skip it
 
         if (! $isCatalogItem && ! empty($validated['title'])) {
             $payload['title'] = $validated['title'];
-        }
-
-        if (! empty($validated['shipping_width'])) {
-            $payload['shipping'] = array_merge($payload['shipping'] ?? [], [
-                'dimensions' => [
-                    'width'  => $validated['shipping_width'],
-                    'height' => $validated['shipping_height'] ?? 0,
-                    'length' => $validated['shipping_length'] ?? 0,
-                    'weight' => $validated['shipping_weight'] ?? 0,
-                ],
-            ]);
         }
 
         if (! empty($validated['attributes'])) {
@@ -540,8 +535,10 @@ class MarketplaceListingController extends Controller
 
     public function updateListingType(Request $request, MarketplaceListing $listing)
     {
+        // MLB (Brasil): free, gold_special (Clássico), gold_pro (Premium)
+        // Other sites may use gold_premium — accept all and let ML validate
         $validated = $request->validate([
-            'listing_type_id' => 'required|string|in:gold_special,gold_premium,bronze,silver,free',
+            'listing_type_id' => 'required|string|in:free,gold_special,gold_pro,gold_premium,gold,silver,bronze',
         ]);
 
         $account = $listing->marketplaceAccount;
@@ -563,10 +560,12 @@ class MarketplaceListingController extends Controller
         }
 
         $typeLabels = [
+            'gold_pro'     => 'Premium',
             'gold_premium' => 'Premium',
             'gold_special' => 'Clássico',
-            'bronze'       => 'Grátis',
+            'gold'         => 'Ouro',
             'silver'       => 'Prata',
+            'bronze'       => 'Bronze',
             'free'         => 'Grátis',
         ];
         $label = $typeLabels[$validated['listing_type_id']] ?? $validated['listing_type_id'];
@@ -578,11 +577,11 @@ class MarketplaceListingController extends Controller
     public function updateShipping(Request $request, MarketplaceListing $listing)
     {
         $validated = $request->validate([
-            'free_shipping'  => 'nullable|boolean',
-            'local_pick_up'  => 'nullable|boolean',
-            'handling_time'  => 'nullable|integer|min:0|max:20',
-            'shipping_width'  => 'nullable|numeric|min:0',
+            'free_shipping'   => 'nullable|boolean',
+            'local_pick_up'   => 'nullable|boolean',
+            'shipping_mode'   => 'nullable|string|in:me1,me2,custom,not_specified',
             'shipping_height' => 'nullable|numeric|min:0',
+            'shipping_width'  => 'nullable|numeric|min:0',
             'shipping_length' => 'nullable|numeric|min:0',
             'shipping_weight' => 'nullable|numeric|min:0',
         ]);
@@ -592,6 +591,7 @@ class MarketplaceListingController extends Controller
             return back()->with('error', 'Conta não encontrada ou sem credenciais.');
         }
 
+        $shippingMode = $validated['shipping_mode'] ?? ($listing->meta['shipping_mode'] ?? 'me2');
         $shippingPayload = [];
 
         if (isset($validated['free_shipping'])) {
@@ -600,16 +600,16 @@ class MarketplaceListingController extends Controller
         if (isset($validated['local_pick_up'])) {
             $shippingPayload['local_pick_up'] = (bool) $validated['local_pick_up'];
         }
-        if (! empty($validated['handling_time']) || $validated['handling_time'] === 0) {
-            $shippingPayload['handling_time'] = (int) $validated['handling_time'];
-        }
-        if (! empty($validated['shipping_width'])) {
+
+        // Dimensions: only ME1 accepts them via API. ME2 dimensions are managed by ML.
+        // ME1 format: "HEIGHTxWIDTHxLENGTH,WEIGHT_IN_GRAMS" (string)
+        if ($shippingMode === 'me1' && ! empty($validated['shipping_height'])) {
             $shippingPayload['dimensions'] = sprintf(
                 '%dx%dx%d,%d',
-                (int) $validated['shipping_height'],
-                (int) $validated['shipping_width'],
-                (int) $validated['shipping_length'],
-                (int) ($validated['shipping_weight'] * 1000) // g
+                (int) round($validated['shipping_height']),
+                (int) round($validated['shipping_width'] ?? 0),
+                (int) round($validated['shipping_length'] ?? 0),
+                (int) round(($validated['shipping_weight'] ?? 0) * 1000) // kg → grams
             );
         }
 
@@ -621,29 +621,124 @@ class MarketplaceListingController extends Controller
             $service = new MercadoLivreService($account);
             $service->updateShipping($listing->external_id, $shippingPayload);
         } catch (\Throwable $e) {
-            $errorMsg = self::friendlyMlError($e->getMessage());
-
-            // If handling_time rejected, retry without it
-            if (str_contains($e->getMessage(), 'handling_time')) {
-                unset($shippingPayload['handling_time']);
-                if (! empty($shippingPayload)) {
-                    try {
-                        $service->updateShipping($listing->external_id, $shippingPayload);
-                        return redirect()->route('listings.show', $listing)
-                            ->with('success', 'Configurações de envio atualizadas.')
-                            ->with('info', 'O prazo de disponibilidade não pôde ser alterado via API neste anúncio. Altere diretamente no Mercado Livre.');
-                    } catch (\Throwable $e2) {
-                        return back()->with('error', 'Erro ao atualizar envio: ' . self::friendlyMlError($e2->getMessage()));
-                    }
-                }
-                return back()->with('error', 'O prazo de disponibilidade não pode ser alterado via API neste anúncio. Altere diretamente no Mercado Livre.');
-            }
-
-            return back()->with('error', 'Erro ao atualizar configurações de envio: ' . $errorMsg);
+            return back()->with('error', 'Erro ao atualizar configurações de envio: ' . self::friendlyMlError($e->getMessage()));
         }
 
         return redirect()->route('listings.show', $listing)
             ->with('success', 'Configurações de envio atualizadas com sucesso.');
+    }
+
+    /**
+     * Generate a product description using the configured AI provider (OpenRouter/OpenAI/Anthropic).
+     * Returns JSON: { description: string } or { error: string }
+     */
+    public function generateDescriptionAi(Request $request, MarketplaceListing $listing): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'existing_description' => 'nullable|string|max:5000',
+        ]);
+
+        try {
+            $ai = new AiService();
+
+            if (! $ai->isConfigured()) {
+                return response()->json([
+                    'error' => 'IA não configurada. Acesse Configurações → Inteligência Artificial e adicione sua chave API.',
+                ], 422);
+            }
+
+            $meta       = $listing->meta ?? [];
+            $category   = $meta['category_id'] ?? '';
+            $attributes = [];
+
+            // Build a clean attribute list from meta if available
+            if (! empty($meta['attributes'])) {
+                foreach ($meta['attributes'] as $attr) {
+                    if (! empty($attr['id']) && ! empty($attr['value_name'])) {
+                        $attributes[$attr['id']] = $attr['value_name'];
+                    }
+                }
+            }
+
+            $prompts = AiService::buildDescriptionPrompt(
+                title: $listing->title,
+                category: $category,
+                existingDescription: $validated['existing_description'] ?? '',
+                attributes: $attributes,
+            );
+
+            $text = $ai->generateText($prompts['system'], $prompts['user']);
+
+            return response()->json(['description' => $text]);
+
+        } catch (\Throwable $e) {
+            Log::warning("generateDescriptionAi [{$listing->external_id}]: " . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Generate a product image using AI (DALL-E or compatible model).
+     * Downloads the generated image and uploads it directly to ML.
+     * Returns JSON: { url: string, uploaded: bool } or { error: string }
+     */
+    public function generateImageAi(Request $request, MarketplaceListing $listing): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'prompt'       => 'nullable|string|max:1000',
+            'upload_to_ml' => 'nullable|boolean',
+        ]);
+
+        try {
+            $ai = new AiService();
+
+            if (! $ai->isConfigured()) {
+                return response()->json([
+                    'error' => 'IA não configurada. Acesse Configurações → Inteligência Artificial e adicione sua chave API.',
+                ], 422);
+            }
+
+            $prompt = $validated['prompt']
+                ?? "Foto profissional de produto para e-commerce do Brasil: {$listing->title}. Fundo branco puro, iluminação de estúdio, alta resolução, vista frontal, sem texto, estilo comercial moderno.";
+
+            $imageUrl = $ai->generateImage($prompt);
+
+            // If upload_to_ml is true, download and upload to ML automatically
+            if (! empty($validated['upload_to_ml'])) {
+                $account = $listing->marketplaceAccount;
+                if ($account && $account->credentials) {
+                    try {
+                        $imageContent = \Illuminate\Support\Facades\Http::timeout(60)->get($imageUrl)->body();
+                        $tmpFile = tempnam(sys_get_temp_dir(), 'ai_img_') . '.jpg';
+                        file_put_contents($tmpFile, $imageContent);
+
+                        $uploadedFile = new \Illuminate\Http\UploadedFile(
+                            $tmpFile, 'ai_generated.jpg', 'image/jpeg', null, true
+                        );
+
+                        $mlService   = new MercadoLivreService($account);
+                        $pictureId   = $mlService->uploadPicture($uploadedFile);
+                        $item        = $mlService->getItem($listing->external_id);
+                        $existing    = collect($item['pictures'] ?? [])->map(fn ($p) => ['id' => $p['id']])->all();
+                        $mlService->updateItem($listing->external_id, ['pictures' => array_merge($existing, [['id' => $pictureId]])]);
+
+                        @unlink($tmpFile);
+
+                        return response()->json(['url' => $imageUrl, 'uploaded' => true, 'picture_id' => $pictureId]);
+                    } catch (\Throwable $uploadErr) {
+                        Log::warning("generateImageAi upload ML error [{$listing->external_id}]: " . $uploadErr->getMessage());
+                        // Return the URL anyway so user can save it manually
+                        return response()->json(['url' => $imageUrl, 'uploaded' => false, 'upload_error' => $uploadErr->getMessage()]);
+                    }
+                }
+            }
+
+            return response()->json(['url' => $imageUrl, 'uploaded' => false]);
+
+        } catch (\Throwable $e) {
+            Log::warning("generateImageAi [{$listing->external_id}]: " . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     public function updateDescription(Request $request, MarketplaceListing $listing)
