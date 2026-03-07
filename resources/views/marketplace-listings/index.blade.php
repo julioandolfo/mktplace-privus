@@ -20,31 +20,33 @@
         $hasAdvanced     = $advancedCount > 0;
     @endphp
 
-    <div class="space-y-5" x-data="{
-        view: localStorage.getItem('listings_view') || 'list',
-        setView(v) { this.view = v; localStorage.setItem('listings_view', v); },
-        gridCols: parseInt(localStorage.getItem('listings_grid_cols') || '4'),
-        setGridCols(n) { this.gridCols = n; localStorage.setItem('listings_grid_cols', n); },
-        get gridClass() {
-            return {
-                2: 'grid-cols-1 sm:grid-cols-2',
-                3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-                4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
-                5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
-            }[this.gridCols] || 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
-        },
-        showAdvanced: {{ $hasAdvanced ? 'true' : 'false' }},
-        selected: [],
-        allSelected: false,
-        toggleAll(ids) {
-            if (this.allSelected) { this.selected = []; this.allSelected = false; }
-            else { this.selected = ids; this.allSelected = true; }
-        },
-        toggleOne(id) {
-            if (this.selected.includes(id)) this.selected = this.selected.filter(s => s !== id);
-            else this.selected.push(id);
-        },
-    }">
+    <div class="space-y-5"
+         x-data="{
+             view: localStorage.getItem('listings_view') || 'list',
+             setView(v) { this.view = v; localStorage.setItem('listings_view', v); },
+             gridCols: parseInt(localStorage.getItem('listings_grid_cols') || '4'),
+             setGridCols(n) { this.gridCols = n; localStorage.setItem('listings_grid_cols', n); },
+             get gridClass() {
+                 return {
+                     2: 'grid-cols-1 sm:grid-cols-2',
+                     3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+                     4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+                     5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+                 }[this.gridCols] || 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+             },
+             showAdvanced: @json($hasAdvanced),
+             advancedCount: @json($advancedCount),
+             selected: [],
+             allSelected: false,
+             toggleAll(ids) {
+                 if (this.allSelected) { this.selected = []; this.allSelected = false; }
+                 else { this.selected = ids; this.allSelected = true; }
+             },
+             toggleOne(id) {
+                 if (this.selected.includes(id)) this.selected = this.selected.filter(s => s !== id);
+                 else this.selected.push(id);
+             },
+         }">
 
         {{-- ═══ Stats Cards ══════════════════════════════════════════════════════ --}}
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -152,7 +154,7 @@
 
                     {{-- Advanced filter toggle --}}
                     <button type="button" @click="showAdvanced = !showAdvanced"
-                        :class="showAdvanced || {{ $advancedCount }} > 0 ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border-primary-500/40' : 'btn-ghost text-gray-500'"
+                        :class="showAdvanced || advancedCount > 0 ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border-primary-500/40' : 'btn-ghost text-gray-500'"
                         class="btn-sm flex items-center gap-1.5 border rounded-lg px-3 py-1.5 transition-colors">
                         <x-heroicon-o-adjustments-horizontal class="w-4 h-4" />
                         <span>Avançado</span>
@@ -195,13 +197,13 @@
                     <div x-show="view === 'grid'" x-cloak
                          class="flex items-center gap-1 border border-gray-200 dark:border-zinc-700 rounded-lg p-1">
                         <span class="text-[10px] text-gray-400 dark:text-zinc-500 px-1 hidden sm:block">Cols:</span>
-                        @foreach([2,3,4,5] as $cols)
-                        <button type="button" @click="setGridCols({{ $cols }})"
-                            :class="gridCols === {{ $cols }} ? 'bg-primary-500 text-white' : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'"
-                            class="w-7 h-7 rounded-md transition-colors text-xs font-semibold" title="{{ $cols }} por linha">
-                            {{ $cols }}
-                        </button>
-                        @endforeach
+                    @foreach([2,3,4,5] as $cols)
+                    <button type="button" @click="setGridCols(@json($cols))"
+                        :class="gridCols === @json($cols) ? 'bg-primary-500 text-white' : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'"
+                        class="w-7 h-7 rounded-md transition-colors text-xs font-semibold" title="{{ $cols }} por linha">
+                        {{ $cols }}
+                    </button>
+                    @endforeach
                     </div>
 
                     {{-- View Toggle --}}
