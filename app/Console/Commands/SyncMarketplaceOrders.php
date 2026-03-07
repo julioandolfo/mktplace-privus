@@ -177,11 +177,9 @@ class SyncMarketplaceOrders extends Command
                 };
             }
 
-            // Dispatch deadline: fetch for any shipment not yet shipped/delivered
-            if (! in_array($shipmentStatus, ['shipped', 'delivered', 'not_delivered', 'cancelled'])) {
-                $leadTime         = $service->getShippingLeadTime((string) $ml['shipping']['id']);
-                $shippingDeadline = $leadTime['estimated_handling_limit']['date'] ?? null;
-            }
+            // Dispatch deadline from /shipments/{id}/lead_time
+            $leadTime         = $service->getShippingLeadTime((string) $ml['shipping']['id']);
+            $shippingDeadline = $leadTime['estimated_handling_limit']['date'] ?? null;
 
             if (in_array($shipmentStatus, ['shipped', 'delivered', 'to_be_agreed', 'not_delivered'])) {
                 $dateShipped = $shipment['date_shipped'] ?? null;

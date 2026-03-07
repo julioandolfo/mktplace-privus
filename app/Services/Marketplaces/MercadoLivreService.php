@@ -170,7 +170,9 @@ class MercadoLivreService
     public function getShippingLeadTime(string $shippingId): array
     {
         try {
-            return $this->get("/shipments/{$shippingId}/lead_time");
+            $data = $this->get("/shipments/{$shippingId}/lead_time");
+            Log::info("ML getShippingLeadTime({$shippingId}): estimated_handling_limit=" . json_encode($data['estimated_handling_limit'] ?? 'NOT_PRESENT') . " | keys=" . implode(',', array_keys($data)));
+            return $data;
         } catch (\Throwable $e) {
             Log::warning("ML getShippingLeadTime({$shippingId}) failed: " . $e->getMessage());
             return [];
