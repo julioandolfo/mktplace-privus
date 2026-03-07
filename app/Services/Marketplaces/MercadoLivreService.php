@@ -214,24 +214,27 @@ class MercadoLivreService
     }
 
     /**
-     * Get item quality/health score from ML API.
-     * Endpoint: GET /items/{id}/health
-     * Returns: health (0-1), level (basic|standard|professional), goals[]
+     * Get item quality/performance score from ML API.
      *
-     * Note: this endpoint is available for most categories in MLB (Brazil).
-     * If it returns 404/403, the item type may not support health scoring.
+     * The /health endpoint was deprecated on Feb 7, 2025.
+     * The new endpoint is: GET /item/{id}/performance  (singular "item", not "items")
+     *
+     * Response: score (0-100), level, level_wording, buckets[] with variables[] and rules[].
+     * Each rule has wordings.link pointing to the exact ML page to fix the issue.
+     *
+     * @see https://developers.mercadolivre.com.br/pt_br/qualidade-das-publicacoes
      */
     public function getItemQuality(string $itemId): array
     {
         try {
+            // New endpoint: /item/{id}/performance (singular, not /items/)
             $response = Http::withToken($this->token())
-                ->timeout(15)
-                ->get(self::BASE_URL . "/items/{$itemId}/health");
+                ->timeout(20)
+                ->get(self::BASE_URL . "/item/{$itemId}/performance");
 
             if ($response->successful()) {
                 $data = $response->json() ?? [];
-                // Validate we got a useful response
-                if (isset($data['health']) || isset($data['goals'])) {
+                if (isset($data['score']) || isset($data['buckets'])) {
                     return $data;
                 }
             }
@@ -240,29 +243,6 @@ class MercadoLivreService
             return [];
         } catch (\Throwable $e) {
             Log::warning("ML getItemQuality({$itemId}) failed: " . $e->getMessage());
-            return [];
-        }
-    }
-
-    /**
-     * Get pending health actions (goals not yet completed) for an item.
-     * Endpoint: GET /items/{id}/health/actions
-     */
-    public function getItemHealthActions(string $itemId): array
-    {
-        try {
-            $response = Http::withToken($this->token())
-                ->timeout(15)
-                ->get(self::BASE_URL . "/items/{$itemId}/health/actions");
-
-            if ($response->successful()) {
-                return $response->json() ?? [];
-            }
-
-            Log::info("ML getItemHealthActions({$itemId}): status={$response->status()}");
-            return [];
-        } catch (\Throwable $e) {
-            Log::warning("ML getItemHealthActions({$itemId}) failed: " . $e->getMessage());
             return [];
         }
     }

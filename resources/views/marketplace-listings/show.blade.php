@@ -959,132 +959,161 @@
         {{-- ═══ Sidebar ══════════════════════════════════════════════════════ --}}
         <div class="space-y-6">
 
-            {{-- Qualidade do Anúncio --}}
+            {{-- Qualidade do Anúncio (/item/{id}/performance — novo endpoint ML) --}}
             <x-ui.card>
                 @php
-                    $hasQuality     = !empty($quality) && isset($quality['health']);
-                    $health         = $hasQuality ? ($quality['health'] ?? 0) : 0;
-                    $pct            = round($health * 100);
-                    $qLevel         = $quality['level'] ?? 'basic';
-                    $qLevelLabel    = match($qLevel) {
-                        'professional' => 'Profissional',
-                        'standard'     => 'Satisfatório',
-                        default        => 'Básico',
+                    // New /performance endpoint: score=0-100, level_wording in PT, buckets[]
+                    $hasQuality     = !empty($quality) && isset($quality['score']);
+                    $qScore         = $hasQuality ? (int) ($quality['score'] ?? 0) : 0;
+                    $qLevelWord     = $quality['level_wording'] ?? ($quality['level'] ?? '');
+                    // Normalize level label for MLB (PT-BR)
+                    $qLevelLabel    = match(strtolower($qLevelWord)) {
+                        'profissional', 'profesional', 'professional', 'good' => 'Profissional',
+                        'satisfatória', 'satisfatoria', 'estándar', 'standard' => 'Satisfatória',
+                        default => $qLevelWord ?: 'Básica',
                     };
-                    $isProfessional = $pct >= 66;
-                    $isStandard     = $pct >= 50 && $pct < 66;
+                    $isProfessional = $qScore >= 66;
+                    $isStandard     = $qScore >= 50 && $qScore < 66;
+
+                    // Flatten all variables from all buckets for display
+                    $allVariables = collect($quality['buckets'] ?? [])
+                        ->flatMap(fn($b) => $b['variables'] ?? []);
+                    $completedVars = $allVariables->where('status', 'COMPLETED')->count();
+                    $totalVars     = $allVariables->count();
                 @endphp
                 <x-slot name="title">
                     <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-1.5">
                             <x-heroicon-o-star class="w-4 h-4 text-amber-400" />
                             <span>Qualidade do Anúncio</span>
                         </div>
                         @if($hasQuality)
                         <span class="text-sm font-bold {{ $isProfessional ? 'text-emerald-500' : ($isStandard ? 'text-amber-500' : 'text-red-500') }}">
-                            {{ $pct }}%
+                            {{ $qScore }}%
                         </span>
                         @endif
                     </div>
                 </x-slot>
 
                 @if($hasQuality)
-                {{-- Progress bar --}}
+
+                {{-- Score bar --}}
                 <div class="mb-4">
                     <div class="flex items-center justify-between mb-1.5">
-                        <span class="text-xs text-gray-500 dark:text-zinc-400">
-                            Nível:
-                            <strong class="{{ $isProfessional ? 'text-emerald-500' : ($isStandard ? 'text-amber-500' : 'text-red-500') }}">
-                                {{ $qLevelLabel }}
-                            </strong>
+                        <span class="text-xs font-semibold {{ $isProfessional ? 'text-emerald-500' : ($isStandard ? 'text-amber-500' : 'text-red-500') }}">
+                            {{ $qLevelLabel }}
                         </span>
-                        <span class="text-xs text-gray-400 dark:text-zinc-500">{{ $pct }}/100</span>
+                        <span class="text-xs text-gray-400 dark:text-zinc-500">{{ $qScore }}/100</span>
                     </div>
                     <div class="h-2.5 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
-                        <div class="h-full rounded-full transition-all duration-500
+                        <div class="h-full rounded-full transition-all duration-700
                             {{ $isProfessional ? 'bg-emerald-500' : ($isStandard ? 'bg-amber-500' : 'bg-red-500') }}"
-                             style="width: {{ $pct }}%"></div>
+                             style="width: {{ $qScore }}%"></div>
                     </div>
                     <div class="flex text-[10px] text-gray-400 dark:text-zinc-600 mt-1 justify-between">
-                        <span>Básico &lt;50%</span>
-                        <span>Satisf. ≥50%</span>
-                        <span>Prof. ≥66%</span>
+                        <span>Básica &lt;50%</span>
+                        <span>Satisfatória ≥50%</span>
+                        <span>Profissional ≥66%</span>
                     </div>
                 </div>
 
-                {{-- Goals list --}}
-                @if(!empty($quality['goals']))
-                @php
-                    $goalLabels = [
-                        'picture'                 => 'Fotos do produto',
-                        'description'             => 'Descrição',
-                        'price'                   => 'Preço competitivo',
-                        'video'                   => 'Vídeo do produto',
-                        'verification'            => 'Verificação de dados',
-                        'whatsapp'                => 'WhatsApp',
-                        'technical_specification' => 'Especificações técnicas',
-                        'upgrade_listing'         => 'Upgrade de tipo de anúncio',
-                        'publish'                 => 'Anúncio publicado',
-                    ];
-                    $applicableGoals = collect($quality['goals'])->where('apply', true);
-                    $pendingActions  = collect($healthActions['actions'] ?? []);
-                    $completedCount  = $applicableGoals->filter(fn($g) => ($g['progress'] ?? 0) >= ($g['progress_max'] ?? 1))->count();
-                    $totalCount      = $applicableGoals->count();
-                @endphp
-                <div class="space-y-1.5">
-                    <p class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                        Fatores ({{ $completedCount }}/{{ $totalCount }} concluídos)
+                {{-- Buckets e variáveis --}}
+                @if($allVariables->isNotEmpty())
+                <div class="space-y-3">
+                    <p class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
+                        Fatores ({{ $completedVars }}/{{ $totalVars }})
                     </p>
-                    @foreach($applicableGoals as $goal)
-                    @php
-                        $goalId    = $goal['id'] ?? '';
-                        $goalLabel = $goalLabels[$goalId] ?? ucfirst(str_replace('_', ' ', $goalId));
-                        $completed = ($goal['progress'] ?? 0) >= ($goal['progress_max'] ?? 1);
-                    @endphp
-                    <div class="flex items-center gap-2 py-1 px-1.5 rounded-md
-                        {{ $completed ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'bg-red-50/40 dark:bg-red-900/10' }}">
-                        @if($completed)
-                            <x-heroicon-s-check-circle class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                        @else
-                            <x-heroicon-o-x-circle class="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                        @endif
-                        <span class="text-xs {{ $completed ? 'text-gray-500 dark:text-zinc-500' : 'text-gray-700 dark:text-zinc-300 font-medium' }} flex-1">
-                            {{ $goalLabel }}
-                        </span>
-                        @if(!$completed)
-                            @if($goalId === 'description')
-                                <a href="#descricao" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">↓</a>
-                            @elseif($goalId === 'picture')
-                                <a href="#imagens" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">↓</a>
-                            @elseif($goalId === 'upgrade_listing')
-                                <a href="#tipo-anuncio" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">↓</a>
-                            @elseif(!empty($live['permalink']))
-                                <a href="{{ $live['permalink'] }}" target="_blank" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">ML↗</a>
+
+                    @foreach($quality['buckets'] as $bucket)
+                    @if(!empty($bucket['variables']))
+                    <div>
+                        {{-- Bucket header --}}
+                        <p class="text-[11px] font-medium text-gray-500 dark:text-zinc-500 mb-1.5 flex items-center gap-1">
+                            @if($bucket['status'] === 'COMPLETED')
+                                <x-heroicon-s-check-circle class="w-3 h-3 text-emerald-500" />
+                            @else
+                                <x-heroicon-o-ellipsis-horizontal-circle class="w-3 h-3 text-amber-400" />
                             @endif
-                        @endif
+                            {{ $bucket['title'] ?? $bucket['key'] }}
+                        </p>
+
+                        <div class="space-y-1">
+                            @foreach($bucket['variables'] as $variable)
+                            @php
+                                $varCompleted = ($variable['status'] ?? '') === 'COMPLETED';
+                                $varScore     = round($variable['score'] ?? 0);
+                                // Get first pending rule's action link
+                                $actionRule   = collect($variable['rules'] ?? [])
+                                    ->firstWhere('status', 'PENDING');
+                                $actionLink   = $actionRule['wordings']['link'] ?? null;
+                                $actionLabel  = $actionRule['wordings']['label'] ?? null;
+                                // Check if we have a local page for this variable
+                                $varKey       = $variable['key'] ?? '';
+                                $localAnchor  = match(true) {
+                                    str_contains($varKey, 'PICTURES') => '#imagens',
+                                    str_contains($varKey, 'DESCRIPTION') => '#descricao',
+                                    str_contains($varKey, 'TECHNICAL_SPEC') => '#atributos',
+                                    str_contains($varKey, 'LISTING_TYPE') || str_contains($varKey, 'FINANCING') => '#tipo-anuncio',
+                                    default => null,
+                                };
+                            @endphp
+                            <div class="flex items-start gap-2 py-1 px-1.5 rounded-md text-xs
+                                {{ $varCompleted ? 'bg-emerald-50/40 dark:bg-emerald-900/10' : 'bg-red-50/30 dark:bg-red-900/10' }}">
+                                {{-- Status icon --}}
+                                @if($varCompleted)
+                                    <x-heroicon-s-check-circle class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                                @else
+                                    <x-heroicon-o-x-circle class="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+                                @endif
+
+                                {{-- Title + progress bar --}}
+                                <div class="flex-1 min-w-0">
+                                    <p class="{{ $varCompleted ? 'text-gray-500 dark:text-zinc-500' : 'text-gray-700 dark:text-zinc-300 font-medium' }} leading-tight truncate"
+                                       title="{{ $variable['title'] ?? '' }}">
+                                        {{ $variable['title'] ?? $varKey }}
+                                    </p>
+                                    @if(!$varCompleted)
+                                    <div class="mt-0.5 h-1 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden w-full">
+                                        <div class="h-full bg-amber-400 rounded-full" style="width: {{ $varScore }}%"></div>
+                                    </div>
+                                    @endif
+                                </div>
+
+                                {{-- Action link --}}
+                                @if(!$varCompleted)
+                                    @if($localAnchor)
+                                        <a href="{{ $localAnchor }}" class="flex-shrink-0 text-[10px] text-primary-500 hover:underline font-medium">Editar</a>
+                                    @elseif($actionLink)
+                                        <a href="{{ $actionLink }}" target="_blank" class="flex-shrink-0 text-[10px] text-primary-500 hover:underline font-medium" title="{{ $actionLabel }}">ML↗</a>
+                                    @endif
+                                @endif
+                            </div>
+                            @endforeach
+                        </div>
                     </div>
+                    @endif
                     @endforeach
                 </div>
                 @endif
 
                 @else
-                {{-- Qualidade não disponível via API — mostra aviso com link --}}
+                {{-- Qualidade ainda não disponível (404 = dados não gerados ainda pelo ML) --}}
                 <div class="flex items-start gap-2 text-xs text-gray-500 dark:text-zinc-400">
-                    <x-heroicon-o-information-circle class="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
-                    <div>
-                        <p>Pontuação não disponível para este anúncio via API.</p>
+                    <x-heroicon-o-clock class="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
+                    <div class="space-y-1">
+                        <p class="font-medium text-gray-600 dark:text-zinc-300">Pontuação ainda não calculada</p>
+                        <p>O Mercado Livre pode levar algumas horas para gerar o score de qualidade de anúncios novos ou recém atualizados.</p>
                         @if(!empty($live['permalink']))
                         <a href="{{ $live['permalink'] }}" target="_blank"
                             class="text-primary-500 hover:underline mt-1 inline-flex items-center gap-1">
                             <x-heroicon-o-arrow-top-right-on-square class="w-3 h-3" />
-                            Ver qualidade no Mercado Livre
+                            Ver no Mercado Livre
                         </a>
                         @endif
                     </div>
                 </div>
                 @endif
 
-                {{-- Footer link --}}
                 @if($hasQuality && !empty($live['permalink']))
                 <div class="mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800">
                     <a href="{{ $live['permalink'] }}" target="_blank"

@@ -64,10 +64,9 @@ class MarketplaceListingController extends Controller
             $step     = 'load-products';
             $products = Product::active()->orderBy('name')->get(['id', 'name', 'sku', 'price']);
 
-            $liveData           = null;
-            $quality            = null;
-            $healthActions      = [];
-            $description           = null;
+            $liveData    = null;
+            $quality     = null;
+            $description = null;
             $categoryAttributes    = [];
             $availableListingTypes = [];
             $apiError              = null;
@@ -83,9 +82,6 @@ class MarketplaceListingController extends Controller
 
                     $step    = 'api-quality';
                     $quality = $service->getItemQuality($listing->external_id);
-
-                    $step          = 'api-health-actions';
-                    $healthActions = $service->getItemHealthActions($listing->external_id);
 
                     $step        = 'api-description';
                     $description = $service->getItemDescription($listing->external_id);
@@ -166,7 +162,7 @@ class MarketplaceListingController extends Controller
 
             $viewData = compact(
                 'listing', 'products',
-                'liveData', 'quality', 'healthActions', 'description', 'categoryAttributes', 'availableListingTypes', 'apiError',
+                'liveData', 'quality', 'description', 'categoryAttributes', 'availableListingTypes', 'apiError',
                 'salesStats', 'totalQty', 'totalRevenue', 'avgTicket',
                 'aiConfigured'
             );
