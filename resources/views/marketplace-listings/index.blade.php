@@ -161,7 +161,9 @@
                         @if($advancedCount > 0)
                         <span class="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold bg-primary-500 text-white rounded-full">{{ $advancedCount }}</span>
                         @endif
-                        <x-heroicon-o-chevron-down class="w-3 h-3 transition-transform" :class="showAdvanced ? 'rotate-180' : ''" />
+                        <span :class="showAdvanced ? 'rotate-180' : ''" class="inline-flex transition-transform">
+                            <x-heroicon-o-chevron-down class="w-3 h-3" />
+                        </span>
                     </button>
 
                     <button type="submit" class="btn-primary btn-sm">
