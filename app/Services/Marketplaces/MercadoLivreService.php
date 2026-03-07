@@ -217,11 +217,27 @@ class MercadoLivreService
      * Get item quality/health score from ML API.
      * Endpoint: GET /items/{id}/health
      * Returns: health (0-1), level (basic|standard|professional), goals[]
+     *
+     * Note: this endpoint is available for most categories in MLB (Brazil).
+     * If it returns 404/403, the item type may not support health scoring.
      */
     public function getItemQuality(string $itemId): array
     {
         try {
-            return $this->get("/items/{$itemId}/health");
+            $response = Http::withToken($this->token())
+                ->timeout(15)
+                ->get(self::BASE_URL . "/items/{$itemId}/health");
+
+            if ($response->successful()) {
+                $data = $response->json() ?? [];
+                // Validate we got a useful response
+                if (isset($data['health']) || isset($data['goals'])) {
+                    return $data;
+                }
+            }
+
+            Log::info("ML getItemQuality({$itemId}): status={$response->status()} body=" . substr($response->body(), 0, 300));
+            return [];
         } catch (\Throwable $e) {
             Log::warning("ML getItemQuality({$itemId}) failed: " . $e->getMessage());
             return [];
@@ -235,7 +251,16 @@ class MercadoLivreService
     public function getItemHealthActions(string $itemId): array
     {
         try {
-            return $this->get("/items/{$itemId}/health/actions");
+            $response = Http::withToken($this->token())
+                ->timeout(15)
+                ->get(self::BASE_URL . "/items/{$itemId}/health/actions");
+
+            if ($response->successful()) {
+                return $response->json() ?? [];
+            }
+
+            Log::info("ML getItemHealthActions({$itemId}): status={$response->status()}");
+            return [];
         } catch (\Throwable $e) {
             Log::warning("ML getItemHealthActions({$itemId}) failed: " . $e->getMessage());
             return [];

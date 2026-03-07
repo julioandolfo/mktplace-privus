@@ -47,16 +47,19 @@
         // Separate category attributes into editable vs read-only
         $currentAttrsIndexed = collect($live['attributes'] ?? [])->keyBy('id');
 
-        // Only count truly missing: required + editable + without any value (name, id or values[])
+        // Only count truly missing: required + editable + without any real value
+        // value_id = -1 is ML's sentinel for "not specified" — treat as missing
         $requiredAttrs   = collect($categoryAttributes)->filter(fn($a) =>
             in_array('required', $a['tags'] ?? []) && ! in_array('read_only', $a['tags'] ?? [])
         );
         $missingRequired = $requiredAttrs->filter(function ($a) use ($currentAttrsIndexed) {
             $current = $currentAttrsIndexed->get($a['id'] ?? '');
             if (! $current) return true;
-            return empty($current['value_name'])
-                && empty($current['value_id'])
-                && empty($current['values']);
+            $hasName   = !empty($current['value_name']);
+            $hasValues = !empty($current['values']);
+            $valueId   = (string)($current['value_id'] ?? '');
+            $hasId     = !empty($valueId) && $valueId !== '-1';
+            return !$hasName && !$hasValues && !$hasId;
         });
     @endphp
 
@@ -259,24 +262,46 @@
                             $attrId        = $attr['id'] ?? null;
                             $attrName      = $attr['name'] ?? $attrId;
                             $currentVal    = $currentAttrsMap->get($attrId) ?? [];
-                            // Resolve current display value: prefer value_name, else first from values[], else value_id
-                            $currentValue  = $currentVal['value_name']
-                                ?? ($currentVal['values'][0]['name'] ?? null)
-                                ?? (!empty($currentVal['value_id']) ? (string)$currentVal['value_id'] : '');
-                            $isRequired    = in_array('required', $attr['tags'] ?? []);
-                            $isMissing     = $isRequired && empty($currentValue);
                             $valueType     = $attr['value_type'] ?? 'string';
                             $allowedValues = $attr['allowed_values'] ?? [];
                             $readOnly      = in_array('read_only', $attr['tags'] ?? []);
+
+                            // Resolve current value — prefer value_name, then values[0].name
+                            // Ignore value_id = -1 (ML sentinel for "not specified")
+                            $rawValueId   = (string)($currentVal['value_id'] ?? '');
+                            $rawValueName = $currentVal['value_name']
+                                ?? ($currentVal['values'][0]['name'] ?? null);
+
+                            // If value_id = -1 and no value_name, the attribute has no real value set
+                            $isNotSpecified = ($rawValueId === '-1' && $rawValueName === null);
+                            $currentValue   = $isNotSpecified ? '' : ($rawValueName ?? '');
+
+                            // For allowed_values lists: also try to match by value_id to get the name
+                            if (empty($currentValue) && !empty($rawValueId) && $rawValueId !== '-1' && !empty($allowedValues)) {
+                                $matched = collect($allowedValues)->firstWhere('id', $rawValueId);
+                                if ($matched) {
+                                    $currentValue = $matched['name'] ?? '';
+                                }
+                            }
+
+                            $isRequired = in_array('required', $attr['tags'] ?? []);
+                            $isMissing  = $isRequired && $currentValue === '';
+
                             // Detect boolean: value_type=boolean OR allowed_values exactly Sim/Não
-                            $isBoolean     = $valueType === 'boolean'
+                            $isBoolean = $valueType === 'boolean'
                                 || (count($allowedValues) === 2
                                     && collect($allowedValues)->pluck('name')->sort()->values()->all() === ['Não', 'Sim']);
+
+                            // Hint text for number_unit attributes (e.g. "W", "V", "kg")
+                            $unitHint = '';
+                            if ($valueType === 'number_unit' && !empty($attr['allowed_units'])) {
+                                $unitHint = collect($attr['allowed_units'])->pluck('name')->implode('/');
+                            }
                         @endphp
                         @if($attrId && !$readOnly)
-                        <div class="flex items-center gap-3 @if($isMissing) bg-amber-50/40 dark:bg-amber-900/10 rounded-lg px-2 py-1 -mx-2 @endif">
-                            <div class="w-44 flex-shrink-0">
-                                <span class="text-sm text-gray-600 dark:text-zinc-400">
+                        <div class="flex items-start gap-3 @if($isMissing) bg-amber-50/40 dark:bg-amber-900/10 rounded-lg px-2 py-1.5 -mx-2 @endif">
+                            <div class="w-44 flex-shrink-0 pt-1.5">
+                                <span class="text-sm text-gray-600 dark:text-zinc-400 leading-tight">
                                     {{ $attrName }}
                                     @if($isMissing)
                                         <span class="text-red-400 text-xs ml-0.5" title="Obrigatório não preenchido">*</span>
@@ -284,6 +309,9 @@
                                         <span class="text-amber-400 text-xs ml-0.5">*</span>
                                     @endif
                                 </span>
+                                @if($unitHint)
+                                    <span class="block text-[10px] text-gray-400 dark:text-zinc-600 mt-0.5">{{ $unitHint }}</span>
+                                @endif
                             </div>
 
                             @if($isBoolean)
@@ -296,24 +324,33 @@
                             @elseif(!empty($allowedValues))
                                 {{-- List of allowed values: render as select --}}
                                 <select name="attributes[{{ $attrId }}]" class="form-input flex-1 text-sm py-1.5">
-                                    <option value="">Selecione...</option>
+                                    <option value="">— Selecione —</option>
                                     @foreach($allowedValues as $val)
-                                    <option value="{{ $val['name'] ?? $val['id'] }}"
-                                        @selected($currentValue === ($val['name'] ?? $val['id']))>
-                                        {{ $val['name'] ?? $val['id'] }}
+                                    @php
+                                        $valName = $val['name'] ?? $val['id'] ?? '';
+                                        $isSelected = ($currentValue !== '' && $currentValue === $valName);
+                                    @endphp
+                                    <option value="{{ $valName }}" @selected($isSelected)>
+                                        {{ $valName }}
                                     </option>
                                     @endforeach
                                 </select>
                             @elseif($valueType === 'number' || $valueType === 'number_unit')
-                                <input type="number" name="attributes[{{ $attrId }}]"
-                                    value="{{ old('attributes.'.$attrId, $currentValue) }}"
-                                    class="form-input flex-1 text-sm py-1.5"
-                                    placeholder="{{ $currentValue ?: '0' }}">
+                                <div class="flex-1 flex items-center gap-1.5">
+                                    <input type="number" name="attributes[{{ $attrId }}]"
+                                        value="{{ old('attributes.'.$attrId, $currentValue !== '' ? $currentValue : '') }}"
+                                        class="form-input flex-1 text-sm py-1.5"
+                                        placeholder="Ex: {{ $unitHint ?: '0' }}"
+                                        step="any">
+                                    @if($unitHint)
+                                        <span class="text-xs text-gray-400 dark:text-zinc-500 flex-shrink-0">{{ $unitHint }}</span>
+                                    @endif
+                                </div>
                             @else
                                 <input type="text" name="attributes[{{ $attrId }}]"
                                     value="{{ old('attributes.'.$attrId, $currentValue) }}"
                                     class="form-input flex-1 text-sm py-1.5"
-                                    placeholder="{{ $currentValue ?: 'Não informado' }}">
+                                    placeholder="Não informado">
                             @endif
                         </div>
                         @endif
@@ -922,35 +959,39 @@
         {{-- ═══ Sidebar ══════════════════════════════════════════════════════ --}}
         <div class="space-y-6">
 
-            {{-- Qualidade do Anúncio (ML /health endpoint) --}}
-            @if(!empty($quality))
+            {{-- Qualidade do Anúncio --}}
             <x-ui.card>
                 @php
-                    $health    = $quality['health'] ?? 0;
-                    $pct       = round($health * 100);
-                    $qLevel    = $quality['level'] ?? 'basic';
-                    $qLevelLabel = match($qLevel) {
+                    $hasQuality     = !empty($quality) && isset($quality['health']);
+                    $health         = $hasQuality ? ($quality['health'] ?? 0) : 0;
+                    $pct            = round($health * 100);
+                    $qLevel         = $quality['level'] ?? 'basic';
+                    $qLevelLabel    = match($qLevel) {
                         'professional' => 'Profissional',
                         'standard'     => 'Satisfatório',
                         default        => 'Básico',
                     };
                     $isProfessional = $pct >= 66;
                     $isStandard     = $pct >= 50 && $pct < 66;
-                    $isBasic        = $pct < 50;
                 @endphp
                 <x-slot name="title">
                     <div class="flex items-center justify-between">
-                        <span>Qualidade do Anúncio</span>
-                        <span class="text-sm font-bold
-                            {{ $isProfessional ? 'text-emerald-500' : ($isStandard ? 'text-amber-500' : 'text-red-500') }}">
+                        <div class="flex items-center gap-2">
+                            <x-heroicon-o-star class="w-4 h-4 text-amber-400" />
+                            <span>Qualidade do Anúncio</span>
+                        </div>
+                        @if($hasQuality)
+                        <span class="text-sm font-bold {{ $isProfessional ? 'text-emerald-500' : ($isStandard ? 'text-amber-500' : 'text-red-500') }}">
                             {{ $pct }}%
                         </span>
+                        @endif
                     </div>
                 </x-slot>
 
+                @if($hasQuality)
                 {{-- Progress bar --}}
-                <div class="mb-3">
-                    <div class="flex items-center justify-between mb-1">
+                <div class="mb-4">
+                    <div class="flex items-center justify-between mb-1.5">
                         <span class="text-xs text-gray-500 dark:text-zinc-400">
                             Nível:
                             <strong class="{{ $isProfessional ? 'text-emerald-500' : ($isStandard ? 'text-amber-500' : 'text-red-500') }}">
@@ -959,16 +1000,15 @@
                         </span>
                         <span class="text-xs text-gray-400 dark:text-zinc-500">{{ $pct }}/100</span>
                     </div>
-                    <div class="h-2 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                    <div class="h-2.5 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
                         <div class="h-full rounded-full transition-all duration-500
                             {{ $isProfessional ? 'bg-emerald-500' : ($isStandard ? 'bg-amber-500' : 'bg-red-500') }}"
                              style="width: {{ $pct }}%"></div>
                     </div>
-                    {{-- Level bands reference --}}
-                    <div class="flex text-[10px] text-gray-400 dark:text-zinc-600 mt-1 justify-between px-0.5">
+                    <div class="flex text-[10px] text-gray-400 dark:text-zinc-600 mt-1 justify-between">
                         <span>Básico &lt;50%</span>
-                        <span>Satisfatório ≥50%</span>
-                        <span>Profissional ≥66%</span>
+                        <span>Satisf. ≥50%</span>
+                        <span>Prof. ≥66%</span>
                     </div>
                 </div>
 
@@ -976,47 +1016,50 @@
                 @if(!empty($quality['goals']))
                 @php
                     $goalLabels = [
-                        'picture'              => ['icon' => 'photo', 'label' => 'Fotos do produto'],
-                        'description'          => ['icon' => 'document-text', 'label' => 'Descrição'],
-                        'price'                => ['icon' => 'currency-dollar', 'label' => 'Preço competitivo'],
-                        'video'                => ['icon' => 'video-camera', 'label' => 'Vídeo do produto'],
-                        'verification'         => ['icon' => 'shield-check', 'label' => 'Verificação de dados'],
-                        'whatsapp'             => ['icon' => 'chat-bubble-left-right', 'label' => 'WhatsApp'],
-                        'technical_specification' => ['icon' => 'clipboard-document-list', 'label' => 'Especificações técnicas'],
-                        'upgrade_listing'      => ['icon' => 'arrow-trending-up', 'label' => 'Upgrade de tipo de anúncio'],
-                        'publish'              => ['icon' => 'rocket-launch', 'label' => 'Anúncio publicado'],
+                        'picture'                 => 'Fotos do produto',
+                        'description'             => 'Descrição',
+                        'price'                   => 'Preço competitivo',
+                        'video'                   => 'Vídeo do produto',
+                        'verification'            => 'Verificação de dados',
+                        'whatsapp'                => 'WhatsApp',
+                        'technical_specification' => 'Especificações técnicas',
+                        'upgrade_listing'         => 'Upgrade de tipo de anúncio',
+                        'publish'                 => 'Anúncio publicado',
                     ];
                     $applicableGoals = collect($quality['goals'])->where('apply', true);
                     $pendingActions  = collect($healthActions['actions'] ?? []);
+                    $completedCount  = $applicableGoals->filter(fn($g) => ($g['progress'] ?? 0) >= ($g['progress_max'] ?? 1))->count();
+                    $totalCount      = $applicableGoals->count();
                 @endphp
                 <div class="space-y-1.5">
-                    <p class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Fatores de qualidade</p>
+                    <p class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+                        Fatores ({{ $completedCount }}/{{ $totalCount }} concluídos)
+                    </p>
                     @foreach($applicableGoals as $goal)
                     @php
                         $goalId    = $goal['id'] ?? '';
-                        $goalInfo  = $goalLabels[$goalId] ?? ['icon' => 'check-circle', 'label' => ucfirst(str_replace('_', ' ', $goalId))];
+                        $goalLabel = $goalLabels[$goalId] ?? ucfirst(str_replace('_', ' ', $goalId));
                         $completed = ($goal['progress'] ?? 0) >= ($goal['progress_max'] ?? 1);
-                        $isPending = $pendingActions->contains('id', $goalId);
                     @endphp
                     <div class="flex items-center gap-2 py-1 px-1.5 rounded-md
-                        {{ $completed ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'bg-red-50/50 dark:bg-red-900/10' }}">
+                        {{ $completed ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'bg-red-50/40 dark:bg-red-900/10' }}">
                         @if($completed)
-                            <x-heroicon-s-check-circle class="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                            <x-heroicon-s-check-circle class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
                         @else
-                            <x-heroicon-o-x-circle class="w-4 h-4 text-red-400 flex-shrink-0" />
+                            <x-heroicon-o-x-circle class="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
                         @endif
-                        <span class="text-xs {{ $completed ? 'text-gray-600 dark:text-zinc-400' : 'text-gray-700 dark:text-zinc-300 font-medium' }} flex-1">
-                            {{ $goalInfo['label'] }}
+                        <span class="text-xs {{ $completed ? 'text-gray-500 dark:text-zinc-500' : 'text-gray-700 dark:text-zinc-300 font-medium' }} flex-1">
+                            {{ $goalLabel }}
                         </span>
                         @if(!$completed)
                             @if($goalId === 'description')
-                                <a href="#descricao" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">Editar</a>
+                                <a href="#descricao" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">↓</a>
                             @elseif($goalId === 'picture')
-                                <a href="#imagens" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">Editar</a>
+                                <a href="#imagens" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">↓</a>
                             @elseif($goalId === 'upgrade_listing')
-                                <a href="#tipo-anuncio" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">Alterar</a>
+                                <a href="#tipo-anuncio" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">↓</a>
                             @elseif(!empty($live['permalink']))
-                                <a href="{{ $live['permalink'] }}" target="_blank" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">ML</a>
+                                <a href="{{ $live['permalink'] }}" target="_blank" class="text-[10px] text-primary-500 hover:underline flex-shrink-0">ML↗</a>
                             @endif
                         @endif
                     </div>
@@ -1024,18 +1067,34 @@
                 </div>
                 @endif
 
-                {{-- Link to ML for full quality management --}}
-                @if(!empty($live['permalink']))
+                @else
+                {{-- Qualidade não disponível via API — mostra aviso com link --}}
+                <div class="flex items-start gap-2 text-xs text-gray-500 dark:text-zinc-400">
+                    <x-heroicon-o-information-circle class="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
+                    <div>
+                        <p>Pontuação não disponível para este anúncio via API.</p>
+                        @if(!empty($live['permalink']))
+                        <a href="{{ $live['permalink'] }}" target="_blank"
+                            class="text-primary-500 hover:underline mt-1 inline-flex items-center gap-1">
+                            <x-heroicon-o-arrow-top-right-on-square class="w-3 h-3" />
+                            Ver qualidade no Mercado Livre
+                        </a>
+                        @endif
+                    </div>
+                </div>
+                @endif
+
+                {{-- Footer link --}}
+                @if($hasQuality && !empty($live['permalink']))
                 <div class="mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800">
                     <a href="{{ $live['permalink'] }}" target="_blank"
-                        class="text-xs text-gray-400 dark:text-zinc-500 hover:text-primary-500 flex items-center gap-1">
+                        class="text-xs text-gray-400 dark:text-zinc-500 hover:text-primary-500 flex items-center gap-1 transition-colors">
                         <x-heroicon-o-arrow-top-right-on-square class="w-3.5 h-3.5" />
                         Ver anúncio no Mercado Livre
                     </a>
                 </div>
                 @endif
             </x-ui.card>
-            @endif
 
             {{-- Status --}}
             <x-ui.card title="Status">
