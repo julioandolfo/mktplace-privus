@@ -152,6 +152,7 @@ class SyncMarketplaceOrders extends Command
         $estimatedDelivery = null;
         $dateDelivered     = null;
         $dateShipped       = null;
+        $shipmentStatus    = null;
         $shipment          = [];
 
         if (! empty($ml['shipping']['id'])) {
@@ -162,9 +163,20 @@ class SyncMarketplaceOrders extends Command
             $shippingMode      = $shipment['mode'] ?? null;
             $estimatedDelivery = $shipment['estimated_delivery_time']['date'] ?? null;
             $dateDelivered     = $shipment['date_delivered'] ?? null;
+            $shipmentStatus    = $shipment['status'] ?? null;
 
-            $shipmentStatus = $shipment['status'] ?? null;
-            if (in_array($shipmentStatus, ['shipped', 'delivered', 'to_be_agreed'])) {
+            // Override order status based on shipment status — ML keeps order.status
+            // as 'confirmed' even after delivery; the real delivery state is in shipment.
+            if ($orderStatus !== OrderStatus::Cancelled) {
+                $orderStatus = match ($shipmentStatus) {
+                    'delivered'                        => OrderStatus::Delivered,
+                    'shipped', 'not_delivered'         => OrderStatus::Shipped,
+                    'ready_to_ship', 'handling'        => OrderStatus::ReadyToShip,
+                    default                            => $orderStatus,
+                };
+            }
+
+            if (in_array($shipmentStatus, ['shipped', 'delivered', 'to_be_agreed', 'not_delivered'])) {
                 $dateShipped = $shipment['date_shipped'] ?? null;
                 if (! $dateShipped) {
                     foreach (($shipment['status_history'] ?? []) as $hist) {
@@ -175,8 +187,6 @@ class SyncMarketplaceOrders extends Command
                     }
                 }
                 $dateShipped = $dateShipped ?? ($trackingCode ? ($ml['last_updated'] ?? null) : null);
-            } else {
-                $dateShipped = null;
             }
         }
 
