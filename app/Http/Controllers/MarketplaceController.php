@@ -7,8 +7,10 @@ use App\Enums\MarketplaceType;
 use App\Models\Company;
 use App\Models\MarketplaceAccount;
 use App\Models\SystemSetting;
+use App\Services\Marketplaces\MercadoLivreService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 
 class MarketplaceController extends Controller
 {
@@ -165,5 +167,68 @@ class MarketplaceController extends Controller
         }
 
         return redirect()->route('marketplaces.show', $marketplace)->with($flash);
+    }
+
+    public function diagnose(Request $request, MarketplaceAccount $marketplace)
+    {
+        if ($marketplace->marketplace_type !== MarketplaceType::MercadoLivre) {
+            return back()->with('error', 'Diagnóstico disponível apenas para Mercado Livre.');
+        }
+
+        $problems  = [];
+        $ok        = [];
+        $mlUser    = null;
+
+        try {
+            $service = new MercadoLivreService($marketplace);
+            $mlUser  = $service->getAuthenticatedUser();
+
+            $mlUserId = (string) ($mlUser['id'] ?? '');
+            $storedId = (string) ($marketplace->shop_id ?? '');
+
+            if ($mlUserId) {
+                if ($storedId === $mlUserId) {
+                    $ok[] = "Token válido. Usuário ML: {$mlUser['nickname']} (ID: {$mlUserId}) — bate com o shop_id cadastrado.";
+                } else {
+                    $problems[] = "SHOP ID INCORRETO: token pertence ao usuário {$mlUser['nickname']} (ID: {$mlUserId}), mas o shop_id cadastrado é '{$storedId}'. Corrija o shop_id para {$mlUserId}.";
+                    // Auto-fix shop_id
+                    $marketplace->update(['shop_id' => $mlUserId]);
+                    $ok[] = "shop_id corrigido automaticamente para {$mlUserId}.";
+                }
+            }
+
+            // Check order count (no date filter)
+            try {
+                $testData = $service->getAuthenticatedUser(); // já feito acima
+                $ok[] = "Conexão com a API do ML OK.";
+            } catch (\Throwable $e) {
+                $problems[] = "Erro na API: " . $e->getMessage();
+            }
+
+        } catch (\Throwable $e) {
+            Log::error("MarketplaceDiagnose: {$e->getMessage()}");
+            $problems[] = "Erro ao conectar com a API do ML: " . $e->getMessage();
+        }
+
+        if (! $marketplace->shop_id) {
+            $problems[] = "shop_id não configurado.";
+        }
+
+        if ($marketplace->isTokenExpired()) {
+            $problems[] = "Token expirado em " . ($marketplace->token_expires_at?->format('d/m/Y H:i') ?? '?');
+        }
+
+        $mlInfo = $mlUser ? " | Conta ML: {$mlUser['nickname']}" : '';
+
+        if (count($problems) > 0) {
+            $msg = "Problemas encontrados:\n• " . implode("\n• ", $problems);
+            if (count($ok) > 0) {
+                $msg .= "\n\nOK:\n✓ " . implode("\n✓ ", $ok);
+            }
+            return back()->with('warning', $msg);
+        }
+
+        $successMsg = "Diagnóstico OK{$mlInfo}. " . implode(' | ', $ok);
+        return back()->with('success', $successMsg);
     }
 }

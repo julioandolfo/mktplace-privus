@@ -84,6 +84,17 @@ class MercadoLivreService
         return $response->json() ?? [];
     }
 
+    // ─── Diagnostics ────────────────────────────────────────────────────────
+
+    /**
+     * Validate the token and return the authenticated user info from ML.
+     * Used to diagnose shop_id mismatches and token issues.
+     */
+    public function getAuthenticatedUser(): array
+    {
+        return $this->get('/users/me');
+    }
+
     // ─── Orders ─────────────────────────────────────────────────────────────
 
     /**
@@ -105,12 +116,21 @@ class MercadoLivreService
             $params['order.date_created.from'] = $since->toIso8601String();
         }
 
+        Log::info("ML getOrders: seller={$shopId}, desde=" . ($since?->toIso8601String() ?? 'início'));
+
+        $firstPage = true;
+
         do {
             $params['offset'] = $offset;
             $data = $this->get('/orders/search', $params);
 
             $results = $data['results'] ?? [];
             $total   = $data['paging']['total'] ?? 0;
+
+            if ($firstPage) {
+                Log::info("ML getOrders: API retornou total={$total} pedidos para seller={$shopId}");
+                $firstPage = false;
+            }
 
             if (empty($results)) {
                 break;

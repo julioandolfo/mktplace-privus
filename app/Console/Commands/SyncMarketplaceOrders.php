@@ -82,11 +82,20 @@ class SyncMarketplaceOrders extends Command
             // Token may still work; continue and let the API call fail naturally
         }
 
-        $since = $account->last_synced_at
+        // --days sempre define o mínimo de janela retroativa,
+        // independente do last_synced_at. Isso evita ignorar --days quando
+        // last_synced_at já foi definido por um sync anterior.
+        $sinceFromDays    = now()->subDays((int) $this->option('days'));
+        $sinceFromLastSync = $account->last_synced_at
             ? $account->last_synced_at->subHour()
-            : now()->subDays((int) $this->option('days'));
+            : null;
 
-        $this->line("  Buscando pedidos desde: {$since->format('d/m/Y H:i')}");
+        // Usa a data mais antiga entre as duas (maior cobertura)
+        $since = $sinceFromLastSync && $sinceFromLastSync->isAfter($sinceFromDays)
+            ? $sinceFromDays
+            : ($sinceFromLastSync ?? $sinceFromDays);
+
+        $this->line("  Buscando pedidos desde: {$since->format('d/m/Y H:i')} (--days=" . $this->option('days') . ")");
 
         $service = new MercadoLivreService($account);
         $synced  = 0;

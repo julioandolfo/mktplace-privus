@@ -63,6 +63,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/marketplaces/{marketplace}/edit', [MarketplaceController::class, 'edit'])->name('marketplaces.edit');
     Route::put('/marketplaces/{marketplace}', [MarketplaceController::class, 'update'])->name('marketplaces.update');
     Route::post('/marketplaces/{marketplace}/sync', [MarketplaceController::class, 'sync'])->name('marketplaces.sync');
+    Route::post('/marketplaces/{marketplace}/diagnose', [MarketplaceController::class, 'diagnose'])->name('marketplaces.diagnose');
 
     // Marketplaces OAuth
     Route::get('/marketplaces/oauth/{type}/redirect', [MarketplaceOAuthController::class, 'redirect'])->name('marketplaces.oauth.redirect');

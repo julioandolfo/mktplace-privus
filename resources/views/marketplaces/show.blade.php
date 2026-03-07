@@ -1,6 +1,13 @@
 <x-app-layout>
     <x-slot name="header">{{ $marketplace->account_name }}</x-slot>
     <x-slot name="actions">
+        <form method="POST" action="{{ route('marketplaces.diagnose', $marketplace) }}">
+            @csrf
+            <button type="submit" class="btn-secondary">
+                <x-heroicon-o-beaker class="w-4 h-4" />
+                Testar Conexão
+            </button>
+        </form>
         <a href="{{ route('marketplaces.edit', $marketplace) }}" class="btn-secondary">
             <x-heroicon-o-pencil-square class="w-4 h-4" />
             Editar
