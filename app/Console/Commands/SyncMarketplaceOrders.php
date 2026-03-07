@@ -150,6 +150,7 @@ class SyncMarketplaceOrders extends Command
         $shippingMethod    = null;
         $shippingMode      = null;
         $estimatedDelivery = null;
+        $shippingDeadline  = null;
         $dateDelivered     = null;
         $dateShipped       = null;
         $shipmentStatus    = null;
@@ -169,11 +170,17 @@ class SyncMarketplaceOrders extends Command
             // as 'confirmed' even after delivery; the real delivery state is in shipment.
             if ($orderStatus !== OrderStatus::Cancelled) {
                 $orderStatus = match ($shipmentStatus) {
-                    'delivered'                        => OrderStatus::Delivered,
-                    'shipped', 'not_delivered'         => OrderStatus::Shipped,
-                    'ready_to_ship', 'handling'        => OrderStatus::ReadyToShip,
-                    default                            => $orderStatus,
+                    'delivered'                 => OrderStatus::Delivered,
+                    'shipped', 'not_delivered'  => OrderStatus::Shipped,
+                    'ready_to_ship', 'handling' => OrderStatus::ReadyToShip,
+                    default                     => $orderStatus,
                 };
+            }
+
+            // Dispatch deadline: only relevant while the seller hasn't shipped yet
+            if (in_array($shipmentStatus, ['pending', 'handling', 'ready_to_ship'])) {
+                $leadTime         = $service->getShippingLeadTime((string) $ml['shipping']['id']);
+                $shippingDeadline = $leadTime['estimated_handling_limit']['date'] ?? null;
             }
 
             if (in_array($shipmentStatus, ['shipped', 'delivered', 'to_be_agreed', 'not_delivered'])) {
@@ -238,7 +245,7 @@ class SyncMarketplaceOrders extends Command
             $account, $ml, $buyer, $orderStatus, $paymentStatus, $payment,
             $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal,
             $customerName, $customerEmail, $customerPhone, $mlUserId, $receiver,
-            $shippingMethod, $shippingMode, $estimatedDelivery, $dateDelivered,
+            $shippingMethod, $shippingMode, $estimatedDelivery, $shippingDeadline, $dateDelivered,
             $packId, $tags, $buyerFeedback, $isFulfillment, $shipment, $dateShipped
         ) {
             $customer = $this->upsertCustomer(
@@ -291,6 +298,7 @@ class SyncMarketplaceOrders extends Command
                         'ml_shipping_mode'      => $shippingMode,
                         'ml_shipping_status'    => $shipment['status'] ?? null,
                         'ml_estimated_delivery' => $estimatedDelivery,
+                        'ml_shipping_deadline'  => $shippingDeadline,
                         'ml_buyer_id'           => $mlUserId,
                         'pack_id'               => $packId,
                         'ml_tags'               => $tags,

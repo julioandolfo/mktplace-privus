@@ -163,6 +163,20 @@ class MercadoLivreService
         }
     }
 
+    /**
+     * Fetch lead time details for a shipment, including the seller dispatch deadline.
+     * The field estimated_handling_limit.date is the deadline for the seller to ship.
+     */
+    public function getShippingLeadTime(string $shippingId): array
+    {
+        try {
+            return $this->get("/shipments/{$shippingId}/lead_time");
+        } catch (\Throwable $e) {
+            Log::warning("ML getShippingLeadTime({$shippingId}) failed: " . $e->getMessage());
+            return [];
+        }
+    }
+
     // ─── Listings ────────────────────────────────────────────────────────────
 
     /**

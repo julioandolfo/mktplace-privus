@@ -228,19 +228,26 @@
                                 <br><span class="text-xs text-gray-400 dark:text-zinc-500">{{ $order->shipped_at->format('H:i') }}</span>
                             @elseif(!in_array($order->status->value, ['shipped', 'cancelled', 'delivered', 'returned']))
                                 @php
-                                    $estimatedDelivery = $order->meta['ml_estimated_delivery'] ?? null;
-                                    $prazo = $estimatedDelivery
-                                        ? \Carbon\Carbon::parse($estimatedDelivery)
+                                    // ml_shipping_deadline = prazo para o VENDEDOR despachar (do /lead_time)
+                                    // ml_estimated_delivery = prazo de entrega para o comprador
+                                    $dispatchDeadline = $order->meta['ml_shipping_deadline'] ?? null;
+                                    $prazo = $dispatchDeadline
+                                        ? \Carbon\Carbon::parse($dispatchDeadline)
                                         : null;
+                                    $isLate = $prazo && $prazo->isPast();
                                 @endphp
                                 <span class="inline-flex flex-col items-start gap-0.5">
-                                    <span class="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                                    <span class="inline-flex items-center gap-1 text-xs font-medium
+                                        {{ $isLate
+                                            ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
+                                            : 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'
+                                        }} px-2 py-0.5 rounded-full">
                                         <x-heroicon-o-clock class="w-3 h-3" />
-                                        A ENVIAR
+                                        {{ $isLate ? 'ATRASADO' : 'A ENVIAR' }}
                                     </span>
                                     @if($prazo)
-                                        <span class="text-[10px] text-gray-400 dark:text-zinc-500 pl-1">
-                                            Prazo: {{ $prazo->format('d/m/Y') }}
+                                        <span class="text-[10px] {{ $isLate ? 'text-red-400 dark:text-red-500 font-medium' : 'text-gray-400 dark:text-zinc-500' }} pl-1">
+                                            Despachar até: {{ $prazo->format('d/m/Y') }}
                                         </span>
                                     @endif
                                 </span>

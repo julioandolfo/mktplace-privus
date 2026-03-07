@@ -109,7 +109,10 @@ class Order extends Model
 
     public function messages(): HasMany
     {
-        return $this->hasMany(OrderMessage::class)->orderBy('created_at');
+        // Order by the actual ML message date stored in the JSON field.
+        // Using created_at is unreliable as messages are inserted in batch.
+        return $this->hasMany(OrderMessage::class)
+            ->orderByRaw("(message_date->>'created')::text ASC NULLS LAST");
     }
 
     // Scopes

@@ -74,15 +74,16 @@ class SyncSingleOrder implements ShouldQueue
         );
 
         // Shipping / tracking
-        $trackingCode       = null;
-        $shippingCost       = 0;
-        $shippingMethod     = null;
-        $shippingMode       = null;
-        $estimatedDelivery  = null;
-        $dateDelivered      = null;
-        $dateShipped        = null;
-        $shipmentStatus     = null;
-        $shipment           = [];
+        $trackingCode      = null;
+        $shippingCost      = 0;
+        $shippingMethod    = null;
+        $shippingMode      = null;
+        $estimatedDelivery = null;
+        $shippingDeadline  = null;
+        $dateDelivered     = null;
+        $dateShipped       = null;
+        $shipmentStatus    = null;
+        $shipment          = [];
 
         if (! empty($ml['shipping']['id'])) {
             $shipment          = $service->getShipping((string) $ml['shipping']['id']);
@@ -98,11 +99,17 @@ class SyncSingleOrder implements ShouldQueue
             // as 'confirmed' even after delivery; the real delivery state is in shipment.
             if ($orderStatus !== OrderStatus::Cancelled) {
                 $orderStatus = match ($shipmentStatus) {
-                    'delivered'                        => OrderStatus::Delivered,
-                    'shipped', 'not_delivered'         => OrderStatus::Shipped,
-                    'ready_to_ship', 'handling'        => OrderStatus::ReadyToShip,
-                    default                            => $orderStatus,
+                    'delivered'                 => OrderStatus::Delivered,
+                    'shipped', 'not_delivered'  => OrderStatus::Shipped,
+                    'ready_to_ship', 'handling' => OrderStatus::ReadyToShip,
+                    default                     => $orderStatus,
                 };
+            }
+
+            // Dispatch deadline: only relevant while the seller hasn't shipped yet
+            if (in_array($shipmentStatus, ['pending', 'handling', 'ready_to_ship'])) {
+                $leadTime         = $service->getShippingLeadTime((string) $ml['shipping']['id']);
+                $shippingDeadline = $leadTime['estimated_handling_limit']['date'] ?? null;
             }
 
             // Determine shipped_at from shipment status transitions
@@ -172,7 +179,7 @@ class SyncSingleOrder implements ShouldQueue
             $account, $ml, $buyer, $orderStatus, $paymentStatus, $payment,
             $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal,
             $customerName, $customerEmail, $customerPhone, $mlUserId, $receiver,
-            $shippingMethod, $shippingMode, $estimatedDelivery, $dateDelivered,
+            $shippingMethod, $shippingMode, $estimatedDelivery, $shippingDeadline, $dateDelivered,
             $packId, $tags, $buyerFeedback, $shipment, $dateShipped
         ) {
             $customer = $this->upsertCustomer(
@@ -222,8 +229,9 @@ class SyncSingleOrder implements ShouldQueue
                         'ml_shipping_id'       => $ml['shipping']['id'] ?? null,
                         'ml_shipping_mode'     => $shippingMode,
                         'ml_shipping_status'   => $shipment['status'] ?? null,
-                        'ml_estimated_delivery'=> $estimatedDelivery,
-                        'ml_buyer_id'          => $mlUserId,
+                        'ml_estimated_delivery' => $estimatedDelivery,
+                        'ml_shipping_deadline'  => $shippingDeadline,
+                        'ml_buyer_id'           => $mlUserId,
                         'pack_id'              => $packId,
                         'ml_tags'              => $tags,
                         'ml_feedback'          => $buyerFeedback,
