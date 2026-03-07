@@ -20,14 +20,34 @@
     </x-slot>
 
     @php
-        $meta = $order->meta ?? [];
+        $meta          = $order->meta ?? [];
         $isFulfillment = $meta['is_fulfillment'] ?? false;
-        $isFromML = $order->marketplaceAccount !== null;
-        $packId = $meta['pack_id'] ?? $order->external_id;
-        $mlLink = null;
-        // ML order link
+        $isFromML      = $order->marketplaceAccount?->marketplace_type === \App\Enums\MarketplaceType::MercadoLivre;
+        $mlType        = $order->marketplaceAccount?->marketplace_type;
+        $packId        = $meta['pack_id'] ?? $order->external_id;
+        $mlShippingId  = $meta['ml_shipping_id'] ?? null;
+        $mlLink        = null;
         if ($order->external_id && $isFromML) {
             $mlLink = 'https://www.mercadolivre.com.br/vendas/' . $order->external_id . '/detalhe';
+        }
+        // Smart tracking URL
+        $trackingUrl = null;
+        if ($mlType && ($order->tracking_code || $mlShippingId)) {
+            $trackingUrl = $mlType->trackingUrl($order->tracking_code, $mlShippingId);
+        } elseif ($order->tracking_code) {
+            $trackingUrl = 'https://rastreamento.correios.com.br/app/index.php?objeto=' . $order->tracking_code;
+        }
+        // ML item → listing lookup for thumbnail/URL
+        $mlListings = [];
+        if ($isFromML && $order->marketplaceAccount) {
+            $mlItemIds = $order->items->map(fn($i) => $i->meta['ml_item_id'] ?? null)->filter()->values()->toArray();
+            if (!empty($mlItemIds)) {
+                $mlListings = \App\Models\MarketplaceListing::where('marketplace_account_id', $order->marketplaceAccount->id)
+                    ->whereIn('external_id', $mlItemIds)
+                    ->get(['external_id', 'meta'])
+                    ->keyBy('external_id')
+                    ->toArray();
+            }
         }
     @endphp
 
@@ -48,7 +68,7 @@
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Produto</th>
+                            <th colspan="2">Produto</th>
                             <th>SKU</th>
                             <th class="text-center">Qtd</th>
                             <th class="text-right">Preco Unit.</th>
@@ -59,19 +79,53 @@
                     <tbody>
                         @foreach($order->items as $item)
                         @php
-                            $itemMeta = $item->meta ?? [];
+                            $itemMeta       = $item->meta ?? [];
                             $variationAttrs = $itemMeta['ml_variation_attrs'] ?? [];
+                            $mlItemId       = $itemMeta['ml_item_id'] ?? null;
+                            $mlItemUrl      = $mlItemId ? 'https://www.mercadolivre.com.br/p/' . $mlItemId : null;
+                            // Thumbnail: ML listing meta → product primary image → placeholder
+                            $thumbUrl = null;
+                            if ($mlItemId && isset($mlListings[$mlItemId])) {
+                                $listingMeta = $mlListings[$mlItemId]['meta'] ?? [];
+                                $thumbUrl = $listingMeta['thumbnail'] ?? ($listingMeta['live']['thumbnail'] ?? null);
+                            }
+                            if (!$thumbUrl && $item->product?->primaryImage) {
+                                $thumbUrl = $item->product->primaryImage->url ?? null;
+                            }
                         @endphp
                         <tr>
+                            {{-- Thumbnail --}}
+                            <td class="w-12 pr-0">
+                                @if($thumbUrl)
+                                    <img src="{{ $thumbUrl }}" alt="{{ $item->name }}"
+                                         class="w-10 h-10 object-cover rounded border border-gray-200 dark:border-zinc-700" />
+                                @else
+                                    <div class="w-10 h-10 rounded border border-gray-200 dark:border-zinc-700 flex items-center justify-center bg-gray-50 dark:bg-zinc-800">
+                                        <x-heroicon-o-photo class="w-5 h-5 text-gray-300 dark:text-zinc-600" />
+                                    </div>
+                                @endif
+                            </td>
+                            {{-- Nome + variações + link --}}
                             <td>
-                                <div class="font-medium">{{ $item->name }}</div>
+                                <div class="flex items-start gap-1">
+                                    <div class="font-medium leading-tight">{{ $item->name }}</div>
+                                    @if($mlItemUrl)
+                                    <a href="{{ $mlItemUrl }}" target="_blank"
+                                       class="flex-shrink-0 text-gray-400 hover:text-primary-500 transition-colors mt-0.5" title="Ver anúncio no ML">
+                                        <x-heroicon-o-arrow-top-right-on-square class="w-3.5 h-3.5" />
+                                    </a>
+                                    @endif
+                                </div>
                                 @if(!empty($variationAttrs))
                                 <div class="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
                                     @foreach($variationAttrs as $attr)
-                                        <span>{{ $attr['name'] ?? '' }}: {{ $attr['value_name'] ?? '' }}</span>
+                                        <span>{{ $attr['name'] ?? '' }}: <strong>{{ $attr['value_name'] ?? '' }}</strong></span>
                                         @if(!$loop->last) · @endif
                                     @endforeach
                                 </div>
+                                @endif
+                                @if($mlItemId)
+                                    <p class="text-[10px] font-mono text-gray-300 dark:text-zinc-600 mt-0.5">{{ $mlItemId }}</p>
                                 @endif
                             </td>
                             <td class="font-mono text-sm">{{ $item->sku }}</td>
@@ -197,22 +251,51 @@
 
             {{-- Customer --}}
             <x-ui.card title="Cliente">
-                <div class="space-y-2">
-                    <p class="font-medium">{{ $order->customer_name }}</p>
+                <div class="space-y-2.5 text-sm">
+                    {{-- Nome --}}
+                    <div class="flex items-center gap-2">
+                        <div class="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+                            <x-heroicon-s-user class="w-4 h-4 text-primary-600 dark:text-primary-400" />
+                        </div>
+                        <div>
+                            <p class="font-semibold text-gray-900 dark:text-white leading-tight">{{ $order->customer_name }}</p>
+                            @if($order->customer_document)
+                                <p class="text-xs font-mono text-gray-400 dark:text-zinc-500">{{ $order->customer_document }}</p>
+                            @endif
+                        </div>
+                    </div>
                     @if($order->customer_email)
-                    <p class="text-sm text-gray-600 dark:text-zinc-400">{{ $order->customer_email }}</p>
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-zinc-400">
+                        <x-heroicon-o-envelope class="w-4 h-4 flex-shrink-0 text-gray-400" />
+                        <a href="mailto:{{ $order->customer_email }}" class="hover:text-primary-500 transition-colors break-all">{{ $order->customer_email }}</a>
+                    </div>
                     @endif
                     @if($order->customer_phone)
-                    <p class="text-sm text-gray-600 dark:text-zinc-400">{{ $order->customer_phone }}</p>
+                    <div class="flex items-center gap-2 text-gray-600 dark:text-zinc-400">
+                        <x-heroicon-o-phone class="w-4 h-4 flex-shrink-0 text-gray-400" />
+                        <a href="tel:{{ $order->customer_phone }}" class="hover:text-primary-500 transition-colors">{{ $order->customer_phone }}</a>
+                    </div>
                     @endif
-                    @if($order->customer_document)
-                    <p class="text-sm text-gray-600 dark:text-zinc-400">{{ $order->customer_document }}</p>
+                    @if($order->shipping_address)
+                    @php $addr = $order->shipping_address; @endphp
+                    <div class="flex items-start gap-2 text-gray-600 dark:text-zinc-400">
+                        <x-heroicon-o-map-pin class="w-4 h-4 flex-shrink-0 text-gray-400 mt-0.5" />
+                        <div class="leading-snug">
+                            <p>{{ $addr['street'] ?? '' }}</p>
+                            @if(!empty($addr['complement'])) <p class="text-gray-400 dark:text-zinc-500">{{ $addr['complement'] }}</p> @endif
+                            @if(!empty($addr['neighborhood'])) <p class="text-gray-400 dark:text-zinc-500">{{ $addr['neighborhood'] }}</p> @endif
+                            <p>{{ $addr['city'] ?? '' }}{{ isset($addr['state']) ? ' - ' . $addr['state'] : '' }}</p>
+                            @if(!empty($addr['zip'])) <p class="text-xs text-gray-400 dark:text-zinc-500">CEP {{ $addr['zip'] }}</p> @endif
+                        </div>
+                    </div>
                     @endif
                     @if($order->customer)
-                    <a href="{{ route('customers.show', $order->customer) }}" class="text-xs text-primary-500 hover:text-primary-400 flex items-center gap-1">
-                        Ver perfil do cliente
-                        <x-heroicon-o-arrow-top-right-on-square class="w-3 h-3" />
-                    </a>
+                    <div class="pt-1 border-t border-gray-100 dark:border-zinc-800">
+                        <a href="{{ route('customers.show', $order->customer) }}" class="text-xs text-primary-500 hover:text-primary-400 flex items-center gap-1 transition-colors">
+                            <x-heroicon-o-arrow-top-right-on-square class="w-3 h-3" />
+                            Ver perfil completo do cliente
+                        </a>
+                    </div>
                     @endif
                 </div>
             </x-ui.card>
@@ -236,15 +319,18 @@
                     @endif
 
                     {{-- Tracking --}}
-                    @if($order->tracking_code)
+                    @if($order->tracking_code || $mlShippingId)
                     <div>
                         <span class="text-xs text-gray-500 dark:text-zinc-400">Codigo de Rastreio</span>
                         <div class="flex items-center gap-2 mt-1">
-                            <p class="text-sm font-mono">{{ $order->tracking_code }}</p>
-                            <a href="https://www.linkcorretos.com.br/{{ $order->tracking_code }}" target="_blank"
-                               class="text-primary-500 hover:text-primary-400 transition-colors" title="Rastrear">
+                            <p class="text-sm font-mono">{{ $order->tracking_code ?: $mlShippingId }}</p>
+                            @if($trackingUrl)
+                            <a href="{{ $trackingUrl }}" target="_blank"
+                               class="inline-flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors" title="Rastrear envio">
                                 <x-heroicon-o-arrow-top-right-on-square class="w-3.5 h-3.5" />
+                                @if($isFromML) ML @else Correios @endif
                             </a>
+                            @endif
                         </div>
                     </div>
                     @endif

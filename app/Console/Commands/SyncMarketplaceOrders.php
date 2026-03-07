@@ -151,6 +151,7 @@ class SyncMarketplaceOrders extends Command
         $shippingMode      = null;
         $estimatedDelivery = null;
         $dateDelivered     = null;
+        $dateShipped       = null;
         $shipment          = [];
 
         if (! empty($ml['shipping']['id'])) {
@@ -161,6 +162,22 @@ class SyncMarketplaceOrders extends Command
             $shippingMode      = $shipment['mode'] ?? null;
             $estimatedDelivery = $shipment['estimated_delivery_time']['date'] ?? null;
             $dateDelivered     = $shipment['date_delivered'] ?? null;
+
+            $shipmentStatus = $shipment['status'] ?? null;
+            if (in_array($shipmentStatus, ['shipped', 'delivered', 'to_be_agreed'])) {
+                $dateShipped = $shipment['date_shipped'] ?? null;
+                if (! $dateShipped) {
+                    foreach (($shipment['status_history'] ?? []) as $hist) {
+                        if (($hist['status'] ?? '') === 'shipped') {
+                            $dateShipped = $hist['date'] ?? null;
+                            break;
+                        }
+                    }
+                }
+                $dateShipped = $dateShipped ?? ($trackingCode ? ($ml['last_updated'] ?? null) : null);
+            } else {
+                $dateShipped = null;
+            }
         }
 
         $receiver        = $shipment['receiver_address'] ?? [];
@@ -193,7 +210,7 @@ class SyncMarketplaceOrders extends Command
             $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal,
             $customerName, $customerEmail, $mlUserId, $receiver,
             $shippingMethod, $shippingMode, $estimatedDelivery, $dateDelivered,
-            $packId, $tags, $buyerFeedback, $isFulfillment, $shipment
+            $packId, $tags, $buyerFeedback, $isFulfillment, $shipment, $dateShipped
         ) {
             $customer = $this->upsertCustomer(
                 $account, $customerName, $customerEmail, $mlUserId, $buyer, $receiver
@@ -231,6 +248,7 @@ class SyncMarketplaceOrders extends Command
                     'paid_at'          => $paymentStatus === PaymentStatus::Paid
                         ? (! empty($payment['date_approved']) ? now()->parse($payment['date_approved']) : null)
                         : null,
+                    'shipped_at'       => ! empty($dateShipped) ? now()->parse($dateShipped) : null,
                     'delivered_at'     => $deliveredAt,
                     'meta'             => [
                         'ml_order_id'           => $ml['id'],

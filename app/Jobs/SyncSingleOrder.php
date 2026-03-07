@@ -80,6 +80,7 @@ class SyncSingleOrder implements ShouldQueue
         $shippingMode       = null;
         $estimatedDelivery  = null;
         $dateDelivered      = null;
+        $dateShipped        = null;
         $shipment           = [];
 
         if (! empty($ml['shipping']['id'])) {
@@ -90,6 +91,25 @@ class SyncSingleOrder implements ShouldQueue
             $shippingMode      = $shipment['mode'] ?? null;
             $estimatedDelivery = $shipment['estimated_delivery_time']['date'] ?? null;
             $dateDelivered     = $shipment['date_delivered'] ?? null;
+
+            // Determine shipped_at from shipment status transitions
+            $shipmentStatus = $shipment['status'] ?? null;
+            if (in_array($shipmentStatus, ['shipped', 'delivered', 'to_be_agreed'])) {
+                // Try to get the actual shipped date from status history
+                $dateShipped = $shipment['date_shipped'] ?? null;
+                if (! $dateShipped) {
+                    // Fallback: find it in status_history
+                    foreach (($shipment['status_history'] ?? []) as $hist) {
+                        if (($hist['status'] ?? '') === 'shipped') {
+                            $dateShipped = $hist['date'] ?? null;
+                            break;
+                        }
+                    }
+                }
+                $dateShipped = $dateShipped ?? ($trackingCode ? ($ml['last_updated'] ?? null) : null);
+            } else {
+                $dateShipped = null;
+            }
         }
 
         $receiver        = $shipment['receiver_address'] ?? [];
@@ -125,7 +145,7 @@ class SyncSingleOrder implements ShouldQueue
             $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal,
             $customerName, $customerEmail, $mlUserId, $receiver,
             $shippingMethod, $shippingMode, $estimatedDelivery, $dateDelivered,
-            $packId, $tags, $buyerFeedback, $shipment
+            $packId, $tags, $buyerFeedback, $shipment, $dateShipped
         ) {
             $customer = $this->upsertCustomer(
                 $account, $customerName, $customerEmail, $mlUserId, $buyer, $receiver
@@ -161,6 +181,7 @@ class SyncSingleOrder implements ShouldQueue
                     'paid_at'          => $paymentStatus === PaymentStatus::Paid
                         ? (! empty($payment['date_approved']) ? now()->parse($payment['date_approved']) : null)
                         : null,
+                    'shipped_at'       => $dateShipped ? now()->parse($dateShipped) : null,
                     'delivered_at'     => $deliveredAt,
                     'meta'             => [
                         'ml_order_id'          => $ml['id'],
