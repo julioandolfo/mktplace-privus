@@ -182,7 +182,7 @@
             </x-ui.card>
 
             {{-- Sync info --}}
-            <x-ui.card title="Sincronizacao">
+            <x-ui.card title="Sincronizacao" x-data="{ showSyncForm: false }">
                 <div class="space-y-3 text-sm">
                     <div>
                         <span class="text-gray-500 dark:text-zinc-400">Ultima Sincronizacao</span>
@@ -191,20 +191,72 @@
                                 {{ $marketplace->last_synced_at->format('d/m/Y H:i') }}
                                 <span class="text-xs text-gray-400 dark:text-zinc-500">({{ $marketplace->last_synced_at->diffForHumans() }})</span>
                             @else
-                                <span class="text-gray-400 dark:text-zinc-500">Nunca sincronizado</span>
+                                <span class="text-amber-600 dark:text-amber-400 font-medium">Nunca sincronizado</span>
                             @endif
                         </p>
                     </div>
 
+                    {{-- Diagnóstico rápido --}}
+                    @php
+                        $diagProblems = [];
+                        if (!$marketplace->shop_id) {
+                            $diagProblems[] = ['type' => 'error', 'msg' => 'Shop ID não configurado — necessário para buscar pedidos'];
+                        }
+                        if ($marketplace->isTokenExpired()) {
+                            $expiredAt = $marketplace->token_expires_at?->format('d/m/Y H:i') ?? 'desconhecido';
+                            $diagProblems[] = ['type' => 'error', 'msg' => "Token OAuth expirado em {$expiredAt}"];
+                        }
+                        try {
+                            $creds = $marketplace->credentials ?? [];
+                        } catch (\Exception $e) {
+                            $creds = [];
+                        }
+                        if (empty($creds['refresh_token'])) {
+                            $diagProblems[] = ['type' => 'warning', 'msg' => 'Refresh token não configurado — token não será renovado automaticamente'];
+                        }
+                        if ($marketplace->status->value !== 'active') {
+                            $diagProblems[] = ['type' => 'error', 'msg' => 'Conta não está ativa (status: ' . $marketplace->status->label() . ') — sync automático bloqueado'];
+                        }
+                    @endphp
+
+                    @if(count($diagProblems) > 0)
+                    <div class="pt-2 border-t border-gray-200 dark:border-zinc-700 space-y-1.5">
+                        <span class="text-xs font-medium text-gray-500 dark:text-zinc-400">Problemas detectados:</span>
+                        @foreach($diagProblems as $prob)
+                            <div class="flex items-start gap-1.5 text-xs {{ $prob['type'] === 'error' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400' }}">
+                                @if($prob['type'] === 'error')
+                                    <x-heroicon-s-x-circle class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                @else
+                                    <x-heroicon-s-exclamation-triangle class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                @endif
+                                <span>{{ $prob['msg'] }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                    @else
+                    <div class="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 pt-1 border-t border-gray-200 dark:border-zinc-700">
+                        <x-heroicon-s-check-circle class="w-3.5 h-3.5" />
+                        <span>Conta saudável para sincronização</span>
+                    </div>
+                    @endif
+
                     <div class="pt-2 border-t border-gray-200 dark:border-zinc-700 space-y-2">
-                        <form method="POST" action="{{ route('marketplaces.sync', $marketplace) }}">
+                        {{-- Sync Pedidos com opção de dias --}}
+                        <form method="POST" action="{{ route('marketplaces.sync', $marketplace) }}" x-data="{ days: 7 }">
                             @csrf
                             <input type="hidden" name="type" value="orders">
-                            <button type="submit" class="btn-secondary btn-sm w-full">
+                            <div class="flex gap-1 mb-1.5">
+                                <label class="text-xs text-gray-500 dark:text-zinc-400 self-center">Últimos</label>
+                                <input type="number" name="days" x-model="days" min="1" max="365"
+                                    class="w-16 text-xs border border-gray-300 dark:border-zinc-600 rounded px-1.5 py-1 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100" />
+                                <label class="text-xs text-gray-500 dark:text-zinc-400 self-center">dias</label>
+                            </div>
+                            <button type="submit" class="btn-primary btn-sm w-full">
                                 <x-heroicon-o-arrow-path class="w-4 h-4" />
                                 Sincronizar Pedidos
                             </button>
                         </form>
+
                         <form method="POST" action="{{ route('marketplaces.sync', $marketplace) }}">
                             @csrf
                             <input type="hidden" name="type" value="listings">

@@ -1288,11 +1288,17 @@
                     </div>
                 </div>
 
-                {{-- Freeze notice --}}
-                @if($peFreeze)
+                {{-- Freeze notice — only show when text is non-empty --}}
+                @php
+                    $freezeText = $peFreeze['text'] ?? '';
+                    // Replace {0}/{1} placeholder markers with empty string
+                    $freezeText = preg_replace('/\{[0-9]+\}/', '', $freezeText);
+                    $freezeText = trim($freezeText);
+                @endphp
+                @if($freezeText)
                 <div class="mb-3 flex items-start gap-2 text-xs bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
                     <x-heroicon-o-information-circle class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                    <p class="text-blue-700 dark:text-blue-300 leading-relaxed">{{ $peFreeze['text'] ?? '' }}</p>
+                    <p class="text-blue-700 dark:text-blue-300 leading-relaxed">{{ $freezeText }}</p>
                 </div>
                 @endif
 

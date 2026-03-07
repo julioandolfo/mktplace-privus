@@ -135,20 +135,33 @@ class MarketplaceController extends Controller
 
     public function sync(Request $request, MarketplaceAccount $marketplace)
     {
-        $type = $request->validate(['type' => 'required|in:orders,listings'])['type'];
+        $validated = $request->validate([
+            'type' => 'required|in:orders,listings',
+            'days' => 'nullable|integer|min:1|max:365',
+        ]);
+
+        $type = $validated['type'];
+        $days = (int) ($validated['days'] ?? 7);
 
         try {
-            Artisan::call("marketplace:sync-{$type}", ['--account' => $marketplace->id]);
-            $msg = $type === 'orders' ? 'Pedidos sincronizados com sucesso.' : 'Anúncios sincronizados com sucesso.';
-            $flash = ['success' => $msg];
+            $params = ['--account' => $marketplace->id, '--days' => $days];
+            $exitCode = Artisan::call("marketplace:sync-{$type}", $params);
+            $output   = trim(Artisan::output());
+
+            if ($exitCode === 0 && ! str_contains($output, 'Falha') && ! str_contains($output, 'Nenhuma conta')) {
+                $label = $type === 'orders' ? 'Pedidos' : 'Anúncios';
+                $flash = ['success' => "{$label} sincronizados. {$output}"];
+            } else {
+                $flash = ['warning' => $output ?: 'Nenhum dado sincronizado. Verifique o status da conta.'];
+            }
         } catch (\Throwable $e) {
             $flash = ['error' => 'Erro ao sincronizar: ' . $e->getMessage()];
         }
 
         if ($request->wantsJson()) {
-            return response()->json(array_key_exists('success', $flash)
-                ? ['message' => $flash['success']]
-                : ['error' => $flash['error']], array_key_exists('error', $flash) ? 500 : 200);
+            $key = array_key_first($flash);
+            $code = $key === 'error' ? 500 : 200;
+            return response()->json([$key => $flash[$key]], $code);
         }
 
         return redirect()->route('marketplaces.show', $marketplace)->with($flash);

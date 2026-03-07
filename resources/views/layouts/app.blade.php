@@ -102,6 +102,20 @@
                     </div>
                     @endif
 
+                    @if (session('warning'))
+                    <div class="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400" x-data="{ show: true }" x-show="show" x-transition>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <x-heroicon-s-exclamation-triangle class="w-5 h-5" />
+                                <span class="whitespace-pre-line">{{ session('warning') }}</span>
+                            </div>
+                            <button @click="show = false" class="text-amber-500 hover:text-amber-700">
+                                <x-heroicon-s-x-mark class="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                    @endif
+
                     {{ $slot }}
                 </main>
             </div>

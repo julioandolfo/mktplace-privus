@@ -19,7 +19,7 @@ class SyncMarketplaceOrders extends Command
 {
     protected $signature = 'marketplace:sync-orders
                             {--account= : ID de conta específica (padrão: todas ativas)}
-                            {--days=1   : Quantos dias para trás sincronizar (quando sem last_synced_at)}';
+                            {--days=7   : Quantos dias para trás sincronizar (quando sem last_synced_at)}';
 
     protected $description = 'Importa pedidos/vendas do Mercado Livre para o sistema';
 
@@ -28,15 +28,28 @@ class SyncMarketplaceOrders extends Command
         $accounts = $this->resolveAccounts();
 
         if ($accounts->isEmpty()) {
-            $this->warn('Nenhuma conta ativa do Mercado Livre encontrada.');
-            return self::SUCCESS;
+            if ($id = $this->option('account')) {
+                // Check if the account exists but is inactive
+                $account = MarketplaceAccount::find($id);
+                if ($account) {
+                    $this->error("Conta [{$account->account_name}] existe mas está com status '{$account->status->value}' (não ativa). Verifique o token OAuth.");
+                } else {
+                    $this->error("Conta com ID={$id} não encontrada.");
+                }
+            } else {
+                $this->warn('Nenhuma conta ativa do Mercado Livre encontrada. Verifique se as contas estão com status "active" e com token válido.');
+            }
+            return self::FAILURE;
         }
+
+        $totalErrors = 0;
 
         foreach ($accounts as $account) {
-            $this->syncAccount($account);
+            $errors = $this->syncAccount($account);
+            $totalErrors += $errors;
         }
 
-        return self::SUCCESS;
+        return $totalErrors > 0 ? self::FAILURE : self::SUCCESS;
     }
 
     private function resolveAccounts()
@@ -51,13 +64,29 @@ class SyncMarketplaceOrders extends Command
         return $query->get();
     }
 
-    private function syncAccount(MarketplaceAccount $account): void
+    private function syncAccount(MarketplaceAccount $account): int
     {
         $this->info("Sincronizando pedidos: [{$account->id}] {$account->account_name}");
+
+        if (! $account->shop_id) {
+            $msg = "Conta não possui shop_id (user_id do ML). Configure-o na edição da conta.";
+            $account->update(['last_error' => $msg]);
+            $this->error("  {$msg}");
+            return 1;
+        }
+
+        if ($account->isTokenExpired()) {
+            $expiresAt = $account->token_expires_at?->format('d/m/Y H:i') ?? 'desconhecido';
+            $msg = "Token OAuth expirado em {$expiresAt}. Execute marketplace:refresh-tokens --force para tentar renovar.";
+            $this->warn("  {$msg}");
+            // Token may still work; continue and let the API call fail naturally
+        }
 
         $since = $account->last_synced_at
             ? $account->last_synced_at->subHour()
             : now()->subDays((int) $this->option('days'));
+
+        $this->line("  Buscando pedidos desde: {$since->format('d/m/Y H:i')}");
 
         $service = new MercadoLivreService($account);
         $synced  = 0;
@@ -77,19 +106,22 @@ class SyncMarketplaceOrders extends Command
                 }
             }
 
-            $account->update(['last_synced_at' => now()]);
+            $account->update(['last_synced_at' => now(), 'last_error' => null]);
 
             activity('marketplace')
                 ->performedOn($account)
                 ->withProperties(['synced' => $synced, 'errors' => $errors, 'since' => $since->toDateTimeString()])
                 ->log('Pedidos sincronizados');
 
-            $this->info("  ✓ {$synced} pedidos sincronizados" . ($errors ? ", {$errors} erros" : ''));
+            $this->info("  ✓ {$synced} pedido(s) sincronizado(s)" . ($errors ? ", {$errors} erro(s)" : ''));
+
+            return $errors;
 
         } catch (\Throwable $e) {
             $account->update(['last_error' => $e->getMessage()]);
             Log::error("SyncOrders: falha na conta {$account->id}: " . $e->getMessage());
             $this->error("  Falha na conta {$account->account_name}: " . $e->getMessage());
+            return 1;
         }
     }
 
