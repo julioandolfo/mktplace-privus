@@ -1233,6 +1233,149 @@
                 @endif
             </x-ui.card>
 
+            {{-- ══ Experiência de Compra (/reputation/items/{id}/purchase_experience) ══ --}}
+            @php
+                $hasPE      = !empty($purchaseExperience) && !isset($purchaseExperience['_redirect']);
+                $peRep      = $purchaseExperience['reputation']     ?? null;
+                $peColor    = $peRep['color'] ?? 'gray'; // green | yellow | orange | red
+                $peValue    = $peRep['value'] ?? null;   // 0-100 or -1
+                $peText     = $peRep['text']  ?? '';
+                $peProblems = $purchaseExperience['metrics_details']['problems'] ?? [];
+                $peTitle    = $purchaseExperience['title']['text'] ?? 'Experiência de compra';
+                $peSubs     = $purchaseExperience['subtitles'] ?? [];
+                $peFreeze   = $purchaseExperience['freeze'] ?? null;
+                $peColorMap = [
+                    'green'  => ['bg' => 'bg-emerald-500', 'text' => 'text-emerald-600 dark:text-emerald-400', 'badge' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400', 'ring' => '#10b981'],
+                    'yellow' => ['bg' => 'bg-amber-400',   'text' => 'text-amber-600 dark:text-amber-400',   'badge' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',   'ring' => '#f59e0b'],
+                    'orange' => ['bg' => 'bg-orange-500',  'text' => 'text-orange-600 dark:text-orange-400', 'badge' => 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400', 'ring' => '#f97316'],
+                    'red'    => ['bg' => 'bg-red-500',     'text' => 'text-red-600 dark:text-red-400',     'badge' => 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',     'ring' => '#ef4444'],
+                    'gray'   => ['bg' => 'bg-gray-400',    'text' => 'text-gray-500 dark:text-zinc-400',   'badge' => 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400',     'ring' => '#9ca3af'],
+                ];
+                $peStyle = $peColorMap[$peColor] ?? $peColorMap['gray'];
+            @endphp
+            <x-ui.card>
+                <x-slot name="title">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-1.5">
+                            <x-heroicon-o-face-smile class="w-4 h-4 text-blue-400" />
+                            <span>Experiência de Compra</span>
+                        </div>
+                        @if($hasPE && $peValue !== null)
+                        <span class="text-sm font-bold {{ $peStyle['text'] }}">
+                            {{ $peValue }}%
+                        </span>
+                        @endif
+                    </div>
+                </x-slot>
+
+                @if($hasPE)
+
+                {{-- Score bar --}}
+                <div class="mb-4">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full {{ $peStyle['badge'] }}">
+                            {{ $peText }}
+                        </span>
+                        <span class="text-xs text-gray-400 dark:text-zinc-500">{{ $peValue }}/100</span>
+                    </div>
+                    <div class="h-2 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-700 {{ $peStyle['bg'] }}"
+                             style="width: {{ max(2, $peValue) }}%"></div>
+                    </div>
+                </div>
+
+                {{-- Freeze notice --}}
+                @if($peFreeze)
+                <div class="mb-3 flex items-start gap-2 text-xs bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
+                    <x-heroicon-o-information-circle class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <p class="text-blue-700 dark:text-blue-300 leading-relaxed">{{ $peFreeze['text'] ?? '' }}</p>
+                </div>
+                @endif
+
+                {{-- Subtitles --}}
+                @if(!empty($peSubs))
+                <div class="mb-3 space-y-1">
+                    @foreach($peSubs as $sub)
+                    <p class="text-xs text-gray-600 dark:text-zinc-400 leading-relaxed">{{ $sub['text'] ?? '' }}</p>
+                    @endforeach
+                </div>
+                @endif
+
+                {{-- Problems list --}}
+                @if(!empty($peProblems))
+                <div class="space-y-2 mt-3">
+                    <p class="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Problemas detectados</p>
+                    @foreach($peProblems as $prob)
+                    @php
+                        $probColor  = $prob['color'] ?? '#9ca3af';
+                        $probL2     = $prob['level_two']['title']['text']  ?? ($prob['level_two']['title']['text']  ?? '');
+                        $probL3     = $prob['level_three']['title']['text'] ?? ($prob['level_three']['title']['text'] ?? '');
+                        $probRemedy = $prob['level_three']['remedy']['text'] ?? ($prob['level_three']['remedy']['text'] ?? '');
+                        $cancellations = $prob['cancellations'] ?? 0;
+                        $claims        = $prob['claims']        ?? 0;
+                    @endphp
+                    <div class="rounded-lg border border-gray-100 dark:border-zinc-800 p-3 space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: {{ $probColor }}"></span>
+                                <span class="text-xs font-semibold text-gray-800 dark:text-white">{{ $probL2 }}</span>
+                                @if(!empty($prob['tag']))
+                                <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-bold uppercase">{{ $prob['tag'] }}</span>
+                                @endif
+                            </div>
+                            <div class="flex items-center gap-2 text-[10px] text-gray-500 dark:text-zinc-500">
+                                @if($cancellations > 0)
+                                <span title="Cancelamentos">❌ {{ $cancellations }}</span>
+                                @endif
+                                @if($claims > 0)
+                                <span title="Reclamações">⚠️ {{ $claims }}</span>
+                                @endif
+                            </div>
+                        </div>
+                        @if($probL3)
+                        <p class="text-xs text-gray-600 dark:text-zinc-400 pl-4.5">{{ $probL3 }}</p>
+                        @endif
+                        @if($probRemedy)
+                        <div class="mt-1.5 pl-4 border-l-2 border-gray-200 dark:border-zinc-700">
+                            <p class="text-[11px] text-gray-500 dark:text-zinc-500 italic leading-relaxed">💡 {{ $probRemedy }}</p>
+                        </div>
+                        @endif
+                    </div>
+                    @endforeach
+                </div>
+                @elseif($peValue >= 100)
+                <div class="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+                    <x-heroicon-o-check-circle class="w-4 h-4" />
+                    <span>Nenhum problema detectado. Experiência excelente!</span>
+                </div>
+                @endif
+
+                {{-- Period --}}
+                @php
+                    $peDist = $purchaseExperience['metrics_details']['distribution'] ?? null;
+                @endphp
+                @if($peDist)
+                <p class="text-[10px] text-gray-400 dark:text-zinc-600 mt-3">
+                    Período: {{ \Carbon\Carbon::parse($peDist['from'])->format('d/m/Y') }} – {{ \Carbon\Carbon::parse($peDist['to'])->format('d/m/Y') }}
+                </p>
+                @endif
+
+                @elseif(isset($purchaseExperience['_redirect']))
+                <div class="flex items-start gap-2 text-xs text-gray-500 dark:text-zinc-400">
+                    <x-heroicon-o-information-circle class="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                    <p>Este anúncio usa a estrutura de User Product do ML. A experiência de compra está disponível no painel do vendedor.</p>
+                </div>
+                @else
+                <div class="flex items-start gap-2 text-xs text-gray-500 dark:text-zinc-400">
+                    <x-heroicon-o-clock class="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                    <div class="space-y-1">
+                        <p class="font-medium text-gray-600 dark:text-zinc-300">Sem dados de experiência de compra</p>
+                        <p>O ML só gera este indicador após as primeiras vendas do anúncio.</p>
+                    </div>
+                </div>
+                @endif
+            </x-ui.card>
+
             {{-- Status --}}
             <x-ui.card title="Status">
                 <div class="flex items-center justify-between mb-4">

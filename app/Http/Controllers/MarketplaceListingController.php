@@ -181,9 +181,10 @@ class MarketplaceListingController extends Controller
             $step     = 'load-products';
             $products = Product::active()->orderBy('name')->get(['id', 'name', 'sku', 'price']);
 
-            $liveData    = null;
-            $quality     = null;
-            $description = null;
+            $liveData          = null;
+            $quality           = null;
+            $purchaseExperience = null;
+            $description       = null;
             $categoryAttributes    = [];
             $availableListingTypes = [];
             $apiError              = null;
@@ -199,6 +200,9 @@ class MarketplaceListingController extends Controller
 
                     $step    = 'api-quality';
                     $quality = $service->getItemQuality($listing->external_id);
+
+                    $step               = 'api-purchase-experience';
+                    $purchaseExperience = $service->getPurchaseExperience($listing->external_id);
 
                     $step        = 'api-description';
                     $description = $service->getItemDescription($listing->external_id);
@@ -286,7 +290,7 @@ class MarketplaceListingController extends Controller
 
             $viewData = compact(
                 'listing', 'products',
-                'liveData', 'quality', 'description', 'categoryAttributes', 'availableListingTypes', 'apiError',
+                'liveData', 'quality', 'purchaseExperience', 'description', 'categoryAttributes', 'availableListingTypes', 'apiError',
                 'salesStats', 'totalQty', 'totalRevenue', 'avgTicket',
                 'aiConfigured'
             );

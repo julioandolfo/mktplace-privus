@@ -214,6 +214,51 @@ class MercadoLivreService
     }
 
     /**
+     * Get buyer purchase experience for an item.
+     *
+     * Endpoint: GET /reputation/items/{itemId}/purchase_experience/integrators?locale=pt_BR
+     * Returns reputation color/value, problems, distribution.
+     * Returns [] if item has no sales (score = -1) or on error.
+     *
+     * @see https://developers.mercadolivre.com.br/pt_br/experiencia-de-compra
+     */
+    public function getPurchaseExperience(string $itemId): array
+    {
+        try {
+            $response = Http::withToken($this->token())
+                ->timeout(15)
+                ->get(self::BASE_URL . "/reputation/items/{$itemId}/purchase_experience/integrators", [
+                    'locale' => 'pt_BR',
+                ]);
+
+            if ($response->status() === 302) {
+                // Item migrated to User Product structure — follow redirect or skip
+                Log::info("ML getPurchaseExperience({$itemId}): 302 redirect (User Product structure).");
+                return ['_redirect' => true];
+            }
+
+            if ($response->status() === 404) {
+                return [];
+            }
+
+            if ($response->successful()) {
+                $data = $response->json() ?? [];
+                // reputation.value = -1 means no sales yet
+                if (($data['reputation']['value'] ?? null) === -1) {
+                    return [];
+                }
+                return $data;
+            }
+
+            Log::warning("ML getPurchaseExperience({$itemId}): HTTP {$response->status()} — " . substr($response->body(), 0, 300));
+            return [];
+        } catch (\Throwable $e) {
+            Log::warning("ML getPurchaseExperience({$itemId}) exception: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
      * Get item quality/performance score from ML API.
      *
      * Endpoint: GET /item/{id}/performance  (singular "item")
