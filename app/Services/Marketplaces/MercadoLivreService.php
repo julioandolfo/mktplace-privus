@@ -302,18 +302,24 @@ class MercadoLivreService
     {
         $payload = ['plain_text' => $plainText];
         $path    = "/items/{$itemId}/description";
+        $url     = self::BASE_URL . $path;
+
+        Log::info("ML updateDescription({$itemId}): sending PUT to {$url}?api_version=2, payload length=" . mb_strlen($plainText));
 
         // PUT with mandatory api_version=2 for existing descriptions
         $response = Http::withToken($this->token())
             ->timeout(30)
-            ->put(self::BASE_URL . $path . '?api_version=2', $payload);
+            ->put($url . '?api_version=2', $payload);
+
+        Log::info("ML updateDescription({$itemId}): PUT response HTTP {$response->status()} body=" . substr($response->body(), 0, 500));
 
         // 404 = description doesn't exist yet → POST to create it
         if ($response->status() === 404) {
             Log::info("ML updateDescription({$itemId}): PUT 404, falling back to POST (create).");
             $response = Http::withToken($this->token())
                 ->timeout(30)
-                ->post(self::BASE_URL . $path, $payload);
+                ->post($url, $payload);
+            Log::info("ML updateDescription({$itemId}): POST response HTTP {$response->status()} body=" . substr($response->body(), 0, 500));
         }
 
         if ($response->failed()) {
@@ -322,7 +328,22 @@ class MercadoLivreService
             );
         }
 
-        Log::info("ML updateDescription({$itemId}): success (HTTP {$response->status()}).");
+        // Verify: re-read the description from ML to confirm it actually changed
+        try {
+            $verify = Http::withToken($this->token())
+                ->timeout(15)
+                ->get($url);
+            $verifyData = $verify->json() ?? [];
+            $savedText  = $verifyData['plain_text'] ?? '(empty)';
+            $matches    = trim($savedText) === trim($plainText);
+            Log::info("ML updateDescription({$itemId}): VERIFY — matches=" . ($matches ? 'YES' : 'NO')
+                . " saved_length=" . mb_strlen($savedText)
+                . " sent_length=" . mb_strlen($plainText)
+                . " saved_preview=" . substr($savedText, 0, 100));
+        } catch (\Throwable $e) {
+            Log::warning("ML updateDescription({$itemId}): verify GET failed: " . $e->getMessage());
+        }
+
         return $response->json() ?? [];
     }
 

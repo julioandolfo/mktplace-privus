@@ -1115,15 +1115,26 @@ SYS;
 
         try {
             $service = new MercadoLivreService($account);
-            $service->updateDescription($listing->external_id, $text);
-            Log::info("updateDescription: listing {$listing->external_id} — " . mb_strlen($text) . " chars.");
+            $result  = $service->updateDescription($listing->external_id, $text);
+
+            // After updating, immediately fetch back to verify
+            $verify = $service->getItemDescription($listing->external_id);
+            $savedText = $verify['plain_text'] ?? '';
+
+            if (! empty($savedText) && trim($savedText) === trim($text)) {
+                return redirect()->route('listings.show', $listing)
+                    ->with('success', 'Descrição atualizada com sucesso no Mercado Livre.');
+            }
+
+            // API returned success but description didn't change
+            Log::warning("updateDescription [{$listing->external_id}]: API returned success but description did NOT change. Result: " . json_encode($result));
+            return redirect()->route('listings.show', $listing)
+                ->with('info', 'A API do ML retornou sucesso, mas a descrição pode não ter sido alterada. Verifique no painel do ML. (Detalhes nos logs)');
+
         } catch (\Throwable $e) {
             Log::warning("updateDescription error [{$listing->external_id}]: " . $e->getMessage());
             return back()->with('error', 'Erro ao salvar descrição: ' . self::friendlyMlError($e->getMessage()));
         }
-
-        return redirect()->route('listings.show', $listing)
-            ->with('success', 'Descrição atualizada com sucesso no Mercado Livre.');
     }
 
     public function addPicture(Request $request, MarketplaceListing $listing)
