@@ -1488,4 +1488,280 @@ SYS;
 
         return response()->json($attributes);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  KITS
+    // ═══════════════════════════════════════════════════════════════════════
+
+    public function kitForm(MarketplaceListing $listing)
+    {
+        $listing->load('marketplaceAccount');
+        $account  = $listing->marketplaceAccount;
+
+        $liveData = null;
+        if ($account && $account->credentials) {
+            try {
+                $service  = new MercadoLivreService($account);
+                $liveData = $service->getItemWithVariations($listing->external_id);
+            } catch (\Throwable $e) {
+                Log::warning("kitForm: error fetching liveData for {$listing->external_id}: " . $e->getMessage());
+            }
+        }
+
+        // Get other ML listings from same account for combo selector
+        $otherListings = MarketplaceListing::where('marketplace_account_id', $listing->marketplace_account_id)
+            ->where('id', '!=', $listing->id)
+            ->where('status', 'active')
+            ->orderBy('title')
+            ->get(['id', 'external_id', 'title', 'price', 'meta']);
+
+        return view('marketplace-listings.kit', compact('listing', 'liveData', 'otherListings', 'account'));
+    }
+
+    /**
+     * Create multipack listings (Kit 2x, Kit 3x, …) from the base listing.
+     * Uses standard POST /items — works for all ML listings regardless of User Products model.
+     */
+    public function storeMultipack(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'qty_min'       => 'required|integer|min:2|max:10',
+            'qty_max'       => 'required|integer|min:2|max:10|gte:qty_min',
+            'qty_step'      => 'required|integer|min:1|max:5',
+            'discount_pct'  => 'nullable|numeric|min:0|max:80',
+            'listing_type'  => 'required|string|in:gold_special,gold_pro,free',
+            'free_shipping' => 'nullable|boolean',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta sem credenciais configuradas.');
+        }
+
+        try {
+            $service  = new MercadoLivreService($account);
+            $liveData = $service->getItemWithVariations($listing->external_id);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Não foi possível buscar dados do anúncio: ' . $e->getMessage());
+        }
+
+        $unitPrice   = (float) ($liveData['price'] ?? $listing->price);
+        $discountPct = (float) ($validated['discount_pct'] ?? 0) / 100;
+        $created     = 0;
+        $errors      = [];
+
+        $pictures = array_map(fn($p) => ['id' => $p['id']], array_slice($liveData['pictures'] ?? [], 0, 10));
+
+        for ($qty = $validated['qty_min']; $qty <= $validated['qty_max']; $qty += $validated['qty_step']) {
+            $kitPrice = round($unitPrice * $qty * (1 - $discountPct), 2);
+            $kitTitle = "Kit {$qty}x " . $listing->title;
+            if (mb_strlen($kitTitle) > 60) {
+                $kitTitle = "Kit {$qty}x " . mb_substr($listing->title, 0, 55 - mb_strlen("Kit {$qty}x "));
+            }
+
+            $payload = [
+                'title'              => $kitTitle,
+                'category_id'        => $liveData['category_id'] ?? null,
+                'price'              => $kitPrice,
+                'currency_id'        => 'BRL',
+                'available_quantity' => max(1, (int) floor(($liveData['available_quantity'] ?? 1) / $qty)),
+                'buying_mode'        => 'buy_it_now',
+                'listing_type_id'    => $validated['listing_type'],
+                'condition'          => $liveData['condition'] ?? 'new',
+                'pictures'           => $pictures,
+                'shipping'           => [
+                    'mode'          => $liveData['shipping']['mode'] ?? 'me2',
+                    'free_shipping' => (bool) ($validated['free_shipping'] ?? ($liveData['shipping']['free_shipping'] ?? false)),
+                ],
+            ];
+
+            // Attach base item description mentioning kit
+            try {
+                $desc = $service->getItemDescription($listing->external_id);
+                $baseDesc = $desc['plain_text'] ?? '';
+                $payload['description'] = ['plain_text' => "Kit com {$qty} unidades.\n\n" . $baseDesc];
+            } catch (\Throwable) {}
+
+            try {
+                $item = $service->publishItem($payload);
+
+                if (! empty($item['id'])) {
+                    MarketplaceListing::create([
+                        'marketplace_account_id' => $listing->marketplace_account_id,
+                        'external_id'            => $item['id'],
+                        'title'                  => $kitTitle,
+                        'price'                  => $kitPrice,
+                        'available_quantity'      => $payload['available_quantity'],
+                        'status'                 => 'active',
+                        'meta'                   => [
+                            'ml_item_id'      => $item['id'],
+                            'ml_permalink'    => $item['permalink'] ?? null,
+                            'listing_type_id' => $validated['listing_type'],
+                            'kit_base_id'     => $listing->external_id,
+                            'kit_quantity'    => $qty,
+                            'thumbnail'       => $pictures[0]['url'] ?? ($liveData['thumbnail'] ?? null),
+                        ],
+                    ]);
+                    $created++;
+                }
+            } catch (\Throwable $e) {
+                Log::warning("storeMultipack kit {$qty}x for {$listing->external_id}: " . $e->getMessage());
+                $errors[] = "Kit {$qty}x: " . self::friendlyMlError($e->getMessage());
+            }
+        }
+
+        $msg = "Kit(s) criado(s): {$created}";
+        if ($errors) {
+            return redirect()->route('listings.show', $listing)->with('info', $msg . '. Erros: ' . implode('; ', $errors));
+        }
+        return redirect()->route('listings.show', $listing)->with('success', "{$created} kit(s) multipack criado(s) com sucesso no Mercado Livre!");
+    }
+
+    /**
+     * Create a Virtual Kit (combo of 2+ different listings) via POST /items/kits.
+     * Requires user_product_id (MLBU...) — only available for User Products listings.
+     */
+    public function storeCombo(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'components'                      => 'required|array|min:2|max:6',
+            'components.*.user_product_id'    => 'required|string|starts_with:MLB',
+            'components.*.quantity'           => 'required|integer|min:1|max:10',
+            'family_name'                     => 'required|string|max:255',
+            'listing_type'                    => 'required|string|in:gold_special,gold_pro',
+            'price_mode'                      => 'required|in:manual,auto',
+            'price'                           => 'nullable|numeric|min:1',
+            'auto_discount'                   => 'nullable|numeric|min:0|max:80',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta sem credenciais configuradas.');
+        }
+
+        $autoPrice    = $validated['price_mode'] === 'auto';
+        $autoDiscount = ($validated['auto_discount'] ?? 0) / 100;
+        $manualPrice  = $autoPrice ? null : (float) ($validated['price'] ?? 0);
+
+        try {
+            $service = new MercadoLivreService($account);
+            $item    = $service->createVirtualKit(
+                familyName:    $validated['family_name'],
+                components:    $validated['components'],
+                price:         $manualPrice,
+                listingTypeId: $validated['listing_type'],
+                autoPrice:     $autoPrice,
+                autoDiscount:  $autoDiscount,
+            );
+
+            if (! empty($item['id'])) {
+                MarketplaceListing::create([
+                    'marketplace_account_id' => $listing->marketplace_account_id,
+                    'external_id'            => $item['id'],
+                    'title'                  => $item['title'] ?? $validated['family_name'],
+                    'price'                  => $item['price'] ?? 0,
+                    'available_quantity'     => $item['available_quantity'] ?? 0,
+                    'status'                 => 'active',
+                    'meta'                   => [
+                        'ml_item_id'      => $item['id'],
+                        'ml_permalink'    => $item['permalink'] ?? null,
+                        'listing_type_id' => $validated['listing_type'],
+                        'is_kit'          => true,
+                        'thumbnail'       => $item['thumbnail'] ?? null,
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::error("storeCombo for {$listing->external_id}: " . $e->getMessage());
+            return back()->with('error', 'Erro ao criar Kit Combo: ' . self::friendlyMlError($e->getMessage()));
+        }
+
+        return redirect()->route('listings.index')
+            ->with('success', 'Kit combo criado com sucesso no Mercado Livre!');
+    }
+
+    /** Search kit components (User Products) for combo creation (AJAX). */
+    public function searchKitComponents(Request $request, MarketplaceListing $listing)
+    {
+        $query          = $request->input('q', '');
+        $addedIds       = $request->input('added', []);
+        $mainProductId  = $request->input('main_product_id');
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return response()->json(['error' => 'Sem credenciais'], 422);
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+            $result  = $service->searchKitComponents($query, (array) $addedIds, $mainProductId);
+            return response()->json($result);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  PROMOTIONS
+    // ═══════════════════════════════════════════════════════════════════════
+
+    public function getPromotions(MarketplaceListing $listing)
+    {
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return response()->json([]);
+        }
+        try {
+            $service    = new MercadoLivreService($account);
+            $promotions = $service->getItemPromotions($listing->external_id);
+            return response()->json($promotions);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function storePromotion(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'deal_price'  => 'required|numeric|min:0.01',
+            'start_date'  => 'required|date',
+            'finish_date' => 'required|date|after:start_date',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta sem credenciais.');
+        }
+
+        $payload = [
+            'deal_price'     => (float) $validated['deal_price'],
+            'start_date'     => \Carbon\Carbon::parse($validated['start_date'])->format('Y-m-d\TH:i:s'),
+            'finish_date'    => \Carbon\Carbon::parse($validated['finish_date'])->format('Y-m-d\TH:i:s'),
+            'promotion_type' => 'PRICE_DISCOUNT',
+        ];
+
+        try {
+            $service = new MercadoLivreService($account);
+            $service->createPromotion($listing->external_id, $payload);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao criar promoção: ' . self::friendlyMlError($e->getMessage()));
+        }
+
+        return back()->with('success', 'Promoção de desconto criada com sucesso!');
+    }
+
+    public function deletePromotion(Request $request, MarketplaceListing $listing)
+    {
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta sem credenciais.');
+        }
+        try {
+            $service = new MercadoLivreService($account);
+            $service->deletePromotion($listing->external_id, $request->input('promotion_type', 'PRICE_DISCOUNT'));
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao remover promoção: ' . self::friendlyMlError($e->getMessage()));
+        }
+        return back()->with('success', 'Promoção removida com sucesso.');
+    }
 }

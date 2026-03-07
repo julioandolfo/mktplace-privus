@@ -112,6 +112,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/listings/{listing}/variations/{variationId}', [MarketplaceListingController::class, 'updateVariation'])->name('listings.update-variation');
     Route::delete('/listings/{listing}/variations/{variationId}', [MarketplaceListingController::class, 'deleteVariation'])->name('listings.delete-variation');
     Route::post('/listings/{listing}/variations', [MarketplaceListingController::class, 'addVariation'])->name('listings.add-variation');
+    // Kits
+    Route::get('/listings/{listing}/kit', [MarketplaceListingController::class, 'kitForm'])->name('listings.kit-form');
+    Route::post('/listings/{listing}/kit/multipack', [MarketplaceListingController::class, 'storeMultipack'])->name('listings.store-multipack');
+    Route::post('/listings/{listing}/kit/combo', [MarketplaceListingController::class, 'storeCombo'])->name('listings.store-combo');
+    Route::get('/listings/{listing}/kit/search-components', [MarketplaceListingController::class, 'searchKitComponents'])->name('listings.kit-search-components');
+    // Promotions
+    Route::get('/listings/{listing}/promotions', [MarketplaceListingController::class, 'getPromotions'])->name('listings.promotions');
+    Route::post('/listings/{listing}/promotions', [MarketplaceListingController::class, 'storePromotion'])->name('listings.store-promotion');
+    Route::delete('/listings/{listing}/promotions', [MarketplaceListingController::class, 'deletePromotion'])->name('listings.delete-promotion');
 
     // Logs
     Route::get('/logs', [ActivityLogController::class, 'index'])->name('logs.index');

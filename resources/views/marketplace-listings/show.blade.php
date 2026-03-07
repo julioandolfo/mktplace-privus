@@ -1,6 +1,10 @@
 <x-app-layout>
     <x-slot name="header">{{ $listing->title }}</x-slot>
     <x-slot name="actions">
+        <a href="{{ route('listings.kit-form', $listing) }}" class="btn-secondary btn-sm">
+            <x-heroicon-o-squares-plus class="w-4 h-4" />
+            Criar Kit
+        </a>
         @if($liveData && isset($liveData['permalink']))
         <a href="{{ $liveData['permalink'] }}" target="_blank" class="btn-secondary btn-sm">
             <x-heroicon-o-arrow-top-right-on-square class="w-4 h-4" />
@@ -1376,6 +1380,90 @@
                 @endif
             </x-ui.card>
 
+            {{-- ══ Promoções ══════════════════════════════════════════════════ --}}
+            <x-ui.card x-data="promoCard('{{ route('listings.promotions', $listing) }}', '{{ route('listings.store-promotion', $listing) }}', '{{ route('listings.delete-promotion', $listing) }}')">
+                <x-slot name="title">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-1.5">
+                            <x-heroicon-o-tag class="w-4 h-4 text-rose-400" />
+                            <span>Promoções</span>
+                        </div>
+                        <button type="button" @click="showForm = !showForm"
+                            class="text-xs text-primary-500 hover:text-primary-400 flex items-center gap-1">
+                            <x-heroicon-o-plus class="w-3.5 h-3.5" />
+                            Nova promoção
+                        </button>
+                    </div>
+                </x-slot>
+
+                {{-- Active promotions --}}
+                <div class="space-y-2 mb-3">
+                    <template x-if="loading">
+                        <div class="flex items-center gap-2 text-xs text-gray-400">
+                            <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            Carregando promoções...
+                        </div>
+                    </template>
+                    <template x-if="!loading && promotions.length === 0">
+                        <p class="text-xs text-gray-400 dark:text-zinc-500">Nenhuma promoção ativa neste anúncio.</p>
+                    </template>
+                    <template x-for="promo in promotions" :key="promo.id || promo.promotion_type">
+                        <div class="flex items-center justify-between py-2 px-3 rounded-lg bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800">
+                            <div>
+                                <p class="text-xs font-semibold text-rose-700 dark:text-rose-400">
+                                    R$ <span x-text="parseFloat(promo.deal_price || 0).toFixed(2).replace('.', ',')"></span>
+                                    <span class="font-normal text-rose-500 ml-1" x-text="promo.promotion_type?.replace('_', ' ')"></span>
+                                </p>
+                                <p class="text-[10px] text-rose-500/80">
+                                    <span x-text="promo.start_date ? new Date(promo.start_date).toLocaleDateString('pt-BR') : ''"></span>
+                                    <span x-show="promo.finish_date"> até <span x-text="new Date(promo.finish_date).toLocaleDateString('pt-BR')"></span></span>
+                                </p>
+                            </div>
+                            <button type="button" @click="deletePromo(promo.promotion_type || 'PRICE_DISCOUNT')"
+                                class="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 transition-colors" title="Remover promoção">
+                                <x-heroicon-o-trash class="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- New promotion form --}}
+                <div x-show="showForm" x-cloak class="border-t border-gray-100 dark:border-zinc-800 pt-3 mt-1">
+                    <form method="POST" :action="storeUrl" class="space-y-3">
+                        @csrf
+                        <div class="space-y-1">
+                            <label class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Preço com desconto</label>
+                            <div class="relative">
+                                <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">R$</span>
+                                <input type="number" name="deal_price" step="0.01" min="0.01" required
+                                    class="form-input pl-7 w-full text-sm" placeholder="0,00">
+                            </div>
+                            <p class="text-[10px] text-gray-400">Preço atual: R$ {{ number_format($listing->price, 2, ',', '.') }} · Desconto mín: 5% · Máx: 80%</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="space-y-1">
+                                <label class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Início</label>
+                                <input type="date" name="start_date" required class="form-input w-full text-sm"
+                                    min="{{ now()->format('Y-m-d') }}" value="{{ now()->format('Y-m-d') }}">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Término</label>
+                                <input type="date" name="finish_date" required class="form-input w-full text-sm"
+                                    min="{{ now()->addDay()->format('Y-m-d') }}" max="{{ now()->addDays(14)->format('Y-m-d') }}">
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-amber-600 dark:text-amber-500">Duração máxima: 14 dias. Requer reputação verde e anúncio ativo.</p>
+                        <div class="flex gap-2">
+                            <button type="submit" class="btn-primary btn-sm flex-1">
+                                <x-heroicon-o-tag class="w-3.5 h-3.5" />
+                                Criar desconto
+                            </button>
+                            <button type="button" @click="showForm = false" class="btn-ghost btn-sm">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </x-ui.card>
+
             {{-- Status --}}
             <x-ui.card title="Status">
                 <div class="flex items-center justify-between mb-4">
@@ -2050,5 +2138,42 @@
 })();
 </script>
 @endif
+
+<script>
+function promoCard(loadUrl, storeUrl, deleteUrl) {
+    return {
+        loadUrl, storeUrl, deleteUrl,
+        promotions: [],
+        loading: true,
+        showForm: false,
+        async init() {
+            try {
+                const r = await fetch(this.loadUrl);
+                const data = await r.json();
+                this.promotions = Array.isArray(data) ? data : (data ? [data] : []);
+            } catch(e) { this.promotions = []; }
+            this.loading = false;
+        },
+        async deletePromo(type) {
+            if (!confirm('Remover esta promoção?')) return;
+            try {
+                const r = await fetch(this.deleteUrl + '?promotion_type=' + type, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ promotion_type: type }),
+                });
+                if (r.ok) {
+                    this.promotions = this.promotions.filter(p => (p.promotion_type || 'PRICE_DISCOUNT') !== type);
+                } else {
+                    alert('Erro ao remover promoção.');
+                }
+            } catch(e) { alert('Erro: ' + e.message); }
+        }
+    };
+}
+</script>
 
 </x-app-layout>

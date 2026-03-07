@@ -480,6 +480,152 @@ class MercadoLivreService
         return $this->post('/items', $data);
     }
 
+    // ─── Kits ────────────────────────────────────────────────────────────────
+
+    /**
+     * Search for eligible kit components (User Products) for a seller.
+     * First call: no added_products. Subsequent calls: include added_products + ONLY_ELIGIBLE filter.
+     *
+     * @see https://developers.mercadolivre.com.br/pt_br/kits-virtuais
+     */
+    public function searchKitComponents(string $query, array $addedProductIds = [], ?string $mainProductId = null): array
+    {
+        $sellerId = $this->requireShopId();
+
+        $body = ['active_channels' => ['marketplace']];
+
+        if ($mainProductId) {
+            $body['main_product_id'] = $mainProductId;
+        }
+        if (! empty($addedProductIds)) {
+            $body['added_products'] = $addedProductIds;
+            $body['search_filters'] = ['only_eligible' => 'ONLY_ELIGIBLE'];
+        }
+
+        try {
+            $response = Http::withToken($this->token())
+                ->timeout(20)
+                ->post(self::BASE_URL . "/users/{$sellerId}/kits/components/search?searchText=" . urlencode($query) . '&limit=10', $body);
+
+            if ($response->failed()) {
+                Log::warning("ML searchKitComponents: HTTP {$response->status()} — " . substr($response->body(), 0, 300));
+                return [];
+            }
+            return $response->json() ?? [];
+        } catch (\Throwable $e) {
+            Log::warning("ML searchKitComponents exception: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Create a Virtual Kit listing (POST /items/kits).
+     * Requires user_product_id (MLBU...) for each component.
+     *
+     * @param array $components [['user_product_id' => 'MLBU...', 'quantity' => 2, 'discount' => 0.10], ...]
+     * @see https://developers.mercadolivre.com.br/pt_br/kits-virtuais
+     */
+    public function createVirtualKit(string $familyName, array $components, ?float $price, string $listingTypeId, ?array $thumbnail = null, bool $autoPrice = false, float $autoDiscount = 0): array
+    {
+        $bundleComponents = array_map(function ($c) use ($autoPrice, $autoDiscount) {
+            $comp = [
+                'type'            => 'user_product',
+                'user_product_id' => $c['user_product_id'],
+                'quantity'        => (int) ($c['quantity'] ?? 1),
+                'automatic_price' => null,
+            ];
+            if ($autoPrice && $autoDiscount > 0) {
+                $comp['automatic_price'] = ['discount' => round($autoDiscount, 2)];
+            }
+            return $comp;
+        }, $components);
+
+        $payload = [
+            'family_name'     => $familyName,
+            'channels'        => ['marketplace'],
+            'currency_id'     => 'BRL',
+            'listing_type_id' => $listingTypeId,
+            'bundle'          => [
+                'type'       => 'kit',
+                'components' => $bundleComponents,
+            ],
+        ];
+
+        if (! $autoPrice && $price !== null) {
+            $payload['price'] = round($price, 2);
+        }
+
+        if ($thumbnail) {
+            $payload['thumbnail'] = $thumbnail;
+        }
+
+        return $this->post('/items/kits', $payload);
+    }
+
+    // ─── Promotions ──────────────────────────────────────────────────────────
+
+    /**
+     * Get active promotions for an item.
+     * @see https://developers.mercadolivre.com.br/pt_br/desconto-individua
+     */
+    public function getItemPromotions(string $itemId): array
+    {
+        try {
+            $response = Http::withToken($this->token())
+                ->timeout(15)
+                ->get(self::BASE_URL . "/seller-promotions/items/{$itemId}", [
+                    'promotion_type' => 'PRICE_DISCOUNT',
+                ]);
+
+            if ($response->status() === 404) {
+                return [];
+            }
+            if ($response->failed()) {
+                Log::warning("ML getItemPromotions({$itemId}): HTTP {$response->status()}");
+                return [];
+            }
+            $data = $response->json() ?? [];
+            return is_array($data) ? $data : [$data];
+        } catch (\Throwable $e) {
+            Log::warning("ML getItemPromotions({$itemId}) exception: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Create a PRICE_DISCOUNT promotion on an item.
+     *
+     * @param array $data ['deal_price' => float, 'start_date' => 'Y-m-d\TH:i:s', 'finish_date' => ..., 'promotion_type' => 'PRICE_DISCOUNT']
+     * @see https://developers.mercadolivre.com.br/pt_br/desconto-individua
+     */
+    public function createPromotion(string $itemId, array $data): array
+    {
+        return $this->post("/seller-promotions/items/{$itemId}", $data);
+    }
+
+    /**
+     * Delete an active promotion from an item.
+     */
+    public function deletePromotion(string $itemId, string $promotionType = 'PRICE_DISCOUNT'): array
+    {
+        try {
+            $response = Http::withToken($this->token())
+                ->timeout(15)
+                ->delete(self::BASE_URL . "/seller-promotions/items/{$itemId}", [
+                    'promotion_type' => $promotionType,
+                ]);
+
+            if ($response->failed()) {
+                throw new \RuntimeException(
+                    "ML API DELETE error [{$response->status()}] /seller-promotions/items/{$itemId}: " . $response->body()
+                );
+            }
+            return $response->json() ?? [];
+        } catch (\Throwable $e) {
+            throw $e;
+        }
+    }
+
     // ─── Messages ────────────────────────────────────────────────────────────
 
     /**
