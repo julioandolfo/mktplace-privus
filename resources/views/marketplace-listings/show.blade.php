@@ -209,13 +209,16 @@
                     </div>
 
                     {{-- handling_time não é editável via API ML para anúncios ativos --}}
-                    @php $currentHandling = $live['shipping']['handling_time'] ?? 0; @endphp
+                    @php $currentHandling = $live['shipping']['handling_time'] ?? null; @endphp
                     <input type="hidden" name="handling_time" value="{{ (int)$currentHandling }}">
 
                     <div class="flex items-start gap-2 text-xs bg-gray-50 dark:bg-zinc-800/40 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-2.5">
                         <x-heroicon-o-information-circle class="w-4 h-4 flex-shrink-0 text-gray-400 dark:text-zinc-500 mt-0.5" />
                         <p class="text-gray-500 dark:text-zinc-400">
-                            <strong>Prazo de disponibilidade</strong> (atual: {{ $currentHandling === 0 ? 'mesmo dia' : $currentHandling . ' dia(s)' }})
+                            <strong>Prazo de disponibilidade</strong>
+                            @if($currentHandling !== null && $currentHandling > 0)
+                                (atual: {{ $currentHandling }} dia{{ $currentHandling > 1 ? 's' : '' }})
+                            @endif
                             não pode ser alterado via API ML. Edite diretamente no
                             @if(!empty($live['permalink']))
                                 <a href="{{ $live['permalink'] }}" target="_blank" class="text-primary-500 underline">painel do ML</a>.
@@ -1406,7 +1409,9 @@
                     $shipping = $live['shipping'];
                     $isMandatoryFreeShipping = in_array('mandatory_free_shipping', $shipping['tags'] ?? []);
                     $dims = $shipping['dimensions'] ?? null;
-                    $currentHandlingTime = $shipping['handling_time'] ?? 0;
+                    $currentHandlingTime = isset($shipping['handling_time']) && $shipping['handling_time'] > 0
+                        ? (int) $shipping['handling_time']
+                        : null;
                 @endphp
                 <div x-data="{ editing: false }">
                     <div class="flex items-center justify-between mb-3">
@@ -1444,7 +1449,7 @@
                                 {{ ($shipping['local_pick_up'] ?? false) ? 'Sim' : 'Não' }}
                             </x-ui.badge>
                         </div>
-                        @if($currentHandlingTime > 0)
+                        @if($currentHandlingTime !== null)
                         <div class="flex justify-between items-center">
                             <span class="text-gray-500 dark:text-zinc-400">Prazo disponib.</span>
                             <span class="text-xs">{{ $currentHandlingTime }} dia{{ $currentHandlingTime !== 1 ? 's' : '' }}</span>

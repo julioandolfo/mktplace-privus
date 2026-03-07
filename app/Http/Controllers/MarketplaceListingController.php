@@ -1116,12 +1116,14 @@ SYS;
         try {
             $service = new MercadoLivreService($account);
             $service->updateDescription($listing->external_id, $text);
+            Log::info("updateDescription: listing {$listing->external_id} — " . mb_strlen($text) . " chars.");
         } catch (\Throwable $e) {
+            Log::warning("updateDescription error [{$listing->external_id}]: " . $e->getMessage());
             return back()->with('error', 'Erro ao salvar descrição: ' . self::friendlyMlError($e->getMessage()));
         }
 
         return redirect()->route('listings.show', $listing)
-            ->with('success', 'Descrição atualizada com sucesso.');
+            ->with('success', 'Descrição atualizada com sucesso no Mercado Livre.');
     }
 
     public function addPicture(Request $request, MarketplaceListing $listing)

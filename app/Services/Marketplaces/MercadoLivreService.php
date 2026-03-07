@@ -289,11 +289,39 @@ class MercadoLivreService
     }
 
     /**
-     * Update item description via ML API (separate endpoint).
+     * Create or update item description via ML API.
+     *
+     * ML uses two different methods:
+     *  - POST /items/{id}/description  → create (when no description exists yet)
+     *  - PUT  /items/{id}/description  → update (when description already exists)
+     *
+     * We first try PUT; if ML returns 404 (no description yet), we fall back to POST.
      */
     public function updateDescription(string $itemId, string $plainText): array
     {
-        return $this->put("/items/{$itemId}/description", ['plain_text' => $plainText]);
+        $payload = ['plain_text' => $plainText];
+        $path    = "/items/{$itemId}/description";
+
+        $response = Http::withToken($this->token())
+            ->timeout(30)
+            ->put(self::BASE_URL . $path, $payload);
+
+        // 404 means the description doesn't exist yet → use POST to create it
+        if ($response->status() === 404) {
+            Log::info("ML updateDescription({$itemId}): PUT returned 404, falling back to POST.");
+            $response = Http::withToken($this->token())
+                ->timeout(30)
+                ->post(self::BASE_URL . $path, $payload);
+        }
+
+        if ($response->failed()) {
+            throw new \RuntimeException(
+                "ML API description error [{$response->status()}] {$path}: " . $response->body()
+            );
+        }
+
+        Log::info("ML updateDescription({$itemId}): success (HTTP {$response->status()}).");
+        return $response->json() ?? [];
     }
 
     /**
