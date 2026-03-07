@@ -100,6 +100,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/listings/{listing}/update-description', [MarketplaceListingController::class, 'updateDescription'])->name('listings.update-description');
     Route::post('/listings/{listing}/ai-description', [MarketplaceListingController::class, 'generateDescriptionAi'])->name('listings.ai-description');
     Route::post('/listings/{listing}/ai-image', [MarketplaceListingController::class, 'generateImageAi'])->name('listings.ai-image');
+    Route::post('/listings/{listing}/ai-improve', [MarketplaceListingController::class, 'improveWithAi'])->name('listings.ai-improve');
     Route::post('/listings/{listing}/listing-type', [MarketplaceListingController::class, 'updateListingType'])->name('listings.update-listing-type');
     Route::post('/listings/{listing}/shipping', [MarketplaceListingController::class, 'updateShipping'])->name('listings.update-shipping');
     Route::post('/listings/{listing}/pictures', [MarketplaceListingController::class, 'addPicture'])->name('listings.add-picture');

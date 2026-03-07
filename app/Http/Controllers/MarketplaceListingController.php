@@ -625,6 +625,249 @@ class MarketplaceListingController extends Controller
     }
 
     /**
+     * Analyze pending quality variables and automatically improve the listing using AI.
+     * Handles: description, title, and technical attribute suggestions.
+     * Returns a JSON stream of completed improvements and any errors.
+     */
+    public function improveWithAi(MarketplaceListing $listing): \Illuminate\Http\JsonResponse
+    {
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return response()->json(['error' => 'Conta não encontrada ou sem credenciais.'], 422);
+        }
+
+        try {
+            $ai = new AiService();
+            if (! $ai->isConfigured()) {
+                return response()->json([
+                    'error' => 'IA não configurada. Acesse Configurações → Inteligência Artificial.',
+                ], 422);
+            }
+
+            $service     = new MercadoLivreService($account);
+            $quality     = $service->getItemQuality($listing->external_id);
+            $liveData    = $service->getItemWithVariations($listing->external_id);
+            $description = $service->getItemDescription($listing->external_id);
+            $categoryAttributes = ! empty($liveData['category_id'])
+                ? $service->getCategoryAttributes($liveData['category_id'])
+                : [];
+
+            $improvements = [];
+            $skipped      = [];
+            $errors       = [];
+
+            $isCatalog    = ! empty($liveData['family_name']) || ! empty($liveData['catalog_product_id']);
+            $hasVariations = ! empty($liveData['variations']);
+            $title        = $liveData['title'] ?? $listing->title;
+            $category     = $liveData['category_id'] ?? '';
+
+            // Collect all pending quality variables across all buckets
+            $pendingVars = collect($quality['buckets'] ?? [])
+                ->flatMap(fn ($b) => $b['variables'] ?? [])
+                ->where('status', 'PENDING')
+                ->values();
+
+            if ($pendingVars->isEmpty()) {
+                return response()->json([
+                    'improvements' => [],
+                    'skipped'      => [],
+                    'errors'       => [],
+                    'message'      => 'Parabéns! Não há itens pendentes de melhoria na qualidade do anúncio.',
+                ]);
+            }
+
+            foreach ($pendingVars as $variable) {
+                $varKey = $variable['key'] ?? '';
+
+                // ── Description ─────────────────────────────────────────────
+                if (str_contains($varKey, 'DESCRIPTION') || str_contains($varKey, 'DESCRI')) {
+                    try {
+                        $existingDesc = $description['plain_text'] ?? '';
+
+                        // Build rich context from live attributes
+                        $attrContext = collect($liveData['attributes'] ?? [])
+                            ->filter(fn ($a) => ! empty($a['value_name']))
+                            ->mapWithKeys(fn ($a) => [$a['name'] ?? $a['id'] => $a['value_name']])
+                            ->toArray();
+
+                        $prompts = AiService::buildDescriptionPrompt(
+                            title: $title,
+                            category: $category,
+                            existingDescription: $existingDesc,
+                            attributes: $attrContext,
+                        );
+
+                        $newDesc = $ai->generateText($prompts['system'], $prompts['user'], 2000);
+
+                        if (! empty($newDesc)) {
+                            $service->updateDescription($listing->external_id, $newDesc);
+                            $improvements[] = [
+                                'icon'    => '📝',
+                                'label'   => 'Descrição',
+                                'detail'  => 'Descrição profissional gerada e salva com sucesso.',
+                            ];
+                        }
+                    } catch (\Throwable $e) {
+                        $errors[] = 'Descrição: ' . $e->getMessage();
+                    }
+                }
+
+                // ── Title ────────────────────────────────────────────────────
+                elseif (str_contains($varKey, 'TITLE')) {
+                    if ($isCatalog) {
+                        $skipped[] = ['label' => 'Título', 'reason' => 'Item vinculado ao catálogo ML — título gerenciado pelo ML.'];
+                        continue;
+                    }
+                    try {
+                        $system = <<<'SYS'
+Você é especialista em SEO e copywriting para Mercado Livre Brasil.
+Crie um título otimizado para máxima visibilidade nos resultados de busca.
+Regras:
+- Máximo 60 caracteres
+- Inclua: produto + característica principal + marca (se conhecida) + aplicação/compatibilidade
+- Sem pontuação desnecessária, sem emojis, sem repetições
+- Retorne APENAS o título, sem explicações ou aspas
+SYS;
+                        $user = "Produto: {$title}\nCrie um título otimizado (máx 60 chars):";
+
+                        $newTitle = trim($ai->generateText($system, $user, 80));
+                        $newTitle = mb_substr(preg_replace('/^["\']|["\']$/', '', $newTitle), 0, 60);
+
+                        if (! empty($newTitle) && $newTitle !== $title) {
+                            $service->updateItem($listing->external_id, ['title' => $newTitle]);
+                            $listing->update(['title' => $newTitle]);
+                            $improvements[] = [
+                                'icon'   => '✏️',
+                                'label'  => 'Título',
+                                'detail' => "Atualizado para: \"{$newTitle}\"",
+                            ];
+                        }
+                    } catch (\Throwable $e) {
+                        $errors[] = 'Título: ' . $e->getMessage();
+                    }
+                }
+
+                // ── Technical Specifications / Attributes ─────────────────
+                elseif (str_contains($varKey, 'TECHNICAL_SPEC') || str_contains($varKey, 'TS_MAIN')) {
+                    try {
+                        // Find attributes that are required and missing
+                        $currentAttrs = collect($liveData['attributes'] ?? [])->keyBy('id');
+                        $missingAttrs = collect($categoryAttributes)
+                            ->filter(fn ($a) =>
+                                in_array('required', $a['tags'] ?? [])
+                                && ! in_array('read_only', $a['tags'] ?? [])
+                                && (
+                                    empty($currentAttrs->get($a['id'] ?? '')['value_name'])
+                                    || (string)($currentAttrs->get($a['id'] ?? '')['value_id'] ?? '') === '-1'
+                                )
+                            )
+                            ->take(15); // limit to avoid huge prompts
+
+                        if ($missingAttrs->isEmpty()) {
+                            $skipped[] = ['label' => 'Atributos técnicos', 'reason' => 'Nenhum atributo obrigatório faltando.'];
+                            continue;
+                        }
+
+                        // Build prompt asking AI to fill in missing attributes
+                        $attrList = $missingAttrs->map(function ($a) {
+                            $allowed = collect($a['allowed_values'] ?? [])->pluck('name')->implode(', ');
+                            $unit    = collect($a['allowed_units'] ?? [])->pluck('name')->implode('/');
+                            $hint    = $allowed ? "Opções: [{$allowed}]" : ($unit ? "Unidade: {$unit}" : '');
+                            return "- {$a['name']}" . ($hint ? " ({$hint})" : '');
+                        })->implode("\n");
+
+                        $system = <<<'SYS'
+Você é especialista em especificações técnicas de produtos para e-commerce brasileiro.
+Com base no título do produto, preencha os atributos técnicos solicitados.
+Responda SOMENTE em JSON puro, sem markdown, no formato:
+{"ATTR_ID": "valor", "ATTR_ID2": "valor2"}
+Use exatamente os valores das opções fornecidas quando disponíveis.
+Se não souber o valor com certeza, não inclua o atributo na resposta.
+SYS;
+                        $attrIds = $missingAttrs->mapWithKeys(fn ($a) => [$a['id'] => $a['name']]);
+                        $user = "Produto: {$title}\n\nAtributos para preencher:\n{$attrList}\n\nResponda em JSON usando os IDs: " . $attrIds->keys()->implode(', ');
+
+                        $raw = $ai->generateText($system, $user, 800);
+                        // Extract JSON from response (AI sometimes wraps it in text)
+                        if (preg_match('/\{[^{}]+\}/s', $raw, $m)) {
+                            $suggested = json_decode($m[0], true) ?? [];
+                        } else {
+                            $suggested = json_decode($raw, true) ?? [];
+                        }
+
+                        if (empty($suggested)) {
+                            $skipped[] = ['label' => 'Atributos técnicos', 'reason' => 'IA não conseguiu sugerir valores para os atributos.'];
+                            continue;
+                        }
+
+                        // Build the full attributes payload (existing + AI suggestions)
+                        $existingPayload = collect($liveData['attributes'] ?? [])
+                            ->filter(fn ($a) => ! empty($a['value_name']) && (string)($a['value_id'] ?? '') !== '-1')
+                            ->map(fn ($a) => ['id' => $a['id'], 'value_name' => $a['value_name']])
+                            ->values()
+                            ->toArray();
+
+                        $aiPayload = collect($suggested)
+                            ->map(fn ($val, $id) => ['id' => $id, 'value_name' => (string)$val])
+                            ->values()
+                            ->toArray();
+
+                        // Merge: existing attrs + AI suggestions (AI takes precedence for missing ones)
+                        $existingIds = collect($existingPayload)->pluck('id')->toArray();
+                        $newOnes     = array_filter($aiPayload, fn ($a) => ! in_array($a['id'], $existingIds));
+                        $fullPayload = array_merge($existingPayload, array_values($newOnes));
+
+                        $service->updateItem($listing->external_id, ['attributes' => $fullPayload]);
+
+                        $filledCount = count($suggested);
+                        $improvements[] = [
+                            'icon'   => '📋',
+                            'label'  => 'Atributos técnicos',
+                            'detail' => "{$filledCount} atributo(s) preenchido(s) automaticamente: " .
+                                collect($suggested)->map(fn ($v, $id) => ($attrIds[$id] ?? $id) . ': ' . $v)->implode(', '),
+                        ];
+                    } catch (\Throwable $e) {
+                        $errors[] = 'Atributos: ' . $e->getMessage();
+                    }
+                }
+
+                // ── Free Shipping, Financing, GTIN, Stock, Pictures — not auto-fixable ──
+                elseif (str_contains($varKey, 'FREE_SHIPPING') || str_contains($varKey, 'SHIPPING')) {
+                    $skipped[] = ['label' => 'Frete grátis', 'reason' => 'Decisão comercial — configure na seção Frete.'];
+                } elseif (str_contains($varKey, 'FINANCING')) {
+                    $skipped[] = ['label' => 'Parcelamento', 'reason' => 'Requer configuração no Mercado Pago.'];
+                } elseif (str_contains($varKey, 'GTIN')) {
+                    $skipped[] = ['label' => 'Código universal (GTIN/EAN)', 'reason' => 'Informe manualmente no painel ML.'];
+                } elseif (str_contains($varKey, 'PICTURE')) {
+                    $skipped[] = ['label' => 'Fotos do produto', 'reason' => 'Use "Gerar com IA" na seção de imagens ou faça upload manualmente.'];
+                } elseif (str_contains($varKey, 'STOCK')) {
+                    $skipped[] = ['label' => 'Estoque', 'reason' => 'Configure o estoque no formulário do anúncio.'];
+                } elseif (str_contains($varKey, 'VERIFICATION')) {
+                    $skipped[] = ['label' => 'Verificação de dados', 'reason' => 'Complete no painel do Mercado Livre.'];
+                } elseif (str_contains($varKey, 'VIDEO')) {
+                    $skipped[] = ['label' => 'Vídeo do produto', 'reason' => 'Adicione um vídeo manualmente no ML.'];
+                }
+            }
+
+            $totalDone = count($improvements);
+            $message   = $totalDone > 0
+                ? "{$totalDone} melhoria(s) aplicada(s) com sucesso! Recarregue a página para ver as mudanças."
+                : 'Nenhuma melhoria automática pôde ser aplicada. Verifique os itens ignorados.';
+
+            return response()->json([
+                'improvements' => $improvements,
+                'skipped'      => $skipped,
+                'errors'       => $errors,
+                'message'      => $message,
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error("improveWithAi [{$listing->external_id}]: " . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Generate a product description using the configured AI provider (OpenRouter/OpenAI/Anthropic).
      * Returns JSON: { description: string } or { error: string }
      */

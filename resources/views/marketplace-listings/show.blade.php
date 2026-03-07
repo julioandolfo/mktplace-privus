@@ -1114,6 +1114,85 @@
                 </div>
                 @endif
 
+                {{-- ── Botão Melhorar com IA ─────────────────────────────── --}}
+                @if($hasQuality && $aiConfigured && $completedVars < $totalVars)
+                <div class="mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800" id="ai-improve-section">
+
+                    {{-- Botão principal --}}
+                    <button type="button" id="btn-ai-improve"
+                        class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
+                               bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700
+                               text-white text-sm font-semibold shadow-sm transition-all duration-200
+                               disabled:opacity-60 disabled:cursor-not-allowed">
+                        <x-heroicon-o-sparkles class="w-4 h-4" />
+                        Melhorar com IA
+                        <span class="text-xs font-normal opacity-80">({{ $totalVars - $completedVars }} pendente{{ ($totalVars - $completedVars) > 1 ? 's' : '' }})</span>
+                    </button>
+                    <p class="text-[10px] text-center text-gray-400 dark:text-zinc-600 mt-1.5">
+                        Aplica automaticamente: descrição, título e atributos técnicos
+                    </p>
+
+                    {{-- Loading overlay --}}
+                    <div id="ai-improve-loading" class="hidden mt-3 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                        <div class="flex items-center gap-2 mb-2">
+                            <svg class="animate-spin w-4 h-4 text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <p class="text-xs font-medium text-purple-700 dark:text-purple-300">Melhorando anúncio com IA...</p>
+                        </div>
+                        <p id="ai-improve-status-text" class="text-xs text-purple-600 dark:text-purple-400">
+                            Analisando qualidade e aplicando melhorias. Isso pode levar 30–60 segundos...
+                        </p>
+                    </div>
+
+                    {{-- Result panel --}}
+                    <div id="ai-improve-result" class="hidden mt-3 space-y-2">
+                        {{-- Message --}}
+                        <p id="ai-improve-message" class="text-xs font-semibold text-gray-700 dark:text-zinc-300"></p>
+
+                        {{-- Improvements applied ✅ --}}
+                        <div id="ai-improve-done-list" class="hidden space-y-1">
+                            <p class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Melhorias aplicadas</p>
+                            <ul id="ai-improve-done-items" class="space-y-1"></ul>
+                        </div>
+
+                        {{-- Skipped items ⚠️ --}}
+                        <div id="ai-improve-skip-list" class="hidden space-y-1">
+                            <p class="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Requerem ação manual</p>
+                            <ul id="ai-improve-skip-items" class="space-y-1"></ul>
+                        </div>
+
+                        {{-- Errors ❌ --}}
+                        <div id="ai-improve-err-list" class="hidden space-y-1">
+                            <p class="text-[10px] font-bold text-red-500 uppercase tracking-wider">Erros</p>
+                            <ul id="ai-improve-err-items" class="space-y-1"></ul>
+                        </div>
+
+                        {{-- Reload button (shown after improvements) --}}
+                        <button type="button" id="btn-ai-improve-reload"
+                            class="hidden w-full btn-primary btn-sm mt-2 flex items-center justify-center gap-1.5">
+                            <x-heroicon-o-arrow-path class="w-3.5 h-3.5" />
+                            Recarregar para ver as mudanças
+                        </button>
+                    </div>
+
+                    {{-- Global error --}}
+                    <div id="ai-improve-global-error" class="hidden mt-3 flex items-start gap-2 text-xs text-red-500">
+                        <x-heroicon-o-exclamation-circle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <span id="ai-improve-global-error-text"></span>
+                    </div>
+                </div>
+                @elseif($hasQuality && !$aiConfigured && $completedVars < $totalVars)
+                <div class="mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800">
+                    <a href="{{ route('settings.index') }}?tab=ai"
+                        class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg border-2 border-dashed border-purple-300 dark:border-purple-700 text-purple-500 text-xs font-medium hover:border-purple-500 transition-colors">
+                        <x-heroicon-o-sparkles class="w-4 h-4" />
+                        Configurar IA para melhorar automaticamente
+                    </a>
+                </div>
+                @endif
+
                 @if($hasQuality && !empty($live['permalink']))
                 <div class="mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800">
                     <a href="{{ $live['permalink'] }}" target="_blank"
@@ -1494,6 +1573,104 @@
 <script>
 (function () {
     const CSRF = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
+    // ─── Improve with AI ──────────────────────────────────────────────────────
+    const btnImprove        = document.getElementById('btn-ai-improve');
+    const improveLoading    = document.getElementById('ai-improve-loading');
+    const improveResult     = document.getElementById('ai-improve-result');
+    const improveMessage    = document.getElementById('ai-improve-message');
+    const improveDoneList   = document.getElementById('ai-improve-done-list');
+    const improveDoneItems  = document.getElementById('ai-improve-done-items');
+    const improveSkipList   = document.getElementById('ai-improve-skip-list');
+    const improveSkipItems  = document.getElementById('ai-improve-skip-items');
+    const improveErrList    = document.getElementById('ai-improve-err-list');
+    const improveErrItems   = document.getElementById('ai-improve-err-items');
+    const btnImproveReload  = document.getElementById('btn-ai-improve-reload');
+    const improveGlobalErr  = document.getElementById('ai-improve-global-error');
+    const improveGlobalErrT = document.getElementById('ai-improve-global-error-text');
+
+    if (btnImprove) {
+        btnImprove.addEventListener('click', async () => {
+            // Reset state
+            btnImprove.disabled = true;
+            improveLoading.classList.remove('hidden');
+            improveResult.classList.add('hidden');
+            improveGlobalErr.classList.add('hidden');
+            improveDoneItems.innerHTML = '';
+            improveSkipItems.innerHTML = '';
+            improveErrItems.innerHTML  = '';
+
+            try {
+                const res = await fetch('{{ route('listings.ai-improve', $listing) }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': CSRF,
+                        'Accept': 'application/json',
+                    },
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    improveGlobalErrT.textContent = data.error;
+                    improveGlobalErr.classList.remove('hidden');
+                    btnImprove.disabled = false;
+                    return;
+                }
+
+                // Populate results
+                improveMessage.textContent = data.message ?? '';
+                improveResult.classList.remove('hidden');
+
+                const improvements = data.improvements ?? [];
+                const skipped      = data.skipped ?? [];
+                const errors       = data.errors ?? [];
+
+                if (improvements.length > 0) {
+                    improvements.forEach(item => {
+                        const li = document.createElement('li');
+                        li.className = 'flex items-start gap-1.5 text-xs text-gray-700 dark:text-zinc-300 bg-emerald-50/60 dark:bg-emerald-900/10 rounded px-2 py-1';
+                        li.innerHTML = `<span class="flex-shrink-0 mt-0.5">${item.icon ?? '✅'}</span><div><strong>${item.label}</strong>: ${item.detail}</div>`;
+                        improveDoneItems.appendChild(li);
+                    });
+                    improveDoneList.classList.remove('hidden');
+                    btnImproveReload.classList.remove('hidden');
+                }
+
+                if (skipped.length > 0) {
+                    skipped.forEach(item => {
+                        const li = document.createElement('li');
+                        li.className = 'flex items-start gap-1.5 text-xs text-gray-600 dark:text-zinc-400 bg-amber-50/40 dark:bg-amber-900/10 rounded px-2 py-1';
+                        li.innerHTML = `<span class="flex-shrink-0 mt-0.5">⚠️</span><div><strong>${item.label}</strong>: ${item.reason}</div>`;
+                        improveSkipItems.appendChild(li);
+                    });
+                    improveSkipList.classList.remove('hidden');
+                }
+
+                if (errors.length > 0) {
+                    errors.forEach(msg => {
+                        const li = document.createElement('li');
+                        li.className = 'text-xs text-red-500 bg-red-50/40 dark:bg-red-900/10 rounded px-2 py-1';
+                        li.textContent = '❌ ' + msg;
+                        improveErrItems.appendChild(li);
+                    });
+                    improveErrList.classList.remove('hidden');
+                }
+
+            } catch (e) {
+                improveGlobalErrT.textContent = 'Erro ao conectar com o servidor. Tente novamente.';
+                improveGlobalErr.classList.remove('hidden');
+                btnImprove.disabled = false;
+            } finally {
+                improveLoading.classList.add('hidden');
+            }
+        });
+    }
+
+    if (btnImproveReload) {
+        btnImproveReload.addEventListener('click', () => window.location.reload());
+    }
 
     // ─── Description AI ───────────────────────────────────────────────────────
     const btnGenDesc    = document.getElementById('btn-gen-desc');
