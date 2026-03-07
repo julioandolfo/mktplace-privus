@@ -30,12 +30,15 @@
         if ($order->external_id && $isFromML) {
             $mlLink = 'https://www.mercadolivre.com.br/vendas/' . $order->external_id . '/detalhe';
         }
-        // Smart tracking URL
+        // Smart tracking URL — only generate when there's a real tracking code or shipment was actually shipped
         $trackingUrl = null;
-        if ($mlType && ($order->tracking_code || $mlShippingId)) {
+        $orderShipped = in_array($order->status->value, ['shipped', 'delivered', 'returned']);
+        if ($order->tracking_code && $mlType) {
             $trackingUrl = $mlType->trackingUrl($order->tracking_code, $mlShippingId);
         } elseif ($order->tracking_code) {
             $trackingUrl = 'https://rastreamento.correios.com.br/app/index.php?objeto=' . $order->tracking_code;
+        } elseif ($mlShippingId && $orderShipped && $isFromML) {
+            $trackingUrl = 'https://rastreamento.mercadolivre.com.br/item/' . $mlShippingId;
         }
         // ML item → listing lookup for thumbnail/URL/internal ID
         $mlListings = [];
@@ -309,13 +312,37 @@
 
             {{-- Shipping --}}
             @if($order->shipping_address || $order->tracking_code || !empty($meta['ml_shipping_id']))
+            @php
+                $hasBeenShipped  = in_array($order->status->value, ['shipped', 'delivered', 'returned']);
+                $isPendingShip   = in_array($order->status->value, ['pending', 'confirmed', 'in_production', 'produced', 'ready_to_ship']);
+                $dispatchDeadline = $meta['ml_shipping_deadline'] ?? null;
+                $deadlineDate     = $dispatchDeadline ? \Carbon\Carbon::parse($dispatchDeadline) : null;
+                $isOverdue        = $deadlineDate && $deadlineDate->isPast();
+            @endphp
             <x-ui.card title="Envio">
                 <div class="space-y-3">
+
+                    {{-- Dispatch status badge --}}
+                    @if($isPendingShip && !$order->shipped_at)
+                    <div class="flex items-center gap-2 px-3 py-2 rounded-lg {{ $isOverdue ? 'bg-red-50 dark:bg-red-900/20' : 'bg-amber-50 dark:bg-amber-900/20' }}">
+                        <x-heroicon-o-clock class="w-4 h-4 flex-shrink-0 {{ $isOverdue ? 'text-red-500' : 'text-amber-500' }}" />
+                        <div>
+                            <p class="text-sm font-medium {{ $isOverdue ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300' }}">
+                                {{ $isOverdue ? 'Envio atrasado' : 'Aguardando envio' }}
+                            </p>
+                            @if($deadlineDate)
+                            <p class="text-xs {{ $isOverdue ? 'text-red-500 dark:text-red-400' : 'text-amber-600 dark:text-amber-400' }}">
+                                Despachar até: {{ $deadlineDate->format('d/m/Y') }}
+                            </p>
+                            @endif
+                        </div>
+                    </div>
+                    @endif
 
                     {{-- Shipping method & mode --}}
                     @if($order->shipping_method || !empty($meta['ml_shipping_mode']))
                     <div>
-                        <span class="text-xs text-gray-500 dark:text-zinc-400">Metodo</span>
+                        <span class="text-xs text-gray-500 dark:text-zinc-400">Método</span>
                         <p class="text-sm mt-1">
                             {{ $order->shipping_method ?? '' }}
                             @if(!empty($meta['ml_shipping_mode']))
@@ -325,17 +352,32 @@
                     </div>
                     @endif
 
-                    {{-- Tracking --}}
-                    @if($order->tracking_code || $mlShippingId)
+                    {{-- Tracking — only show when there's a real tracking code --}}
+                    @if($order->tracking_code)
                     <div>
-                        <span class="text-xs text-gray-500 dark:text-zinc-400">Codigo de Rastreio</span>
+                        <span class="text-xs text-gray-500 dark:text-zinc-400">Código de Rastreio</span>
                         <div class="flex items-center gap-2 mt-1">
-                            <p class="text-sm font-mono">{{ $order->tracking_code ?: $mlShippingId }}</p>
+                            <p class="text-sm font-mono">{{ $order->tracking_code }}</p>
                             @if($trackingUrl)
                             <a href="{{ $trackingUrl }}" target="_blank"
                                class="inline-flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors" title="Rastrear envio">
                                 <x-heroicon-o-arrow-top-right-on-square class="w-3.5 h-3.5" />
                                 @if($isFromML) ML @else Correios @endif
+                            </a>
+                            @endif
+                        </div>
+                    </div>
+                    @elseif($mlShippingId && $hasBeenShipped)
+                    {{-- Fallback: ML shipping ID only if order was actually shipped but has no tracking code --}}
+                    <div>
+                        <span class="text-xs text-gray-500 dark:text-zinc-400">ID Envio ML</span>
+                        <div class="flex items-center gap-2 mt-1">
+                            <p class="text-sm font-mono text-gray-400 dark:text-zinc-500">{{ $mlShippingId }}</p>
+                            @if($trackingUrl)
+                            <a href="{{ $trackingUrl }}" target="_blank"
+                               class="inline-flex items-center gap-1 text-xs text-primary-500 hover:text-primary-400 transition-colors" title="Rastrear envio">
+                                <x-heroicon-o-arrow-top-right-on-square class="w-3.5 h-3.5" />
+                                ML
                             </a>
                             @endif
                         </div>
@@ -355,7 +397,7 @@
                     {{-- Address --}}
                     @if($order->shipping_address)
                     <div>
-                        <span class="text-xs text-gray-500 dark:text-zinc-400">Endereco de Entrega</span>
+                        <span class="text-xs text-gray-500 dark:text-zinc-400">Endereço de Entrega</span>
                         <div class="text-sm mt-1 space-y-0.5">
                             @php $addr = $order->shipping_address; @endphp
                             <p>{{ $addr['street'] ?? '' }}</p>

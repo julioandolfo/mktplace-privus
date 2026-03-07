@@ -177,8 +177,8 @@ class SyncMarketplaceOrders extends Command
                 };
             }
 
-            // Dispatch deadline: only relevant while the seller hasn't shipped yet
-            if (in_array($shipmentStatus, ['pending', 'handling', 'ready_to_ship'])) {
+            // Dispatch deadline: fetch for any shipment not yet shipped/delivered
+            if (! in_array($shipmentStatus, ['shipped', 'delivered', 'not_delivered', 'cancelled'])) {
                 $leadTime         = $service->getShippingLeadTime((string) $ml['shipping']['id']);
                 $shippingDeadline = $leadTime['estimated_handling_limit']['date'] ?? null;
             }
