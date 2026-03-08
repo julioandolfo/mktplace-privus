@@ -25,6 +25,9 @@ class OrderController extends Controller
             'marketplaceAccount.webmaniaAccount',
             'invoices',
             'messages',
+            'timelines.performer',
+            'designAssignment.designer',
+            'designAssignment.files',
         ]);
 
         $unreadMessages = $order->messages->where('direction', 'received')->where('is_read', false)->count();

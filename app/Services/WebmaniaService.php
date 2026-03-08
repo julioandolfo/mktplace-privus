@@ -237,7 +237,7 @@ class WebmaniaService
 
     private function persistInvoice(Order $order, array $result, array $payload): Invoice
     {
-        return Invoice::updateOrCreate(
+        $invoice = Invoice::updateOrCreate(
             ['external_id' => $result['uuid'] ?? null, 'order_id' => $order->id],
             [
                 'company_id'       => $order->company_id,
@@ -261,5 +261,12 @@ class WebmaniaService
                 'meta'             => $result,
             ]
         );
+
+        // Se NF-e aprovada, dispara job para submeter ao ML (se conta ML)
+        if (($result['status'] ?? '') === 'aprovado' && $invoice->access_key) {
+            \App\Jobs\SubmitInvoiceToML::dispatch($invoice->id)->delay(now()->addSeconds(5));
+        }
+
+        return $invoice;
     }
 }

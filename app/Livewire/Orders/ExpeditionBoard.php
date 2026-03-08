@@ -70,29 +70,36 @@ class ExpeditionBoard extends Component
 
             'overdue' => (clone $base)
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("(meta->>'ml_shipping_deadline')::date < ?", [$today])
+                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
+                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date < ?", [$today])
                 ->count(),
 
             'today' => (clone $base)
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("(meta->>'ml_shipping_deadline')::date = ?", [$today])
+                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
+                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date = ?", [$today])
                 ->count(),
 
             'tomorrow' => (clone $base)
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("(meta->>'ml_shipping_deadline')::date = ?", [$tomorrow])
+                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
+                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date = ?", [$tomorrow])
                 ->count(),
 
             'this_week' => (clone $base)
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("(meta->>'ml_shipping_deadline')::date > ? AND (meta->>'ml_shipping_deadline')::date <= ?", [$tomorrow, $friday])
+                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
+                ->whereRaw(
+                    "(meta->>'ml_shipping_deadline')::timestamptz::date > ? AND (meta->>'ml_shipping_deadline')::timestamptz::date <= ?",
+                    [$tomorrow, $friday]
+                )
                 ->count(),
 
             'later' => (clone $base)
                 ->whereIn('pipeline_status', $expeditionPipeline)
                 ->where(fn ($q) => $q
-                    ->whereRaw("(meta->>'ml_shipping_deadline')::date > ?", [$friday])
-                    ->orWhereRaw("meta->>'ml_shipping_deadline' IS NULL")
+                    ->whereRaw("meta IS NULL OR meta->>'ml_shipping_deadline' IS NULL")
+                    ->orWhereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date > ?", [$friday])
                 )
                 ->count(),
 
@@ -134,25 +141,32 @@ class ExpeditionBoard extends Component
 
             'overdue' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("(meta->>'ml_shipping_deadline')::date < ?", [$today]),
+                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
+                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date < ?", [$today]),
 
             'today' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("(meta->>'ml_shipping_deadline')::date = ?", [$today]),
+                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
+                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date = ?", [$today]),
 
             'tomorrow' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("(meta->>'ml_shipping_deadline')::date = ?", [$tomorrow]),
+                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
+                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date = ?", [$tomorrow]),
 
             'this_week' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("(meta->>'ml_shipping_deadline')::date > ? AND (meta->>'ml_shipping_deadline')::date <= ?", [$tomorrow, $friday]),
+                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
+                ->whereRaw(
+                    "(meta->>'ml_shipping_deadline')::timestamptz::date > ? AND (meta->>'ml_shipping_deadline')::timestamptz::date <= ?",
+                    [$tomorrow, $friday]
+                ),
 
             'later' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
                 ->where(fn ($q) => $q
-                    ->whereRaw("(meta->>'ml_shipping_deadline')::date > ?", [$friday])
-                    ->orWhereRaw("meta->>'ml_shipping_deadline' IS NULL")
+                    ->whereRaw("meta IS NULL OR meta->>'ml_shipping_deadline' IS NULL")
+                    ->orWhereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date > ?", [$friday])
                 ),
 
             'partial' => $query->where('pipeline_status', PipelineStatus::PartiallyShipped->value),
@@ -164,8 +178,8 @@ class ExpeditionBoard extends Component
 
         return $query->orderByRaw("
             CASE
-                WHEN meta->>'ml_shipping_deadline' IS NOT NULL
-                THEN (meta->>'ml_shipping_deadline')::date
+                WHEN meta IS NOT NULL AND meta->>'ml_shipping_deadline' IS NOT NULL
+                THEN (meta->>'ml_shipping_deadline')::timestamptz::date
                 ELSE '9999-12-31'::date
             END ASC
         ")->orderByDesc('paid_at');

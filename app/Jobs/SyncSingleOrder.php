@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Enums\MarketplaceType;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\PipelineStatus;
 use App\Models\Customer;
 use App\Models\MarketplaceAccount;
 use App\Models\Order;
@@ -193,6 +194,29 @@ class SyncSingleOrder implements ShouldQueue
                 $deliveredAt = now()->parse($ml['last_updated'] ?? now());
             }
 
+            // Determina o pipeline_status correto baseado no status do marketplace.
+            // Só avança quando pertinente — nunca regride de estados avançados (packed, shipped, etc.)
+            $existingOrder       = Order::where('marketplace_account_id', $account->id)
+                ->where('external_id', (string) $ml['id'])
+                ->first();
+            $currentPipeline     = $existingOrder?->pipeline_status;
+            $advancedPipelines   = [
+                PipelineStatus::Packing,
+                PipelineStatus::Packed,
+                PipelineStatus::PartiallyShipped,
+                PipelineStatus::Shipped,
+            ];
+            $isAlreadyAdvanced   = $currentPipeline && in_array($currentPipeline, $advancedPipelines);
+
+            $newPipeline = match (true) {
+                $orderStatus === OrderStatus::Shipped   => PipelineStatus::Shipped,
+                $orderStatus === OrderStatus::Delivered => PipelineStatus::Shipped,
+                $orderStatus === OrderStatus::Cancelled => PipelineStatus::Shipped, // não exibir na expedição
+                $isAlreadyAdvanced                      => $currentPipeline,       // preserva estado avançado
+                $orderStatus === OrderStatus::ReadyToShip => PipelineStatus::ReadyToShip,
+                default                                 => $currentPipeline ?? PipelineStatus::ReadyToShip,
+            };
+
             $order = Order::updateOrCreate(
                 [
                     'marketplace_account_id' => $account->id,
@@ -202,6 +226,7 @@ class SyncSingleOrder implements ShouldQueue
                     'company_id'       => $account->company_id,
                     'customer_id'      => $customer?->id,
                     'status'           => $orderStatus,
+                    'pipeline_status'  => $newPipeline,
                     'payment_status'   => $paymentStatus,
                     'payment_method'   => $payment['payment_method_id'] ?? $payment['payment_type'] ?? null,
                     'customer_name'    => $customerName,

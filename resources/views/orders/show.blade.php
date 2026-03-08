@@ -202,6 +202,114 @@
                 </table>
             </x-ui.card>
 
+            {{-- Produção por Item (só aparece se algum item requer produção ou tem arte) --}}
+            @if($order->items->contains(fn ($i) => $i->product?->requires_production || $i->has_artwork || $i->production_status->value !== 'not_required'))
+            <x-ui.card title="Produção por Item">
+                <div class="space-y-4">
+                    @foreach($order->items as $item)
+                    @php
+                        $needsProd  = $item->product?->requires_production || $item->production_status->value !== 'not_required';
+                        $hasArtwork = $item->has_artwork;
+                    @endphp
+                    @if($needsProd || $hasArtwork)
+                    <div class="flex items-start gap-4 pb-4 border-b border-gray-100 dark:border-zinc-800 last:border-0 last:pb-0"
+                         x-data="{ editArtwork: false }">
+
+                        {{-- Arte --}}
+                        <div class="flex-shrink-0">
+                            @if($hasArtwork)
+                            <a href="{{ $item->artwork_url }}" target="_blank" class="block relative group">
+                                <img src="{{ $item->artwork_url }}" alt="Arte"
+                                     class="w-16 h-16 object-cover rounded-lg border-2
+                                            {{ $item->artwork_approved ? 'border-green-400' : 'border-purple-400' }}" />
+                                @if($item->artwork_approved)
+                                <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                                    <x-heroicon-s-check class="w-2.5 h-2.5 text-white" />
+                                </div>
+                                @endif
+                            </a>
+                            @else
+                            <div class="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 dark:border-zinc-600
+                                        flex items-center justify-center cursor-pointer hover:border-purple-400 transition-colors"
+                                 @click="editArtwork = true">
+                                <x-heroicon-o-photo class="w-6 h-6 text-gray-400" />
+                            </div>
+                            @endif
+                        </div>
+
+                        {{-- Info --}}
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-sm leading-tight">{{ $item->name }}</p>
+                            <div class="flex items-center gap-2 mt-1">
+                                <x-ui.badge :color="$item->production_status->color()" class="text-xs">
+                                    {{ $item->production_status->label() }}
+                                </x-ui.badge>
+                                @if($hasArtwork && !$item->artwork_approved)
+                                <x-ui.badge color="warning" class="text-xs">Arte pendente</x-ui.badge>
+                                @endif
+                            </div>
+                            @if($item->production_notes)
+                            <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1 italic">{{ $item->production_notes }}</p>
+                            @endif
+                        </div>
+
+                        {{-- Ações rápidas --}}
+                        <div class="flex-shrink-0 flex flex-col gap-1.5">
+                            <button @click="editArtwork = !editArtwork" class="btn-secondary btn-xs">
+                                <x-heroicon-o-pencil class="w-3 h-3" />
+                                Arte
+                            </button>
+                            @if($hasArtwork)
+                            <form method="POST" action="{{ route('orders.items.artwork', [$order, $item]) }}">
+                                @csrf @method('PATCH')
+                                <input type="hidden" name="artwork_approved" value="{{ $item->artwork_approved ? '0' : '1' }}">
+                                <button type="submit" class="btn-xs w-full {{ $item->artwork_approved ? 'btn-secondary text-red-600' : 'bg-green-600 text-white border-green-600' }}">
+                                    {{ $item->artwork_approved ? 'Desaprovar' : '✓ Aprovar' }}
+                                </button>
+                            </form>
+                            @endif
+                        </div>
+                    </div>
+
+                    {{-- Formulário inline de arte (colapsável) --}}
+                    <div x-show="editArtwork" x-cloak @keydown.escape="editArtwork = false"
+                         class="ml-20 -mt-2 pb-4">
+                        <form method="POST" action="{{ route('orders.items.artwork', [$order, $item]) }}"
+                              class="flex gap-2 items-end">
+                            @csrf @method('PATCH')
+                            <div class="flex-1">
+                                <label class="form-label text-xs">URL da Arte/Mockup</label>
+                                <input type="url" name="artwork_url"
+                                       value="{{ old('artwork_url', $item->artwork_url) }}"
+                                       placeholder="https://..." class="form-input text-sm">
+                            </div>
+                            <div class="flex-1">
+                                <label class="form-label text-xs">Status de Produção</label>
+                                <select name="production_status" class="form-input text-sm">
+                                    @foreach(\App\Enums\ProductionStatus::cases() as $ps)
+                                    <option value="{{ $ps->value }}"
+                                            {{ $item->production_status->value === $ps->value ? 'selected' : '' }}>
+                                        {{ $ps->label() }}
+                                    </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label text-xs">Obs</label>
+                                <input type="text" name="production_notes"
+                                       value="{{ old('production_notes', $item->production_notes) }}"
+                                       placeholder="Notas internas" class="form-input text-sm">
+                            </div>
+                            <button type="submit" class="btn-primary btn-sm flex-shrink-0">Salvar</button>
+                            <button type="button" @click="editArtwork = false" class="btn-secondary btn-sm flex-shrink-0">✕</button>
+                        </form>
+                    </div>
+                    @endif
+                    @endforeach
+                </div>
+            </x-ui.card>
+            @endif
+
             {{-- Totals --}}
             <x-ui.card title="Totais">
                 <div class="space-y-2">
@@ -653,6 +761,73 @@
             @endif
         </div>
     </div>
+
+    {{-- ============================================================
+         TIMELINE DO PEDIDO
+    ============================================================ --}}
+    <x-ui.card title="Histórico do Pedido" class="mt-6">
+        <x-slot name="headerActions">
+            <span class="text-xs text-gray-400 dark:text-zinc-500">{{ $order->timelines->count() }} evento(s)</span>
+        </x-slot>
+        <x-order-timeline :order="$order" />
+    </x-ui.card>
+
+    {{-- Design Assignment (quando houver) --}}
+    @if($order->designAssignment)
+    <x-ui.card title="Design — Mockup e Arquivos" class="mt-4">
+        @php $da = $order->designAssignment; @endphp
+        <div class="flex items-center gap-3 mb-4">
+            <x-ui.badge :color="$da->statusColor()">{{ $da->statusLabel() }}</x-ui.badge>
+            @if($da->designer)
+            <span class="text-sm text-gray-500 dark:text-zinc-400">
+                Designer: <strong>{{ $da->designer->name }}</strong>
+            </span>
+            @endif
+            @if($da->completed_at)
+            <span class="text-sm text-gray-500 dark:text-zinc-400">
+                Concluído em {{ $da->completed_at->format('d/m/Y H:i') }}
+            </span>
+            @endif
+            @if(auth()->user()->isAdmin() || auth()->id() === $da->designer_id)
+            <a href="{{ route('designer.edit', $da) }}" class="btn-secondary btn-sm ml-auto">
+                <x-heroicon-o-paint-brush class="w-4 h-4" />
+                Abrir Editor
+            </a>
+            @endif
+        </div>
+
+        @if($da->mockup_url)
+        <div class="mb-4">
+            <p class="text-xs font-medium text-gray-500 dark:text-zinc-400 mb-2">Mockup Final</p>
+            <a href="{{ $da->mockup_url }}" target="_blank">
+                <img src="{{ $da->mockup_url }}" alt="Mockup"
+                     class="max-h-48 rounded-xl border-2 border-green-300 dark:border-green-700 object-contain" />
+            </a>
+        </div>
+        @endif
+
+        @if($da->productionFiles->count() > 0)
+        <div>
+            <p class="text-xs font-medium text-gray-500 dark:text-zinc-400 mb-2">Arquivos de Produção ({{ $da->productionFiles->count() }})</p>
+            <div class="space-y-1.5">
+                @foreach($da->productionFiles as $file)
+                <div class="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-zinc-800 text-sm">
+                    <x-heroicon-o-document class="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <a href="{{ $file->publicUrl() }}" target="_blank"
+                       class="flex-1 truncate text-gray-700 dark:text-zinc-300 hover:underline">
+                        {{ $file->file_name }}
+                    </a>
+                    <span class="text-xs text-gray-400 flex-shrink-0">{{ $file->fileSizeFormatted() }}</span>
+                    @if($file->is_ai_generated)
+                    <x-ui.badge color="violet" class="text-[10px]">IA</x-ui.badge>
+                    @endif
+                </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
+    </x-ui.card>
+    @endif
 
     {{-- ============================================================
          MODAL — Emissão de NF-e

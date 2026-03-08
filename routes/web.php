@@ -51,6 +51,32 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return view('production.index');
     })->name('production.index');
 
+    // ─── Designer Module ────────────────────────────────────────────────────────
+    Route::prefix('designer')->middleware('role:designer,admin')->group(function () {
+        Route::get('/', [\App\Http\Controllers\DesignEditorController::class, 'board'])->name('designer.index');
+        Route::get('/{assignment}/edit', [\App\Http\Controllers\DesignEditorController::class, 'edit'])->name('designer.edit');
+        Route::post('/{assignment}/save', [\App\Http\Controllers\DesignEditorController::class, 'save'])->name('designer.save');
+        Route::post('/{assignment}/complete', [\App\Http\Controllers\DesignEditorController::class, 'complete'])->name('designer.complete');
+        Route::post('/{assignment}/start', [\App\Http\Controllers\DesignEditorController::class, 'start'])->name('designer.start');
+
+        // Arquivos
+        Route::post('/{assignment}/files', [\App\Http\Controllers\DesignFileController::class, 'store'])->name('designer.files.store');
+        Route::delete('/files/{file}', [\App\Http\Controllers\DesignFileController::class, 'destroy'])->name('designer.files.destroy');
+
+        // Mockup IA
+        Route::post('/{assignment}/ai-mockup', [\App\Http\Controllers\AiMockupController::class, 'generate'])->name('designer.ai-mockup');
+        Route::post('/{assignment}/ai-mockup/approve', [\App\Http\Controllers\AiMockupController::class, 'approve'])->name('designer.ai-mockup.approve');
+    });
+
+    // ─── Configurações de Designers (admin only) ────────────────────────────────
+    Route::prefix('settings/designers')->middleware('role:admin')->group(function () {
+        Route::get('/', [\App\Http\Controllers\DesignerSettingsController::class, 'index'])->name('settings.designers.index');
+        Route::put('/', [\App\Http\Controllers\DesignerSettingsController::class, 'update'])->name('settings.designers.update');
+        Route::post('/users', [\App\Http\Controllers\DesignerSettingsController::class, 'inviteDesigner'])->name('settings.designers.invite');
+        Route::patch('/users/{user}/toggle', [\App\Http\Controllers\DesignerSettingsController::class, 'toggleDesigner'])->name('settings.designers.toggle');
+        Route::delete('/users/{user}', [\App\Http\Controllers\DesignerSettingsController::class, 'removeDesigner'])->name('settings.designers.remove');
+    });
+
     // Expedition
     Route::get('/expedition', function () {
         return view('expedition.index');
@@ -77,6 +103,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // NF-e
     Route::post('/orders/{order}/invoice/emit', [\App\Http\Controllers\ShippingController::class, 'emitInvoice'])->name('orders.invoice.emit');
+
+    // Artwork por item
+    Route::patch('/orders/{order}/items/{item}/artwork', [\App\Http\Controllers\OrderItemArtworkController::class, 'update'])->name('orders.items.artwork');
 
     // Etiquetas oficiais ML
     Route::get('/orders/{order}/ml-label', [\App\Http\Controllers\ShippingController::class, 'mlLabel'])->name('orders.ml-label');
@@ -160,6 +189,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Settings
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
+
+    // Configurações — Melhor Envios
+    Route::resource('settings/melhor-envios', \App\Http\Controllers\MelhorEnviosAccountController::class)
+        ->names('settings.me')
+        ->parameters(['melhor-envios' => 'melhorEnvio']);
+    Route::get('/auth/melhor-envios/{melhorEnvio}/connect', [\App\Http\Controllers\MelhorEnviosAccountController::class, 'connect'])->name('me.connect');
+    Route::get('/auth/melhor-envios/callback', [\App\Http\Controllers\MelhorEnviosAccountController::class, 'callback'])->name('me.callback');
 
     // Configurações — Webmaniabr
     Route::get('/settings/webmania', [\App\Http\Controllers\WebmaniaAccountController::class, 'index'])->name('settings.webmania.index');

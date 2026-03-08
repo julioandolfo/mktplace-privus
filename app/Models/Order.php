@@ -128,6 +128,16 @@ class Order extends Model
         return $this->hasMany(ShipmentLabel::class);
     }
 
+    public function designAssignment(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(DesignAssignment::class);
+    }
+
+    public function timelines(): HasMany
+    {
+        return $this->hasMany(OrderTimeline::class)->orderBy('happened_at');
+    }
+
     // Scopes
 
     public function scopeSearch(Builder $query, string $term): Builder
