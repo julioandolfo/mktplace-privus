@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\Romaneio;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -48,66 +49,128 @@ class ExpeditionBoard extends Component
     public function updatingFilterAccount(): void { $this->resetPage(); }
 
     // ----------------------------------------------------------------
+    //  DB-agnostic helpers: suporta SQLite e PostgreSQL
+    // ----------------------------------------------------------------
+
+    protected function isPostgres(): bool
+    {
+        return DB::getDriverName() === 'pgsql';
+    }
+
+    /**
+     * Extrai a data (YYYY-MM-DD) de um campo JSON de deadline.
+     * SQLite: SUBSTR(json_extract(meta,'$.ml_shipping_deadline'), 1, 10)
+     * PostgreSQL: (meta->>'ml_shipping_deadline')::timestamptz::date
+     */
+    protected function deadlineDateSql(): string
+    {
+        if ($this->isPostgres()) {
+            return "(meta->>'ml_shipping_deadline')::timestamptz::date";
+        }
+
+        // SQLite: ISO string "2026-03-11T23:59:59.000-03:00" → substr = "2026-03-11"
+        return "SUBSTR(json_extract(meta, '$.ml_shipping_deadline'), 1, 10)";
+    }
+
+    /** Null check para o campo deadline, compatível com ambos os bancos */
+    protected function deadlineNotNullSql(): string
+    {
+        if ($this->isPostgres()) {
+            return "meta->>'ml_shipping_deadline' IS NOT NULL";
+        }
+        return "json_extract(meta, '$.ml_shipping_deadline') IS NOT NULL";
+    }
+
+    /** IS NULL para o campo deadline (inverso de notNull) */
+    protected function deadlineIsNullSql(): string
+    {
+        if ($this->isPostgres()) {
+            return "meta->>'ml_shipping_deadline' IS NULL";
+        }
+        return "json_extract(meta, '$.ml_shipping_deadline') IS NULL";
+    }
+
+    /** NULL-safe date sentinel para ORDER BY */
+    protected function deadlineOrderSql(): string
+    {
+        $dl = $this->deadlineDateSql();
+        $notNull = $this->deadlineNotNullSql();
+
+        return "CASE WHEN meta IS NOT NULL AND {$notNull} THEN {$dl} ELSE '9999-12-31' END";
+    }
+
+    // ----------------------------------------------------------------
+    //  Base query com filtro de company_id seguro
+    // ----------------------------------------------------------------
+
+    protected function baseQuery()
+    {
+        $query = Order::query();
+
+        $companyId = Auth::user()?->company_id;
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
+
+        return $query->when($this->filterAccount, fn ($q) => $q->where('marketplace_account_id', $this->filterAccount));
+    }
+
+    // ----------------------------------------------------------------
     //  Tab counts
     // ----------------------------------------------------------------
 
     protected function getTabCounts(): array
     {
-        $base = Order::query()
-            ->where('company_id', Auth::user()->company_id)
-            ->when($this->filterAccount, fn ($q) => $q->where('marketplace_account_id', $this->filterAccount));
-
         $today    = now()->toDateString();
         $tomorrow = now()->addDay()->toDateString();
         $friday   = now()->endOfWeek(Carbon::FRIDAY)->toDateString();
 
         $expeditionPipeline = array_map(fn ($s) => $s->value, PipelineStatus::expeditionStatuses());
+        $dl   = $this->deadlineDateSql();
+        $notnull = $this->deadlineNotNullSql();
 
         return [
-            'in_production' => (clone $base)
+            'in_production' => (clone $this->baseQuery())
                 ->whereIn('pipeline_status', array_map(fn ($s) => $s->value, PipelineStatus::productionStatuses()))
                 ->count(),
 
-            'overdue' => (clone $base)
+            'overdue' => (clone $this->baseQuery())
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
-                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date < ?", [$today])
+                ->whereRaw($notnull)
+                ->whereRaw("{$dl} < ?", [$today])
                 ->count(),
 
-            'today' => (clone $base)
+            'today' => (clone $this->baseQuery())
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
-                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date = ?", [$today])
+                ->whereRaw($notnull)
+                ->whereRaw("{$dl} = ?", [$today])
                 ->count(),
 
-            'tomorrow' => (clone $base)
+            'tomorrow' => (clone $this->baseQuery())
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
-                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date = ?", [$tomorrow])
+                ->whereRaw($notnull)
+                ->whereRaw("{$dl} = ?", [$tomorrow])
                 ->count(),
 
-            'this_week' => (clone $base)
+            'this_week' => (clone $this->baseQuery())
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
-                ->whereRaw(
-                    "(meta->>'ml_shipping_deadline')::timestamptz::date > ? AND (meta->>'ml_shipping_deadline')::timestamptz::date <= ?",
-                    [$tomorrow, $friday]
-                )
+                ->whereRaw($notnull)
+                ->whereRaw("{$dl} > ? AND {$dl} <= ?", [$tomorrow, $friday])
                 ->count(),
 
-            'later' => (clone $base)
+            'later' => (clone $this->baseQuery())
                 ->whereIn('pipeline_status', $expeditionPipeline)
                 ->where(fn ($q) => $q
-                    ->whereRaw("meta IS NULL OR meta->>'ml_shipping_deadline' IS NULL")
-                    ->orWhereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date > ?", [$friday])
+                    ->whereRaw($this->deadlineIsNullSql())
+                    ->orWhereRaw("{$dl} > ?", [$friday])
                 )
                 ->count(),
 
-            'partial' => (clone $base)
+            'partial' => (clone $this->baseQuery())
                 ->where('pipeline_status', PipelineStatus::PartiallyShipped->value)
                 ->count(),
 
-            'shipped' => (clone $base)
+            'shipped' => (clone $this->baseQuery())
                 ->where('pipeline_status', PipelineStatus::Shipped->value)
                 ->count(),
         ];
@@ -124,12 +187,12 @@ class ExpeditionBoard extends Component
         $friday   = now()->endOfWeek(Carbon::FRIDAY)->toDateString();
 
         $expeditionPipeline = array_map(fn ($s) => $s->value, PipelineStatus::expeditionStatuses());
+        $dl      = $this->deadlineDateSql();
+        $notnull = $this->deadlineNotNullSql();
 
-        $query = Order::query()
+        $query = $this->baseQuery()
             ->with(['items.product', 'items.variant', 'marketplaceAccount'])
-            ->where('company_id', Auth::user()->company_id)
             ->when($this->search, fn ($q) => $q->search($this->search))
-            ->when($this->filterAccount, fn ($q) => $q->where('marketplace_account_id', $this->filterAccount))
             ->when($this->filterType, fn ($q) => $q->whereHas('marketplaceAccount', fn ($mq) =>
                 $mq->where('marketplace_type', $this->filterType)
             ));
@@ -141,32 +204,29 @@ class ExpeditionBoard extends Component
 
             'overdue' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
-                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date < ?", [$today]),
+                ->whereRaw($notnull)
+                ->whereRaw("{$dl} < ?", [$today]),
 
             'today' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
-                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date = ?", [$today]),
+                ->whereRaw($notnull)
+                ->whereRaw("{$dl} = ?", [$today]),
 
             'tomorrow' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
-                ->whereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date = ?", [$tomorrow]),
+                ->whereRaw($notnull)
+                ->whereRaw("{$dl} = ?", [$tomorrow]),
 
             'this_week' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
-                ->whereRaw("meta->>'ml_shipping_deadline' IS NOT NULL")
-                ->whereRaw(
-                    "(meta->>'ml_shipping_deadline')::timestamptz::date > ? AND (meta->>'ml_shipping_deadline')::timestamptz::date <= ?",
-                    [$tomorrow, $friday]
-                ),
+                ->whereRaw($notnull)
+                ->whereRaw("{$dl} > ? AND {$dl} <= ?", [$tomorrow, $friday]),
 
             'later' => $query
                 ->whereIn('pipeline_status', $expeditionPipeline)
                 ->where(fn ($q) => $q
-                    ->whereRaw("meta IS NULL OR meta->>'ml_shipping_deadline' IS NULL")
-                    ->orWhereRaw("(meta->>'ml_shipping_deadline')::timestamptz::date > ?", [$friday])
+                    ->whereRaw($this->deadlineIsNullSql())
+                    ->orWhereRaw("{$dl} > ?", [$friday])
                 ),
 
             'partial' => $query->where('pipeline_status', PipelineStatus::PartiallyShipped->value),
@@ -176,13 +236,7 @@ class ExpeditionBoard extends Component
             default => $query->whereIn('pipeline_status', $expeditionPipeline),
         };
 
-        return $query->orderByRaw("
-            CASE
-                WHEN meta IS NOT NULL AND meta->>'ml_shipping_deadline' IS NOT NULL
-                THEN (meta->>'ml_shipping_deadline')::timestamptz::date
-                ELSE '9999-12-31'::date
-            END ASC
-        ")->orderByDesc('paid_at');
+        return $query->orderByRaw($this->deadlineOrderSql() . ' ASC')->orderByDesc('paid_at');
     }
 
     // ----------------------------------------------------------------
@@ -191,7 +245,7 @@ class ExpeditionBoard extends Component
 
     public function setVolume(int $orderId, int $volumes): void
     {
-        $order = Order::where('company_id', Auth::user()->company_id)->findOrFail($orderId);
+        $order = $this->scopedOrder($orderId);
         $meta  = $order->meta ?? [];
         $meta['expedition_volumes'] = max(1, $volumes);
         $order->update(['meta' => $meta]);
@@ -203,9 +257,18 @@ class ExpeditionBoard extends Component
     //  Actions — Packing
     // ----------------------------------------------------------------
 
+    protected function scopedOrder(int $orderId): Order
+    {
+        $q = Order::query();
+        if ($cid = Auth::user()?->company_id) {
+            $q->where('company_id', $cid);
+        }
+        return $q->findOrFail($orderId);
+    }
+
     public function markPacked(int $orderId): void
     {
-        $order = Order::where('company_id', Auth::user()->company_id)->findOrFail($orderId);
+        $order = $this->scopedOrder($orderId);
         $order->update(['pipeline_status' => PipelineStatus::Packed]);
         $this->dispatch('order-updated', id: $orderId);
         session()->flash('success', "Pedido {$order->order_number} marcado como embalado.");
@@ -217,9 +280,11 @@ class ExpeditionBoard extends Component
             return;
         }
 
-        $orders = Order::where('company_id', Auth::user()->company_id)
-            ->whereIn('id', $this->selectedOrders)
-            ->get();
+        $q = Order::whereIn('id', $this->selectedOrders);
+        if ($cid = Auth::user()?->company_id) {
+            $q->where('company_id', $cid);
+        }
+        $orders = $q->get();
 
         foreach ($orders as $order) {
             $order->update(['pipeline_status' => PipelineStatus::Packed]);
@@ -234,7 +299,7 @@ class ExpeditionBoard extends Component
 
     public function markShipped(int $orderId): void
     {
-        $order = Order::where('company_id', Auth::user()->company_id)->findOrFail($orderId);
+        $order = $this->scopedOrder($orderId);
         $order->update([
             'status'          => OrderStatus::Shipped,
             'pipeline_status' => PipelineStatus::Shipped,
@@ -286,9 +351,11 @@ class ExpeditionBoard extends Component
 
         // Modo 1: adiciona pedidos selecionados
         if ($this->romaneioMode === 1 && ! empty($this->selectedOrders)) {
-            $orders = Order::where('company_id', $user->company_id)
-                ->whereIn('id', $this->selectedOrders)
-                ->get();
+            $q = Order::whereIn('id', $this->selectedOrders);
+            if ($user->company_id) {
+                $q->where('company_id', $user->company_id);
+            }
+            $orders = $q->get();
 
             foreach ($orders as $order) {
                 $volumes = (int) ($order->meta['expedition_volumes'] ?? 1);
@@ -343,10 +410,11 @@ class ExpeditionBoard extends Component
             }
         }
 
-        $accounts = MarketplaceAccount::where('company_id', Auth::user()->company_id)
-            ->active()
-            ->orderBy('account_name')
-            ->get();
+        $accountQuery = MarketplaceAccount::active()->orderBy('account_name');
+        if ($cid = Auth::user()?->company_id) {
+            $accountQuery->where('company_id', $cid);
+        }
+        $accounts = $accountQuery->get();
 
         $tabCounts = $this->getTabCounts();
 

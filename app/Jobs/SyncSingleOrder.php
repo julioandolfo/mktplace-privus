@@ -209,12 +209,12 @@ class SyncSingleOrder implements ShouldQueue
             $isAlreadyAdvanced   = $currentPipeline && in_array($currentPipeline, $advancedPipelines);
 
             $newPipeline = match (true) {
-                $orderStatus === OrderStatus::Shipped   => PipelineStatus::Shipped,
-                $orderStatus === OrderStatus::Delivered => PipelineStatus::Shipped,
-                $orderStatus === OrderStatus::Cancelled => PipelineStatus::Shipped, // não exibir na expedição
-                $isAlreadyAdvanced                      => $currentPipeline,       // preserva estado avançado
+                $orderStatus === OrderStatus::Shipped    => PipelineStatus::Shipped,
+                $orderStatus === OrderStatus::Delivered  => PipelineStatus::Shipped,
+                $orderStatus === OrderStatus::Cancelled  => $currentPipeline,       // mantém o atual; cancelado não vai para expedição
+                $isAlreadyAdvanced                       => $currentPipeline,       // preserva estado avançado
                 $orderStatus === OrderStatus::ReadyToShip => PipelineStatus::ReadyToShip,
-                default                                 => $currentPipeline ?? PipelineStatus::ReadyToShip,
+                default                                  => $currentPipeline ?? PipelineStatus::ReadyToShip,
             };
 
             $order = Order::updateOrCreate(

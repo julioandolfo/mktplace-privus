@@ -51,10 +51,14 @@ COPY . .
 # Install and build frontend assets
 RUN npm ci && npm run build && rm -rf node_modules
 
+# Garante que diretórios de runtime existam
+RUN mkdir -p storage/logs storage/framework/sessions storage/framework/views \
+        storage/framework/cache/data bootstrap/cache
+
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html/storage \
-    && chmod -R 755 /var/www/html/bootstrap/cache
+    && chmod -R 775 /var/www/html/storage \
+    && chmod -R 775 /var/www/html/bootstrap/cache
 
 # Copy Nginx config
 COPY docker/nginx.conf /etc/nginx/nginx.conf
