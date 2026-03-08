@@ -1,6 +1,14 @@
 <x-app-layout>
     <x-slot name="header">Pedido {{ $order->order_number }}</x-slot>
     <x-slot name="actions">
+        {{-- Ações de expedição --}}
+        @if($order->pipeline_status->value !== 'shipped')
+        <a href="{{ route('orders.pack', $order) }}" class="btn-secondary">
+            <x-heroicon-o-qr-code class="w-4 h-4" />
+            Conferir
+        </a>
+        @endif
+
         @if($order->is_editable)
         <a href="{{ route('orders.edit', $order) }}" class="btn-secondary">
             <x-heroicon-o-pencil-square class="w-4 h-4" />
@@ -67,16 +75,26 @@
         <div class="lg:col-span-2 space-y-6">
 
             {{-- Items --}}
-            <x-ui.card title="Itens do Pedido" :padding="false">
+            <x-ui.card :padding="false">
+                <x-slot name="title">
+                    <div class="flex items-center justify-between">
+                        <span>Itens do Pedido</span>
+                        @if($order->pipeline_status === \App\Enums\PipelineStatus::PartiallyShipped)
+                            <x-ui.badge color="warning">Envio Parcial</x-ui.badge>
+                        @endif
+                    </div>
+                </x-slot>
                 <table class="data-table">
                     <thead>
                         <tr>
                             <th colspan="2">Produto</th>
                             <th>SKU</th>
                             <th class="text-center">Qtd</th>
+                            <th class="text-center">Enviado</th>
+                            <th class="text-center">Pendente</th>
                             <th class="text-right">Preco Unit.</th>
-                            <th class="text-right">Desconto</th>
                             <th class="text-right">Total</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -86,11 +104,9 @@
                             $variationAttrs = $itemMeta['ml_variation_attrs'] ?? [];
                             $mlItemId      = $itemMeta['ml_item_id'] ?? null;
                             $listingRecord = $mlItemId ? ($mlListings[$mlItemId] ?? null) : null;
-                            // Internal listing URL (prefer) or external ML URL as fallback
                             $listingUrl = $listingRecord
                                 ? route('listings.show', $listingRecord['id'])
                                 : null;
-                            // Thumbnail: ML listing meta → product primary image → placeholder
                             $thumbUrl = null;
                             if ($listingRecord) {
                                 $listingMeta = $listingRecord['meta'] ?? [];
@@ -99,11 +115,21 @@
                             if (!$thumbUrl && $item->product?->primaryImage) {
                                 $thumbUrl = $item->product->primaryImage->url ?? null;
                             }
+                            if (!$thumbUrl && $item->has_artwork) {
+                                $thumbUrl = $item->artwork_url;
+                            }
+                            $pendingQty = $item->pending_quantity;
                         @endphp
-                        <tr>
-                            {{-- Thumbnail --}}
+                        <tr class="{{ $item->is_fully_shipped ? 'opacity-60' : '' }}">
+                            {{-- Thumbnail / Artwork --}}
                             <td class="w-12 pr-0">
-                                @if($thumbUrl)
+                                @if($item->has_artwork)
+                                    <div class="relative">
+                                        <img src="{{ $item->artwork_url }}" alt="Arte"
+                                             class="w-10 h-10 object-cover rounded border-2 border-purple-400" />
+                                        <span class="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full" title="Arte personalizada"></span>
+                                    </div>
+                                @elseif($thumbUrl)
                                     <img src="{{ $thumbUrl }}" alt="{{ $item->name }}"
                                          class="w-10 h-10 object-cover rounded border border-gray-200 dark:border-zinc-700" />
                                 @else
@@ -112,18 +138,16 @@
                                     </div>
                                 @endif
                             </td>
-                            {{-- Nome + variações + link --}}
+                            {{-- Nome --}}
                             <td>
                                 <div class="flex items-start gap-1">
                                     @if($listingUrl)
                                     <a href="{{ $listingUrl }}" class="font-medium leading-tight hover:text-primary-600 dark:hover:text-primary-400 transition-colors">{{ $item->name }}</a>
-                                    @else
-                                    <div class="font-medium leading-tight">{{ $item->name }}</div>
-                                    @endif
-                                    @if($listingUrl)
-                                    <a href="{{ $listingUrl }}" class="flex-shrink-0 text-gray-400 hover:text-primary-500 transition-colors mt-0.5" title="Ver anúncio no sistema">
+                                    <a href="{{ $listingUrl }}" class="flex-shrink-0 text-gray-400 hover:text-primary-500 mt-0.5">
                                         <x-heroicon-o-arrow-top-right-on-square class="w-3.5 h-3.5" />
                                     </a>
+                                    @else
+                                    <div class="font-medium leading-tight">{{ $item->name }}</div>
                                     @endif
                                 </div>
                                 @if(!empty($variationAttrs))
@@ -140,9 +164,38 @@
                             </td>
                             <td class="font-mono text-sm">{{ $item->sku }}</td>
                             <td class="text-center">{{ $item->quantity }}</td>
+                            {{-- Enviado --}}
+                            <td class="text-center">
+                                @if($item->shipped_quantity > 0)
+                                    <span class="font-semibold text-green-600 dark:text-green-400">{{ $item->shipped_quantity }}</span>
+                                @else
+                                    <span class="text-gray-400">0</span>
+                                @endif
+                            </td>
+                            {{-- Pendente --}}
+                            <td class="text-center">
+                                @if($item->cancelled_quantity > 0 && $pendingQty === 0)
+                                    <span class="text-xs text-red-500">cancelado</span>
+                                @elseif($pendingQty > 0)
+                                    <span class="font-semibold text-amber-600 dark:text-amber-400">{{ $pendingQty }}</span>
+                                @else
+                                    <x-heroicon-s-check-circle class="w-4 h-4 text-green-500 mx-auto" />
+                                @endif
+                            </td>
                             <td class="text-right">R$ {{ number_format($item->unit_price, 2, ',', '.') }}</td>
-                            <td class="text-right">R$ {{ number_format($item->discount, 2, ',', '.') }}</td>
                             <td class="text-right font-medium">R$ {{ number_format($item->total, 2, ',', '.') }}</td>
+                            {{-- Cancelar restante --}}
+                            <td>
+                                @if($pendingQty > 0 && $item->shipped_quantity === 0)
+                                <form method="POST" action="{{ route('orders.cancel-remaining', [$order, $item]) }}"
+                                      onsubmit="return confirm('Cancelar {{ $pendingQty }} unidade(s) restante(s) de {{ $item->name }}?')">
+                                    @csrf
+                                    <button type="submit" class="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 whitespace-nowrap">
+                                        Cancelar
+                                    </button>
+                                </form>
+                                @endif
+                            </td>
                         </tr>
                         @endforeach
                     </tbody>
@@ -216,6 +269,93 @@
 
         {{-- ═══ Sidebar ══════════════════════════════════════════════════════ --}}
         <div class="space-y-6">
+
+            {{-- Pipeline / Expedição --}}
+            <x-ui.card title="Expedição">
+                <div class="space-y-3">
+                    <div>
+                        <span class="text-xs text-gray-500 dark:text-zinc-400">Pipeline interno</span>
+                        <div class="mt-1">
+                            <x-ui.badge :color="$order->pipeline_status->color()">
+                                {{ $order->pipeline_status->label() }}
+                            </x-ui.badge>
+                        </div>
+                    </div>
+
+                    {{-- Ações de expedição --}}
+                    <div class="flex flex-col gap-2 pt-1">
+                        <a href="{{ route('orders.pack', $order) }}" class="btn-secondary btn-sm w-full justify-center">
+                            <x-heroicon-o-qr-code class="w-4 h-4" />
+                            Conferir Embalagem
+                        </a>
+
+                        @if($order->marketplaceAccount?->marketplace_type === \App\Enums\MarketplaceType::MercadoLivre && ($meta['ml_shipping_id'] ?? null))
+                        <a href="{{ route('orders.ml-label', $order) }}" target="_blank"
+                           class="btn-secondary btn-sm w-full justify-center">
+                            <x-heroicon-o-tag class="w-4 h-4" />
+                            Etiqueta ML (Correios)
+                        </a>
+                        @endif
+                    </div>
+
+                    {{-- Volumes configurados --}}
+                    <div>
+                        <span class="text-xs text-gray-500 dark:text-zinc-400">Volumes de caixa</span>
+                        <p class="text-sm font-semibold mt-1">{{ $order->expedition_volumes }}</p>
+                    </div>
+                </div>
+            </x-ui.card>
+
+            {{-- NF-e --}}
+            <x-ui.card title="Nota Fiscal">
+                @if($latestInvoice)
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">Status</span>
+                        <x-ui.badge :color="$latestInvoice->status->color()">
+                            {{ $latestInvoice->status->label() }}
+                        </x-ui.badge>
+                    </div>
+                    @if($latestInvoice->number)
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">NF-e nº</span>
+                        <span class="font-mono font-semibold">{{ $latestInvoice->number }}</span>
+                    </div>
+                    @endif
+                    @if($latestInvoice->access_key)
+                    <div>
+                        <span class="text-xs text-gray-500 dark:text-zinc-400">Chave de Acesso</span>
+                        <p class="font-mono text-[10px] break-all text-gray-600 dark:text-zinc-400 mt-0.5">
+                            {{ $latestInvoice->formatted_access_key }}
+                        </p>
+                    </div>
+                    @endif
+                    <div class="flex gap-2 pt-1">
+                        @if($latestInvoice->pdf_url)
+                        <a href="{{ $latestInvoice->pdf_url }}" target="_blank" class="btn-secondary btn-xs flex-1 justify-center">
+                            <x-heroicon-o-document class="w-3.5 h-3.5" />
+                            DANFE
+                        </a>
+                        @endif
+                        @if($latestInvoice->xml_url)
+                        <a href="{{ $latestInvoice->xml_url }}" target="_blank" class="btn-secondary btn-xs flex-1 justify-center">
+                            <x-heroicon-o-code-bracket class="w-3.5 h-3.5" />
+                            XML
+                        </a>
+                        @endif
+                    </div>
+                </div>
+                @else
+                <div class="text-center py-2">
+                    <p class="text-sm text-gray-500 dark:text-zinc-400 mb-3">Nenhuma NF-e emitida</p>
+                    <button onclick="document.getElementById('nfe-modal').classList.remove('hidden')"
+                            class="btn-primary btn-sm w-full justify-center">
+                        <x-heroicon-o-document-plus class="w-4 h-4" />
+                        Emitir NF-e
+                    </button>
+                </div>
+                @endif
+            </x-ui.card>
 
             {{-- Status --}}
             <x-ui.card title="Status">
@@ -446,6 +586,13 @@
                 </div>
             </x-ui.card>
 
+            {{-- Melhor Envios — cotação / etiqueta --}}
+            @if($order->marketplaceAccount?->melhor_envios_account_id)
+            <x-ui.card title="Frete — Melhor Envios">
+                <livewire:orders.shipping-quote :order="$order" />
+            </x-ui.card>
+            @endif
+
             {{-- Marketplace --}}
             @if($order->marketplaceAccount)
             <x-ui.card title="Marketplace">
@@ -506,4 +653,118 @@
             @endif
         </div>
     </div>
+
+    {{-- ============================================================
+         MODAL — Emissão de NF-e
+    ============================================================ --}}
+    <div id="nfe-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+         @keydown.escape.window="document.getElementById('nfe-modal').classList.add('hidden')">
+        <div class="bg-white dark:bg-zinc-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-zinc-700">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Emitir NF-e</h3>
+                <button onclick="document.getElementById('nfe-modal').classList.add('hidden')"
+                        class="text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200">
+                    <x-heroicon-o-x-mark class="w-5 h-5" />
+                </button>
+            </div>
+
+            <form action="{{ route('orders.invoice.emit', $order) }}" method="POST" class="p-6 space-y-5">
+                @csrf
+
+                {{-- Provider --}}
+                @if($order->marketplaceAccount?->webmania_account_id)
+                <div class="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+                    <x-heroicon-o-information-circle class="w-4 h-4 flex-shrink-0" />
+                    Emissão via <strong>Webmaniabr</strong> — conta vinculada: {{ $order->marketplaceAccount->webmaniaAccount?->name ?? 'Webmania' }}
+                </div>
+                @else
+                <div class="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-sm text-amber-700 dark:text-amber-300">
+                    <x-heroicon-o-exclamation-triangle class="w-4 h-4 flex-shrink-0" />
+                    Nenhuma conta Webmaniabr vinculada a esta conta de marketplace.
+                    <a href="{{ route('settings.index') }}" class="underline ml-1">Configurar</a>
+                </div>
+                @endif
+
+                {{-- Campos principais --}}
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label">Natureza da Operação</label>
+                        <input type="text" name="nature_operation" value="Venda" class="form-input">
+                    </div>
+                    <div>
+                        <label class="form-label">Modalidade do Frete</label>
+                        <select name="shipping_modality" class="form-input">
+                            <option value="9">Sem frete (9)</option>
+                            <option value="0">CIF — Remetente paga (0)</option>
+                            <option value="1">FOB — Destinatário paga (1)</option>
+                        </select>
+                    </div>
+                </div>
+
+                {{-- Seção colapsável: Volume e Peso --}}
+                <details class="border border-gray-200 dark:border-zinc-700 rounded-lg">
+                    <summary class="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 dark:text-zinc-300">
+                        Informar Volume e Peso (opcional)
+                    </summary>
+                    <div class="px-4 pb-4 pt-2 grid grid-cols-3 gap-3">
+                        <div>
+                            <label class="form-label text-xs">Espécie</label>
+                            <input type="text" name="volume_species" placeholder="Caixa" class="form-input">
+                        </div>
+                        <div>
+                            <label class="form-label text-xs">Peso Bruto (kg)</label>
+                            <input type="number" step="0.001" name="weight_gross" class="form-input">
+                        </div>
+                        <div>
+                            <label class="form-label text-xs">Peso Líquido (kg)</label>
+                            <input type="number" step="0.001" name="weight_net" class="form-input">
+                        </div>
+                    </div>
+                </details>
+
+                {{-- Seção colapsável: Informações Complementares --}}
+                <details class="border border-gray-200 dark:border-zinc-700 rounded-lg">
+                    <summary class="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 dark:text-zinc-300">
+                        Informações Complementares (opcional)
+                    </summary>
+                    <div class="px-4 pb-4 pt-2 space-y-3">
+                        <div>
+                            <label class="form-label text-xs">Info ao Fisco</label>
+                            <textarea name="info_fisco" rows="2" class="form-input"></textarea>
+                        </div>
+                        <div>
+                            <label class="form-label text-xs">Info ao Consumidor</label>
+                            <textarea name="info_consumer" rows="2" class="form-input"></textarea>
+                        </div>
+                    </div>
+                </details>
+
+                {{-- Toggle homologação --}}
+                <div class="flex items-center gap-3">
+                    <input type="checkbox" name="homologation" id="nfe-homolog" value="1"
+                           class="rounded border-gray-300 dark:border-zinc-600">
+                    <label for="nfe-homolog" class="text-sm text-gray-700 dark:text-zinc-300">
+                        Emitir em <strong>Homologação</strong> (ambiente de teste)
+                    </label>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button"
+                            onclick="document.getElementById('nfe-modal').classList.add('hidden')"
+                            class="btn-secondary">
+                        Cancelar
+                    </button>
+                    <button type="submit" name="action" value="preview" class="btn-secondary">
+                        <x-heroicon-o-eye class="w-4 h-4" />
+                        Pré-visualizar DANFE
+                    </button>
+                    <button type="submit" name="action" value="emit" class="btn-primary">
+                        <x-heroicon-o-document-plus class="w-4 h-4" />
+                        Emitir NF-e
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 </x-app-layout>

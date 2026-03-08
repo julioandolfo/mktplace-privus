@@ -56,6 +56,37 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return view('expedition.index');
     })->name('expedition.index');
 
+    // Packing (conferência de embalagem)
+    Route::get('/orders/{order}/pack', \App\Livewire\Orders\PackingScreen::class)->name('orders.pack');
+    Route::post('/orders/{order}/mark-packed', [\App\Http\Controllers\OrderDispatchController::class, 'markPacked'])->name('orders.mark-packed');
+    Route::post('/orders/{order}/partial-dispatch', [\App\Http\Controllers\OrderDispatchController::class, 'partial'])->name('orders.partial-dispatch');
+    Route::post('/orders/{order}/items/{item}/cancel-remaining', [\App\Http\Controllers\OrderDispatchController::class, 'cancelRemaining'])->name('orders.cancel-remaining');
+
+    // Romaneios
+    Route::get('/romaneios', [\App\Http\Controllers\RomaneioController::class, 'index'])->name('romaneios.index');
+    Route::post('/romaneios', [\App\Http\Controllers\RomaneioController::class, 'store'])->name('romaneios.store');
+    Route::get('/romaneios/{romaneio}', [\App\Http\Controllers\RomaneioController::class, 'show'])->name('romaneios.show');
+    Route::get('/romaneios/{romaneio}/pdf/romaneio', [\App\Http\Controllers\RomaneioController::class, 'pdfRomaneio'])->name('romaneios.pdf.romaneio');
+    Route::get('/romaneios/{romaneio}/pdf/etiquetas', [\App\Http\Controllers\RomaneioController::class, 'pdfEtiquetas'])->name('romaneios.pdf.etiquetas');
+    Route::post('/romaneios/{romaneio}/scan', [\App\Http\Controllers\RomaneioController::class, 'scan'])->name('romaneios.scan');
+    Route::post('/romaneios/{romaneio}/close', [\App\Http\Controllers\RomaneioController::class, 'close'])->name('romaneios.close');
+
+    // Romaneio board — tela de bipagem
+    Route::get('/romaneios/{romaneio}/board', \App\Livewire\Romaneios\RomaneioBoard::class)->name('romaneios.board');
+    Route::get('/romaneios/{romaneio}/pdf/etiquetas-avulso', [\App\Http\Controllers\RomaneioController::class, 'pdfEtiquetas'])->name('romaneios.pdf.etiquetas-avulso');
+
+    // NF-e
+    Route::post('/orders/{order}/invoice/emit', [\App\Http\Controllers\ShippingController::class, 'emitInvoice'])->name('orders.invoice.emit');
+
+    // Etiquetas oficiais ML
+    Route::get('/orders/{order}/ml-label', [\App\Http\Controllers\ShippingController::class, 'mlLabel'])->name('orders.ml-label');
+    Route::post('/orders/ml-labels-batch', [\App\Http\Controllers\ShippingController::class, 'mlLabelsBatch'])->name('orders.ml-labels-batch');
+
+    // Melhor Envios
+    Route::post('/orders/{order}/shipping/quote', [\App\Http\Controllers\ShippingController::class, 'quote'])->name('orders.shipping.quote');
+    Route::post('/orders/{order}/shipping/purchase', [\App\Http\Controllers\ShippingController::class, 'purchase'])->name('orders.shipping.purchase');
+    Route::post('/webhooks/melhor-envios', [\App\Http\Controllers\ShippingController::class, 'webhook'])->name('webhooks.melhor-envios');
+
     // Marketplaces
     Route::get('/marketplaces', [MarketplaceController::class, 'index'])->name('marketplaces.index');
     Route::get('/marketplaces/create', [MarketplaceController::class, 'create'])->name('marketplaces.create');
@@ -129,6 +160,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Settings
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
+
+    // Configurações — Webmaniabr
+    Route::get('/settings/webmania', [\App\Http\Controllers\WebmaniaAccountController::class, 'index'])->name('settings.webmania.index');
+    Route::get('/settings/webmania/create', [\App\Http\Controllers\WebmaniaAccountController::class, 'create'])->name('settings.webmania.create');
+    Route::post('/settings/webmania', [\App\Http\Controllers\WebmaniaAccountController::class, 'store'])->name('settings.webmania.store');
+    Route::get('/settings/webmania/{account}/edit', [\App\Http\Controllers\WebmaniaAccountController::class, 'edit'])->name('settings.webmania.edit');
+    Route::put('/settings/webmania/{account}', [\App\Http\Controllers\WebmaniaAccountController::class, 'update'])->name('settings.webmania.update');
+    Route::delete('/settings/webmania/{account}', [\App\Http\Controllers\WebmaniaAccountController::class, 'destroy'])->name('settings.webmania.destroy');
+
+    // Configurações — Marketplace Accounts (vincular Webmania, ME, etc.)
+    Route::get('/settings/accounts', [\App\Http\Controllers\MarketplaceAccountSettingsController::class, 'index'])->name('settings.accounts.index');
+    Route::put('/settings/accounts/{account}', [\App\Http\Controllers\MarketplaceAccountSettingsController::class, 'update'])->name('settings.accounts.update');
 });
 
 require __DIR__.'/auth.php';

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class MarketplaceAccount extends Model
 {
@@ -28,6 +29,8 @@ class MarketplaceAccount extends Model
         'last_error',
         'settings',
         'meta',
+        'webmania_account_id',
+        'melhor_envios_account_id',
     ];
 
     protected function casts(): array
@@ -60,6 +63,16 @@ class MarketplaceAccount extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function webmaniaAccount(): BelongsTo
+    {
+        return $this->belongsTo(WebmaniaAccount::class);
+    }
+
+    public function melhorEnviosAccount(): BelongsTo
+    {
+        return $this->belongsTo(MelhorEnviosAccount::class);
     }
 
     // Scopes

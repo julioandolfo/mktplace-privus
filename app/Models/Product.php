@@ -26,6 +26,7 @@ class Product extends Model
         'seo_title', 'seo_description',
         'ai_generated_description', 'ai_score',
         'attributes', 'meta',
+        'requires_production', 'requires_artwork',
     ];
 
     protected function casts(): array
@@ -40,9 +41,11 @@ class Product extends Model
             'width' => 'decimal:2',
             'height' => 'decimal:2',
             'length' => 'decimal:2',
-            'tax_data' => 'json',
-            'attributes' => 'json',
-            'meta' => 'json',
+            'tax_data'            => 'json',
+            'attributes'          => 'json',
+            'meta'                => 'json',
+            'requires_production' => 'boolean',
+            'requires_artwork'    => 'boolean',
         ];
     }
 

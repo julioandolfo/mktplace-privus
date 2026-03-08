@@ -740,6 +740,75 @@ class MercadoLivreService
         );
     }
 
+    // ─── Shipping Labels ─────────────────────────────────────────────────────
+
+    /**
+     * Retorna a URL do PDF de etiqueta oficial dos Correios/transportadora para
+     * um ou mais shipment IDs. Endpoint: GET /shipment_labels?shipment_ids=X,Y&response_type=pdf
+     *
+     * @param  array<string|int>  $shipmentIds
+     */
+    public function getShipmentLabels(array $shipmentIds, string $responseType = 'pdf'): string
+    {
+        if (empty($shipmentIds)) {
+            throw new \InvalidArgumentException('Informe ao menos um shipment_id.');
+        }
+
+        $ids      = implode(',', $shipmentIds);
+        $response = Http::withToken($this->token())
+            ->timeout(30)
+            ->get(self::BASE_URL . '/shipment_labels', [
+                'shipment_ids'  => $ids,
+                'response_type' => $responseType, // 'pdf' | 'zpl2'
+            ]);
+
+        if ($response->failed()) {
+            throw new \RuntimeException(
+                "ML getShipmentLabels error [{$response->status()}]: " . $response->body()
+            );
+        }
+
+        // A API retorna redirect para URL do PDF; o Http client segue o redirect automaticamente.
+        // Devolvemos a URL final (ou o body se for conteúdo direto).
+        $finalUrl = $response->effectiveUri()?->__toString() ?? '';
+
+        if ($finalUrl && $finalUrl !== self::BASE_URL . '/shipment_labels') {
+            return $finalUrl;
+        }
+
+        // Fallback: retorna body como base64 caso seja PDF binário
+        return 'data:application/pdf;base64,' . base64_encode($response->body());
+    }
+
+    /**
+     * Envia o documento fiscal (NF-e) para a ML via Faturador ML.
+     * Para pedidos sem pack, usa /users/{user_id}/invoices/orders/{order_id}.
+     * Para packs, usa /packs/{pack_id}/fiscal_documents.
+     *
+     * @param  string  $mlOrderId   ID externo do pedido no ML
+     * @param  string  $accessKey   Chave de acesso de 44 dígitos da NF-e
+     * @param  string|null  $packId Pack ID se aplicável
+     */
+    public function submitFiscalDocument(
+        string $mlOrderId,
+        string $accessKey,
+        ?string $packId = null
+    ): array {
+        $sellerId = $this->requireShopId();
+
+        if ($packId) {
+            return $this->post("/packs/{$packId}/fiscal_documents", [
+                'type'       => 'invoice',
+                'invoice_id' => $accessKey,
+            ]);
+        }
+
+        return $this->post("/users/{$sellerId}/invoices/orders/{$mlOrderId}", [
+            'type'       => 'invoice',
+            'invoice_id' => $accessKey,
+        ]);
+    }
+
     // ─── Status Mappers ───────────────────────────────────────────────────────
 
     public static function mapOrderStatus(string $mlStatus): string
