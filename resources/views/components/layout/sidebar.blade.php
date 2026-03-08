@@ -58,6 +58,13 @@
             <span x-show="sidebarOpen" x-transition.opacity>Producao</span>
         </a>
 
+        @if(auth()->user()?->isDesigner())
+        <a href="{{ route('designer.index') }}" class="sidebar-link {{ request()->routeIs('designer.*') ? 'active' : '' }}">
+            <x-heroicon-o-paint-brush class="icon" />
+            <span x-show="sidebarOpen" x-transition.opacity>Designer</span>
+        </a>
+        @endif
+
         <a href="{{ route('expedition.index') }}" class="sidebar-link {{ request()->routeIs('expedition.*') ? 'active' : '' }}">
             <x-heroicon-o-truck class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Expedicao</span>
@@ -156,6 +163,12 @@
             <x-heroicon-o-wrench-screwdriver class="icon" />
             <span>Producao</span>
         </a>
+        @if(auth()->user()?->isDesigner())
+        <a href="{{ route('designer.index') }}" class="sidebar-link {{ request()->routeIs('designer.*') ? 'active' : '' }}">
+            <x-heroicon-o-paint-brush class="icon" />
+            <span>Designer</span>
+        </a>
+        @endif
         <a href="{{ route('expedition.index') }}" class="sidebar-link {{ request()->routeIs('expedition.*') ? 'active' : '' }}">
             <x-heroicon-o-truck class="icon" />
             <span>Expedicao</span>

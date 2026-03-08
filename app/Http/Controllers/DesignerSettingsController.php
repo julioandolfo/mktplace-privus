@@ -13,7 +13,13 @@ class DesignerSettingsController extends Controller
     public function index()
     {
         $companyId = Auth::user()->company_id;
-        $company   = Company::findOrFail($companyId);
+
+        if (! $companyId) {
+            return redirect()->route('settings.index')
+                ->with('error', 'Seu usuário ainda não está vinculado a uma empresa. Contate o administrador.');
+        }
+
+        $company = Company::findOrFail($companyId);
 
         $designers = User::where('company_id', $companyId)
             ->where('role', 'designer')

@@ -37,6 +37,30 @@
                     <x-heroicon-o-bell class="w-5 h-5" />
                     Notificacoes
                 </button>
+
+                <div class="h-px bg-gray-100 dark:bg-zinc-700 mx-1 my-1"></div>
+
+                {{-- Links externos (páginas separadas) --}}
+                <a href="{{ route('settings.designers.index') }}"
+                   class="{{ $navBtn }} {{ request()->routeIs('settings.designers.*') ? $navActive : $navInactive }}">
+                    <x-heroicon-o-paint-brush class="w-5 h-5" />
+                    Designers
+                </a>
+                <a href="{{ route('settings.me.index') }}"
+                   class="{{ $navBtn }} {{ request()->routeIs('settings.me.*') ? $navActive : $navInactive }}">
+                    <x-heroicon-o-truck class="w-5 h-5" />
+                    Melhor Envios
+                </a>
+                <a href="{{ route('settings.webmania.index') }}"
+                   class="{{ $navBtn }} {{ request()->routeIs('settings.webmania.*') ? $navActive : $navInactive }}">
+                    <x-heroicon-o-document-text class="w-5 h-5" />
+                    Webmaniabr (NF-e)
+                </a>
+                <a href="{{ route('settings.accounts.index') }}"
+                   class="{{ $navBtn }} {{ request()->routeIs('settings.accounts.*') ? $navActive : $navInactive }}">
+                    <x-heroicon-o-link class="w-5 h-5" />
+                    Contas &amp; Expedição
+                </a>
             </nav>
         </div>
 
