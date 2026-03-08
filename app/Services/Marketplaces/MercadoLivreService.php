@@ -184,22 +184,31 @@ class MercadoLivreService
     /**
      * Extract the dispatch deadline from lead_time data.
      * Tries multiple fields and falls back to calculating from paid_at + handling hours.
+     *
+     * Priority:
+     *  1. estimated_handling_limit.date (documented, older API)
+     *  2. estimated_schedule_limit.date (current BR API, populated for pending shipments)
+     *  3. buffering.date (sometimes present)
+     *  4. Calculated: paid_at + handling hours (min 24h for "same day" dispatch)
      */
     public static function extractDispatchDeadline(array $leadTime, ?\Carbon\Carbon $paidAt = null): ?string
     {
-        // 1. Try documented field (older API versions)
         $deadline = $leadTime['estimated_handling_limit']['date'] ?? null;
 
-        // 2. Try current BR field
         if (! $deadline) {
             $deadline = $leadTime['estimated_schedule_limit']['date'] ?? null;
         }
 
-        // 3. Calculate from paid_at + handling hours
+        if (! $deadline) {
+            $deadline = $leadTime['buffering']['date'] ?? null;
+        }
+
         if (! $deadline && $paidAt) {
             $handlingHours = $leadTime['estimated_delivery_time']['handling'] ?? null;
             if ($handlingHours !== null && is_numeric($handlingHours)) {
-                $deadline = $paidAt->copy()->addHours((int) $handlingHours)->toIso8601String();
+                // handling=0 means "same day dispatch" — ML gives until end of next business day
+                $hours = max((int) $handlingHours, 24);
+                $deadline = $paidAt->copy()->addHours($hours)->toIso8601String();
             }
         }
 
