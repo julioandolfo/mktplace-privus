@@ -107,8 +107,10 @@ class SyncSingleOrder implements ShouldQueue
             }
 
             // Dispatch deadline from /shipments/{id}/lead_time
-            $leadTime         = $service->getShippingLeadTime((string) $ml['shipping']['id']);
-            $shippingDeadline = $leadTime['estimated_handling_limit']['date'] ?? null;
+            $leadTime  = $service->getShippingLeadTime((string) $ml['shipping']['id']);
+            $paidAtRaw = $payment['date_approved'] ?? $ml['date_created'] ?? null;
+            $paidAtCarbon = $paidAtRaw ? \Carbon\Carbon::parse($paidAtRaw) : null;
+            $shippingDeadline = MercadoLivreService::extractDispatchDeadline($leadTime, $paidAtCarbon);
 
             // Determine shipped_at from shipment status transitions
             if (in_array($shipmentStatus, ['shipped', 'delivered', 'to_be_agreed', 'not_delivered'])) {

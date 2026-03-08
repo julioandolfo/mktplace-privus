@@ -164,19 +164,46 @@ class MercadoLivreService
     }
 
     /**
-     * Fetch lead time details for a shipment, including the seller dispatch deadline.
-     * The field estimated_handling_limit.date is the deadline for the seller to ship.
+     * Fetch lead time details for a shipment and extract the seller dispatch deadline.
+     *
+     * The API may return the deadline in different fields depending on the version:
+     *  - estimated_handling_limit.date (documented, older format)
+     *  - estimated_schedule_limit.date (current BR format)
+     *  - Fallback: calculated from paid_at + handling hours
      */
     public function getShippingLeadTime(string $shippingId): array
     {
         try {
-            $data = $this->get("/shipments/{$shippingId}/lead_time");
-            Log::info("ML getShippingLeadTime({$shippingId}): estimated_handling_limit=" . json_encode($data['estimated_handling_limit'] ?? 'NOT_PRESENT') . " | keys=" . implode(',', array_keys($data)));
-            return $data;
+            return $this->get("/shipments/{$shippingId}/lead_time");
         } catch (\Throwable $e) {
             Log::warning("ML getShippingLeadTime({$shippingId}) failed: " . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * Extract the dispatch deadline from lead_time data.
+     * Tries multiple fields and falls back to calculating from paid_at + handling hours.
+     */
+    public static function extractDispatchDeadline(array $leadTime, ?\Carbon\Carbon $paidAt = null): ?string
+    {
+        // 1. Try documented field (older API versions)
+        $deadline = $leadTime['estimated_handling_limit']['date'] ?? null;
+
+        // 2. Try current BR field
+        if (! $deadline) {
+            $deadline = $leadTime['estimated_schedule_limit']['date'] ?? null;
+        }
+
+        // 3. Calculate from paid_at + handling hours
+        if (! $deadline && $paidAt) {
+            $handlingHours = $leadTime['estimated_delivery_time']['handling'] ?? null;
+            if ($handlingHours !== null && is_numeric($handlingHours)) {
+                $deadline = $paidAt->copy()->addHours((int) $handlingHours)->toIso8601String();
+            }
+        }
+
+        return $deadline;
     }
 
     // ─── Listings ────────────────────────────────────────────────────────────

@@ -58,7 +58,7 @@ class DebugShipmentLeadTime extends Command
             return self::FAILURE;
         }
 
-        return $this->callLeadTime($account, $shippingId);
+        return $this->callLeadTime($account, $shippingId, $order);
     }
 
     private function debugAccount(string $accountId): int
@@ -87,9 +87,10 @@ class DebugShipmentLeadTime extends Command
             $this->newLine();
             $this->info("═══ Pedido: {$order->order_number} (status: {$order->status->value}) ═══");
             $this->info("ML Shipping ID: " . ($shippingId ?: 'N/A'));
+            $this->info("paid_at: " . ($order->paid_at?->format('d/m/Y H:i') ?? 'N/A'));
 
             if ($shippingId) {
-                $this->callLeadTime($account, $shippingId);
+                $this->callLeadTime($account, $shippingId, $order);
             } else {
                 $this->warn('  Sem shipping_id.');
             }
@@ -98,7 +99,7 @@ class DebugShipmentLeadTime extends Command
         return self::SUCCESS;
     }
 
-    private function callLeadTime(MarketplaceAccount $account, string $shippingId): int
+    private function callLeadTime(MarketplaceAccount $account, string $shippingId, ?Order $order = null): int
     {
         $service = new MercadoLivreService($account);
 
@@ -113,23 +114,36 @@ class DebugShipmentLeadTime extends Command
 
         $this->info('  Keys retornadas: ' . implode(', ', array_keys($leadTime)));
 
-        if (isset($leadTime['estimated_handling_limit'])) {
-            $this->info('  ✓ estimated_handling_limit.date = ' . ($leadTime['estimated_handling_limit']['date'] ?? 'null'));
-        } else {
-            $this->warn('  ✗ estimated_handling_limit NÃO presente na resposta.');
+        // Show all relevant deadline fields
+        $fields = [
+            'estimated_handling_limit' => $leadTime['estimated_handling_limit']['date'] ?? null,
+            'estimated_schedule_limit' => $leadTime['estimated_schedule_limit']['date'] ?? null,
+            'estimated_delivery_time.handling (horas)' => $leadTime['estimated_delivery_time']['handling'] ?? null,
+            'estimated_delivery_time.date' => $leadTime['estimated_delivery_time']['date'] ?? null,
+            'estimated_delivery_limit' => $leadTime['estimated_delivery_limit']['date'] ?? null,
+            'buffering' => $leadTime['buffering']['date'] ?? null,
+        ];
+
+        foreach ($fields as $name => $value) {
+            $icon = $value !== null ? '✓' : '✗';
+            $this->line("  {$icon} {$name} = " . ($value ?? 'null'));
         }
 
-        if (isset($leadTime['estimated_delivery_time'])) {
-            $this->info('  estimated_delivery_time.date = ' . ($leadTime['estimated_delivery_time']['date'] ?? 'null'));
-        }
-
-        if (isset($leadTime['estimated_delivery_limit'])) {
-            $this->info('  estimated_delivery_limit.date = ' . ($leadTime['estimated_delivery_limit']['date'] ?? 'null'));
-        }
-
+        // Test the extraction method
+        $paidAt = $order?->paid_at;
+        $extracted = MercadoLivreService::extractDispatchDeadline($leadTime, $paidAt);
         $this->newLine();
-        $this->line('  Resposta completa (JSON):');
-        $this->line('  ' . json_encode($leadTime, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        if ($extracted) {
+            $formatted = \Carbon\Carbon::parse($extracted)->format('d/m/Y H:i');
+            $this->info("  >>> PRAZO EXTRAÍDO: {$formatted}");
+            $this->info("  >>> Valor bruto: {$extracted}");
+        } else {
+            $this->error('  >>> Não foi possível extrair prazo de despacho.');
+        }
+
+        if ($paidAt) {
+            $this->line("  paid_at do pedido: {$paidAt->format('d/m/Y H:i')}");
+        }
 
         return self::SUCCESS;
     }
