@@ -88,10 +88,15 @@
         </div>
         @else
         <div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-zinc-700">
-            <button wire:click="openRomaneioModal(2)"
+            <button wire:click="createEmptyRomaneio"
+                    wire:loading.attr="disabled"
+                    wire:target="createEmptyRomaneio"
                     class="btn-ghost btn-sm">
-                <x-heroicon-o-plus-circle class="w-4 h-4" />
-                Novo Romaneio Vazio (bipagem)
+                <span wire:loading.remove wire:target="createEmptyRomaneio">
+                    <x-heroicon-o-plus-circle class="w-4 h-4" />
+                    Novo Romaneio (bipagem)
+                </span>
+                <span wire:loading wire:target="createEmptyRomaneio" class="text-xs">Criando...</span>
             </button>
 
             <a href="{{ route('romaneios.index') }}" class="btn-ghost btn-sm ml-auto">
@@ -350,21 +355,30 @@
                                 <div class="flex items-center justify-end gap-2">
 
                                 @if($activeTab === 'in_production')
-                                    {{-- Em produção: só visualizar --}}
+                                    {{-- Em produção: visualizar + ações secundárias --}}
                                     <span class="text-xs text-gray-400 dark:text-zinc-500 italic">Em produção</span>
-                                    <a href="{{ route('orders.show', $order) }}" class="btn-ghost btn-xs" title="Ver pedido">
-                                        <x-heroicon-o-eye class="w-4 h-4" />
-                                    </a>
+                                    @include('livewire.orders._expedition-menu', [
+                                        'order'   => $order,
+                                        'mlStep'  => $isMl ? ($mlStep ?? 1) : null,
+                                        'genStep' => !$isMl ? ($genStep ?? 1) : null,
+                                        'isMl'    => $isMl,
+                                        'mlShippingId' => $mlShippingId,
+                                    ])
 
                                 @elseif($isShipped || $activeTab === 'shipped')
-                                    {{-- Enviado --}}
+                                    {{-- Enviado: mostra status + opção de re-abrir para re-envio --}}
                                     <span class="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
                                         <x-heroicon-s-check-circle class="w-3.5 h-3.5" />
                                         Enviado
                                     </span>
-                                    <a href="{{ route('orders.show', $order) }}" class="btn-ghost btn-xs" title="Ver pedido">
-                                        <x-heroicon-o-eye class="w-4 h-4" />
-                                    </a>
+                                    @include('livewire.orders._expedition-menu', [
+                                        'order'   => $order,
+                                        'mlStep'  => null,
+                                        'genStep' => null,
+                                        'isMl'    => $isMl,
+                                        'mlShippingId' => $mlShippingId,
+                                        'isShipped' => true,
+                                    ])
 
                                 @elseif($isMl)
                                     {{-- ──── PROGRESSO: dots para ML (4 etapas) ──── --}}
@@ -407,67 +421,14 @@
                                         </button>
                                     @endif
 
-                                    {{-- ──── MENU ⋮ SECUNDÁRIO (teleport para escapar do overflow) ──── --}}
-                                    <div x-data="{
-                                            open: false,
-                                            top: 0, left: 0,
-                                            toggle() {
-                                                this.open = !this.open;
-                                                if (this.open) {
-                                                    const r = this.$refs.btn.getBoundingClientRect();
-                                                    this.top  = r.bottom + window.scrollY + 4;
-                                                    this.left = r.right  + window.scrollX - 208;
-                                                }
-                                            }
-                                        }">
-                                        <button x-ref="btn" @click="toggle()" class="btn-ghost btn-xs px-1" title="Mais ações">
-                                            <x-heroicon-o-ellipsis-vertical class="w-4 h-4" />
-                                        </button>
-                                        <template x-teleport="body">
-                                            <div x-show="open" x-cloak
-                                                 @click.outside="open = false"
-                                                 @keydown.escape.window="open = false"
-                                                 x-transition:enter="transition ease-out duration-100"
-                                                 x-transition:enter-start="opacity-0 scale-95"
-                                                 x-transition:enter-end="opacity-100 scale-100"
-                                                 :style="`position:fixed;top:${top}px;left:${left}px;z-index:9999;`"
-                                                 class="w-52 bg-white dark:bg-zinc-800 rounded-lg shadow-2xl border border-gray-100 dark:border-zinc-700 py-1 text-left">
-
-                                                @if($mlStep === 1)
-                                                <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
-                                                   target="_blank"
-                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                    <x-heroicon-o-document-text class="w-4 h-4 text-gray-400" />
-                                                    Etiqueta de Volume
-                                                </a>
-                                                <button wire:click="markPacked({{ $order->id }})"
-                                                        wire:confirm="Marcar {{ $order->order_number }} como embalado sem conferência?"
-                                                        @click="open = false"
-                                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                    <x-heroicon-o-archive-box class="w-4 h-4 text-gray-400" />
-                                                    Marcar Embalado
-                                                </button>
-                                                <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
-                                                @endif
-
-                                                @if($mlStep === 4 && $mlShippingId)
-                                                <a href="{{ route('orders.ml-label', $order) }}"
-                                                   target="_blank"
-                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                    <x-heroicon-o-tag class="w-4 h-4 text-amber-500" />
-                                                    Etiqueta ML (Correios)
-                                                </a>
-                                                <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
-                                                @endif
-
-                                                <a href="{{ route('orders.show', $order) }}"
-                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                    <x-heroicon-o-eye class="w-4 h-4 text-gray-400" />
-                                                    Ver Pedido
-                                                </a>
-                                            </div>
-                                        </template>
-                                    </div>
+                                    @include('livewire.orders._expedition-menu', [
+                                        'order'        => $order,
+                                        'mlStep'       => $mlStep,
+                                        'genStep'      => null,
+                                        'isMl'         => true,
+                                        'mlShippingId' => $mlShippingId,
+                                        'isShipped'    => false,
+                                    ])
 
                                 @else
                                     {{-- ──── PROGRESSO: dots para Genérico (2 etapas) ──── --}}
@@ -497,57 +458,14 @@
                                         </button>
                                     @endif
 
-                                    {{-- ──── MENU ⋮ SECUNDÁRIO (teleport para escapar do overflow) ──── --}}
-                                    <div x-data="{
-                                            open: false,
-                                            top: 0, left: 0,
-                                            toggle() {
-                                                this.open = !this.open;
-                                                if (this.open) {
-                                                    const r = this.$refs.btn.getBoundingClientRect();
-                                                    this.top  = r.bottom + window.scrollY + 4;
-                                                    this.left = r.right  + window.scrollX - 208;
-                                                }
-                                            }
-                                        }">
-                                        <button x-ref="btn" @click="toggle()" class="btn-ghost btn-xs px-1" title="Mais ações">
-                                            <x-heroicon-o-ellipsis-vertical class="w-4 h-4" />
-                                        </button>
-                                        <template x-teleport="body">
-                                            <div x-show="open" x-cloak
-                                                 @click.outside="open = false"
-                                                 @keydown.escape.window="open = false"
-                                                 x-transition:enter="transition ease-out duration-100"
-                                                 x-transition:enter-start="opacity-0 scale-95"
-                                                 x-transition:enter-end="opacity-100 scale-100"
-                                                 :style="`position:fixed;top:${top}px;left:${left}px;z-index:9999;`"
-                                                 class="w-52 bg-white dark:bg-zinc-800 rounded-lg shadow-2xl border border-gray-100 dark:border-zinc-700 py-1 text-left">
-
-                                                @if($genStep === 1)
-                                                <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
-                                                   target="_blank"
-                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                    <x-heroicon-o-document-text class="w-4 h-4 text-gray-400" />
-                                                    Etiqueta de Volume
-                                                </a>
-                                                <button wire:click="markPacked({{ $order->id }})"
-                                                        wire:confirm="Marcar {{ $order->order_number }} como embalado?"
-                                                        @click="open = false"
-                                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                    <x-heroicon-o-archive-box class="w-4 h-4 text-gray-400" />
-                                                    Marcar Embalado
-                                                </button>
-                                                <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
-                                                @endif
-
-                                                <a href="{{ route('orders.show', $order) }}"
-                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                    <x-heroicon-o-eye class="w-4 h-4 text-gray-400" />
-                                                    Ver Pedido
-                                                </a>
-                                            </div>
-                                        </template>
-                                    </div>
+                                    @include('livewire.orders._expedition-menu', [
+                                        'order'        => $order,
+                                        'mlStep'       => null,
+                                        'genStep'      => $genStep,
+                                        'isMl'         => false,
+                                        'mlShippingId' => null,
+                                        'isShipped'    => false,
+                                    ])
 
                                 @endif
 

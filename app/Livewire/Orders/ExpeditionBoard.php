@@ -343,6 +343,24 @@ class ExpeditionBoard extends Component
         $this->showRomaneioModal = true;
     }
 
+    /**
+     * Cria um romaneio vazio (modo bipagem) sem abrir modal.
+     * Nome gerado automaticamente e redireciona direto para o board de bipagem.
+     */
+    public function createEmptyRomaneio(): void
+    {
+        $user = Auth::user();
+
+        $romaneio = Romaneio::create([
+            'company_id' => $user?->company_id,
+            'created_by' => $user->id,
+            'name'       => 'ROM-' . now()->format('d/m/Y H:i'),
+            'status'     => 'open',
+        ]);
+
+        $this->redirect(route('romaneios.board', $romaneio));
+    }
+
     public function createRomaneio()
     {
         $this->validate(['romaneioName' => 'required|string|max:100']);
@@ -350,28 +368,27 @@ class ExpeditionBoard extends Component
         $user = Auth::user();
 
         $romaneio = Romaneio::create([
-            'company_id' => $user->company_id,
+            'company_id' => $user?->company_id,
             'created_by' => $user->id,
             'name'       => $this->romaneioName,
             'status'     => 'open',
         ]);
 
-        // Modo 1: adiciona pedidos selecionados
         if ($this->romaneioMode === 1 && ! empty($this->selectedOrders)) {
             $q = Order::whereIn('id', $this->selectedOrders);
             if ($user->company_id) {
                 $q->where('company_id', $user->company_id);
             }
-            $orders = $q->get();
+            $orders = $q->with('items')->get();
 
             foreach ($orders as $order) {
                 $volumes = (int) ($order->meta['expedition_volumes'] ?? 1);
 
                 $romaneio->items()->create([
-                    'order_id'     => $order->id,
-                    'volumes'      => $volumes,
+                    'order_id'        => $order->id,
+                    'volumes'         => $volumes,
                     'volumes_scanned' => 0,
-                    'items_detail' => $order->items->map(fn ($item) => [
+                    'items_detail'    => $order->items->map(fn ($item) => [
                         'order_item_id' => $item->id,
                         'quantity'      => $item->pending_quantity,
                     ])->filter(fn ($d) => $d['quantity'] > 0)->values()->toArray(),
@@ -384,12 +401,22 @@ class ExpeditionBoard extends Component
         $this->selectAll        = false;
         $this->romaneioName     = '';
 
-        // Modo 2 (vazio/bipagem): vai direto para o board de bipagem
-        if ($this->romaneioMode === 2) {
-            return redirect()->route('romaneios.board', $romaneio);
-        }
+        return $this->redirect(route('romaneios.show', $romaneio));
+    }
 
-        return redirect()->route('romaneios.show', $romaneio);
+    /**
+     * Reverte pedido enviado para "Pronto para Envio" — permite reprocessar
+     * (gerar nova etiqueta MelhorEnvios, corrigir endereço, etc.)
+     */
+    public function revertToReadyToShip(int $orderId): void
+    {
+        $order = $this->scopedOrder($orderId);
+        $order->update([
+            'status'          => OrderStatus::Paid,
+            'pipeline_status' => PipelineStatus::Packed,
+            'shipped_at'      => null,
+        ]);
+        session()->flash('success', "Pedido {$order->order_number} reaberto para re-envio.");
     }
 
     // ----------------------------------------------------------------
