@@ -15,16 +15,43 @@ class FixOrderPipelineStatus extends Command
 
     public function handle(): int
     {
-        // Corrige users sem company_id (pega a primeira empresa disponível)
+        // ── 1. Corrige users sem company_id ───────────────────────────────
         $firstCompanyId = DB::table('companies')->orderBy('id')->value('id');
         if ($firstCompanyId) {
             $usersFixed = DB::table('users')->whereNull('company_id')->update(['company_id' => $firstCompanyId]);
             $this->info("Usuários sem company_id corrigidos: {$usersFixed}");
         }
 
-        // Mapeia OrderStatus → PipelineStatus para orders sem pipeline_status
+        // ── 2. Pedidos delivered/shipped com pipeline != shipped → corrige ─
+        // Isso resolve o caso de pedidos "Entregue" que ainda aparecem como
+        // ready_to_ship e inflam os contadores de "Atrasados" na expedição.
+        $wrongPipeline = DB::table('orders')
+            ->whereIn('status', [
+                OrderStatus::Delivered->value,
+                OrderStatus::Shipped->value,
+                OrderStatus::Returned->value,
+            ])
+            ->where('pipeline_status', '!=', PipelineStatus::Shipped->value)
+            ->orWhere(function ($q) {
+                $q->whereIn('status', [
+                    OrderStatus::Delivered->value,
+                    OrderStatus::Shipped->value,
+                    OrderStatus::Returned->value,
+                ])->whereNull('pipeline_status');
+            })
+            ->update(['pipeline_status' => PipelineStatus::Shipped->value]);
+        $this->info("Pedidos delivered/shipped com pipeline errado corrigidos: {$wrongPipeline}");
+
+        // ── 3. Pedidos cancelled com pipeline != null → sem pipeline ───────
+        DB::table('orders')
+            ->where('status', OrderStatus::Cancelled->value)
+            ->whereNotNull('pipeline_status')
+            ->whereNotIn('pipeline_status', [PipelineStatus::Shipped->value])
+            ->update(['pipeline_status' => null]);
+
+        // ── 4. Pedidos com pipeline_status NULL → define pelo status ───────
         $statusMap = [
-            OrderStatus::Cancelled->value    => null, // manter null (cancelado)
+            OrderStatus::Cancelled->value    => null,
             OrderStatus::Delivered->value    => PipelineStatus::Shipped->value,
             OrderStatus::Shipped->value      => PipelineStatus::Shipped->value,
             OrderStatus::ReadyToShip->value  => PipelineStatus::ReadyToShip->value,
@@ -48,16 +75,9 @@ class FixOrderPipelineStatus extends Command
 
             $total += $updated;
         }
+        $this->info("Pedidos com pipeline_status NULL corrigidos: {$total}");
 
-        // Pedidos com pipeline = 'shipped' mas status = 'cancelled' → corrige para não aparecer
-        DB::table('orders')
-            ->whereNull('pipeline_status')
-            ->where('status', OrderStatus::Cancelled->value)
-            ->update(['pipeline_status' => 'cancelled_pipeline']);
-
-        $this->info("Pedidos com pipeline_status corrigidos: {$total}");
-
-        // Corrige orders sem company_id (se o marketplace_account tiver company_id)
+        // ── 5. Corrige orders sem company_id via marketplace_account ───────
         $ordersWithoutCompany = DB::table('orders')
             ->join('marketplace_accounts', 'orders.marketplace_account_id', '=', 'marketplace_accounts.id')
             ->whereNull('orders.company_id')
@@ -70,14 +90,15 @@ class FixOrderPipelineStatus extends Command
         }
         $this->info("Pedidos sem company_id corrigidos via marketplace_account: {$ordersWithoutCompany->count()}");
 
-        // Relatório final
-        $ready = Order::where('pipeline_status', PipelineStatus::ReadyToShip->value)->count();
-        $null  = Order::whereNull('pipeline_status')->count();
+        // ── 6. Relatório final ─────────────────────────────────────────────
         $this->table(
             ['pipeline_status', 'count'],
-            array_merge(
-                DB::table('orders')->select('pipeline_status', DB::raw('count(*) as total'))->groupBy('pipeline_status')->get()->map(fn ($r) => [$r->pipeline_status ?? 'NULL', $r->total])->toArray(),
-            )
+            DB::table('orders')
+                ->select('pipeline_status', DB::raw('count(*) as total'))
+                ->groupBy('pipeline_status')
+                ->get()
+                ->map(fn ($r) => [$r->pipeline_status ?? 'NULL', $r->total])
+                ->toArray()
         );
 
         $this->info('Concluído!');

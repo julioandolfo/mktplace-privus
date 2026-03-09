@@ -90,13 +90,17 @@ class ExpeditionBoard extends Component
         return "json_extract(meta, '$.ml_shipping_deadline') IS NULL";
     }
 
-    /** NULL-safe date sentinel para ORDER BY */
+    /** NULL-safe date sentinel para ORDER BY — tipos compatíveis com cada DB */
     protected function deadlineOrderSql(): string
     {
         $dl = $this->deadlineDateSql();
         $notNull = $this->deadlineNotNullSql();
 
-        return "CASE WHEN meta IS NOT NULL AND {$notNull} THEN {$dl} ELSE '9999-12-31' END";
+        // PostgreSQL: ELSE precisa ter o mesmo tipo (date) que o THEN
+        // SQLite: SUBSTR retorna texto, '9999-12-31' é texto — sem necessidade de cast
+        $elseSentinel = $this->isPostgres() ? "'9999-12-31'::date" : "'9999-12-31'";
+
+        return "CASE WHEN meta IS NOT NULL AND {$notNull} THEN {$dl} ELSE {$elseSentinel} END";
     }
 
     // ----------------------------------------------------------------
