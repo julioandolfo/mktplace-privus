@@ -328,194 +328,77 @@
                                 </x-ui.badge>
                             </td>
 
-                            {{-- Ações progressivas por marketplace --}}
-                            <td class="text-right">
-                                <div class="flex flex-col items-end gap-1.5">
+                            {{-- ═══════════════════════════════════════════════════════
+                                 AÇÕES: dots de progresso + 1 CTA principal + menu ⋮
+                            ═══════════════════════════════════════════════════════ --}}
+                            @php
+                                // Calcular etapa ML
+                                if ($isMl) {
+                                    if ($isPrePack)        $mlStep = 1;
+                                    elseif ($pendingNfe)   $mlStep = 3;
+                                    elseif (!$hasNfe)      $mlStep = 2;
+                                    else                   $mlStep = 4;
+                                }
+                                // Calcular etapa genérica
+                                if (!$isMl) {
+                                    if ($isPrePack)    $genStep = 1;
+                                    elseif ($isPacked) $genStep = 2;
+                                    else               $genStep = 3;
+                                }
+                            @endphp
+                            <td class="text-right pr-3">
+                                <div class="flex items-center justify-end gap-2">
 
                                 @if($activeTab === 'in_production')
-
-                                    {{-- Produção: só visualizar --}}
+                                    {{-- Em produção: só visualizar --}}
+                                    <span class="text-xs text-gray-400 dark:text-zinc-500 italic">Em produção</span>
                                     <a href="{{ route('orders.show', $order) }}" class="btn-ghost btn-xs" title="Ver pedido">
                                         <x-heroicon-o-eye class="w-4 h-4" />
                                     </a>
 
                                 @elseif($isShipped || $activeTab === 'shipped')
-
-                                    {{-- Enviado: só visualizar --}}
+                                    {{-- Enviado --}}
+                                    <span class="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
+                                        <x-heroicon-s-check-circle class="w-3.5 h-3.5" />
+                                        Enviado
+                                    </span>
                                     <a href="{{ route('orders.show', $order) }}" class="btn-ghost btn-xs" title="Ver pedido">
                                         <x-heroicon-o-eye class="w-4 h-4" />
                                     </a>
 
                                 @elseif($isMl)
-                                    {{-- ══════════════════════════════════════
-                                         FLUXO MERCADO LIVRE
-                                         1 Romaneio → 2 Embalar → 3 NF-e → 4 Etiqueta ML → 5 Enviado
-                                    ════════════════════════════════════════ --}}
-
-                                    {{-- Mini stepper ML --}}
-                                    @php
-                                        $step = $isPrePack ? 1 : ($isPacked && !$hasNfe && !$pendingNfe ? 2 : ($pendingNfe ? 3 : ($hasNfe && !$canShip ? 4 : ($canShip ? 4 : 5))));
-                                        // Simplify: 1=prePack, 2=packed+noNfe, 3=nfePending, 4=nfeOk, 5=shipped
-                                        if ($isPrePack)           $mlStep = 1;
-                                        elseif ($pendingNfe)      $mlStep = 3;
-                                        elseif (!$hasNfe)         $mlStep = 2;
-                                        elseif ($hasNfe)          $mlStep = 4;
-                                        else                      $mlStep = 5;
-                                    @endphp
-
-                                    <div class="flex items-center gap-0.5 text-[10px]" title="Fluxo: Embalar → NF-e → Etiqueta ML → Enviado">
-                                        @foreach([
-                                            [1, 'Embalar'],
-                                            [2, 'NF-e'],
-                                            [3, 'Etiqueta'],
-                                            [4, 'Enviar'],
-                                        ] as [$n, $lbl])
-                                        <span class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded
-                                            {{ $mlStep > $n
-                                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                                : ($mlStep === $n
-                                                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 font-semibold ring-1 ring-primary-400'
-                                                    : 'bg-gray-100 dark:bg-zinc-700 text-gray-400 dark:text-zinc-500') }}">
-                                            @if($mlStep > $n)
-                                                <x-heroicon-s-check class="w-2.5 h-2.5" />
-                                            @else
-                                                {{ $n }}
-                                            @endif
-                                            {{ $lbl }}
-                                        </span>
+                                    {{-- ──── PROGRESSO: dots para ML (4 etapas) ──── --}}
+                                    <div class="flex items-center gap-1" title="Embalar → NF-e → Etiqueta ML → Enviado">
+                                        @foreach([1,2,3,4] as $s)
+                                        <div class="w-2 h-2 rounded-full transition-colors
+                                            {{ $mlStep > $s  ? 'bg-green-400 dark:bg-green-500'
+                                            : ($mlStep === $s ? 'bg-primary-500 ring-2 ring-primary-300 dark:ring-primary-700'
+                                            : 'bg-gray-200 dark:bg-zinc-600') }}">
+                                        </div>
                                         @endforeach
+                                        <span class="text-[10px] text-gray-400 dark:text-zinc-500 ml-0.5 tabular-nums">{{ $mlStep }}/4</span>
                                     </div>
 
-                                    {{-- Step 1: Pré-embalagem --}}
+                                    {{-- ──── CTA PRINCIPAL ──── --}}
                                     @if($mlStep === 1)
-                                        <div class="flex items-center gap-1">
-                                            {{-- Etiqueta Romaneio interna --}}
-                                            <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
-                                               target="_blank"
-                                               class="btn-ghost btn-xs" title="Etiqueta de Volume (Romaneio)">
-                                                <x-heroicon-o-document-text class="w-4 h-4" />
-                                            </a>
-                                            {{-- Conferir embalagem (bipagem) --}}
-                                            <a href="{{ route('orders.pack', $order) }}"
-                                               class="btn-secondary btn-xs" title="Conferir embalagem">
-                                                <x-heroicon-o-qr-code class="w-3.5 h-3.5" />
-                                                Conferir
-                                            </a>
-                                            {{-- Ou marcar embalado direto --}}
-                                            <button wire:click="markPacked({{ $order->id }})"
-                                                    wire:confirm="Marcar {{ $order->order_number }} como embalado sem conferência?"
-                                                    class="btn-ghost btn-xs text-gray-400" title="Pular conferência e marcar embalado">
-                                                <x-heroicon-o-archive-box class="w-4 h-4" />
+                                        <a href="{{ route('orders.pack', $order) }}" class="btn-secondary btn-xs">
+                                            <x-heroicon-o-qr-code class="w-3.5 h-3.5" />
+                                            Conferir
+                                        </a>
+                                    @elseif($mlStep === 2)
+                                        <form method="POST" action="{{ route('orders.invoice.emit', $order) }}" class="inline">
+                                            @csrf
+                                            <button type="submit" class="btn-primary btn-xs">
+                                                <x-heroicon-o-document-check class="w-3.5 h-3.5" />
+                                                Emitir NF-e
                                             </button>
-                                        </div>
-                                    @endif
-
-                                    {{-- Step 2: Emitir NF-e --}}
-                                    @if($mlStep === 2)
-                                        <div class="flex items-center gap-1">
-                                            <form method="POST" action="{{ route('orders.invoice.emit', $order) }}">
-                                                @csrf
-                                                <button type="submit"
-                                                        class="btn-primary btn-xs" title="Emitir NF-e">
-                                                    <x-heroicon-o-document-check class="w-3.5 h-3.5" />
-                                                    Emitir NF-e
-                                                </button>
-                                            </form>
-                                        </div>
-                                    @endif
-
-                                    {{-- Step 3: NF-e processando --}}
-                                    @if($mlStep === 3)
+                                        </form>
+                                    @elseif($mlStep === 3)
                                         <span class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
                                             <x-heroicon-o-arrow-path class="w-3.5 h-3.5 animate-spin" />
-                                            NF-e processando...
+                                            NF-e processando
                                         </span>
-                                    @endif
-
-                                    {{-- Step 4: NF-e aprovada — Etiqueta ML + Marcar Enviado --}}
-                                    @if($mlStep === 4)
-                                        <div class="flex items-center gap-1">
-                                            {{-- Etiqueta Oficial ML --}}
-                                            @if($mlShippingId)
-                                            <a href="{{ route('orders.ml-label', $order) }}"
-                                               target="_blank"
-                                               class="btn-secondary btn-xs text-amber-600 dark:text-amber-400" title="Etiqueta Correios (ML)">
-                                                <x-heroicon-o-tag class="w-3.5 h-3.5" />
-                                                Etiqueta ML
-                                            </a>
-                                            @endif
-                                            {{-- Enviado --}}
-                                            <button wire:click="markShipped({{ $order->id }})"
-                                                    wire:confirm="Marcar {{ $order->order_number }} como enviado?"
-                                                    class="btn-primary btn-xs">
-                                                <x-heroicon-o-truck class="w-3.5 h-3.5" />
-                                                Enviado
-                                            </button>
-                                        </div>
-                                    @endif
-
-                                    {{-- Ver pedido (sempre disponível) --}}
-                                    <a href="{{ route('orders.show', $order) }}" class="btn-ghost btn-xs text-gray-400" title="Ver pedido">
-                                        <x-heroicon-o-eye class="w-3.5 h-3.5" />
-                                    </a>
-
-                                @else
-                                    {{-- ══════════════════════════════════════
-                                         FLUXO GENÉRICO (WooCommerce / Shopee / Amazon / TikTok / Manual)
-                                         1 Romaneio → 2 Embalar → 3 Enviado
-                                    ════════════════════════════════════════ --}}
-
-                                    @php
-                                        if ($isPrePack)       $genStep = 1;
-                                        elseif ($isPacked)    $genStep = 2;
-                                        else                  $genStep = 3;
-                                    @endphp
-
-                                    {{-- Mini stepper genérico --}}
-                                    <div class="flex items-center gap-0.5 text-[10px]" title="Fluxo: Embalar → Enviado">
-                                        @foreach([
-                                            [1, 'Embalar'],
-                                            [2, 'Enviar'],
-                                        ] as [$n, $lbl])
-                                        <span class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded
-                                            {{ $genStep > $n
-                                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                                : ($genStep === $n
-                                                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 font-semibold ring-1 ring-primary-400'
-                                                    : 'bg-gray-100 dark:bg-zinc-700 text-gray-400 dark:text-zinc-500') }}">
-                                            @if($genStep > $n)
-                                                <x-heroicon-s-check class="w-2.5 h-2.5" />
-                                            @else
-                                                {{ $n }}
-                                            @endif
-                                            {{ $lbl }}
-                                        </span>
-                                        @endforeach
-                                    </div>
-
-                                    {{-- Step 1: Embalar --}}
-                                    @if($genStep === 1)
-                                        <div class="flex items-center gap-1">
-                                            <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
-                                               target="_blank"
-                                               class="btn-ghost btn-xs" title="Etiqueta de Volume">
-                                                <x-heroicon-o-document-text class="w-4 h-4" />
-                                            </a>
-                                            <a href="{{ route('orders.pack', $order) }}"
-                                               class="btn-secondary btn-xs">
-                                                <x-heroicon-o-qr-code class="w-3.5 h-3.5" />
-                                                Conferir
-                                            </a>
-                                            <button wire:click="markPacked({{ $order->id }})"
-                                                    wire:confirm="Marcar {{ $order->order_number }} como embalado?"
-                                                    class="btn-ghost btn-xs text-gray-400" title="Marcar embalado sem conferência">
-                                                <x-heroicon-o-archive-box class="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    @endif
-
-                                    {{-- Step 2: Enviado --}}
-                                    @if($genStep === 2)
+                                    @elseif($mlStep === 4)
                                         <button wire:click="markShipped({{ $order->id }})"
                                                 wire:confirm="Marcar {{ $order->order_number }} como enviado?"
                                                 class="btn-primary btn-xs">
@@ -524,10 +407,115 @@
                                         </button>
                                     @endif
 
-                                    {{-- Ver pedido --}}
-                                    <a href="{{ route('orders.show', $order) }}" class="btn-ghost btn-xs text-gray-400" title="Ver pedido">
-                                        <x-heroicon-o-eye class="w-3.5 h-3.5" />
-                                    </a>
+                                    {{-- ──── MENU ⋮ SECUNDÁRIO ──── --}}
+                                    <div x-data="{ open: false }" class="relative">
+                                        <button @click="open = !open" class="btn-ghost btn-xs px-1" title="Mais ações">
+                                            <x-heroicon-o-ellipsis-vertical class="w-4 h-4" />
+                                        </button>
+                                        <div x-show="open" x-cloak @click.outside="open = false"
+                                             x-transition:enter="transition ease-out duration-100"
+                                             x-transition:enter-start="opacity-0 scale-95"
+                                             x-transition:enter-end="opacity-100 scale-100"
+                                             class="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-gray-100 dark:border-zinc-700 z-50 py-1 text-left">
+
+                                            @if($mlStep === 1)
+                                            <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
+                                               target="_blank"
+                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                <x-heroicon-o-document-text class="w-4 h-4 text-gray-400" />
+                                                Etiqueta de Volume
+                                            </a>
+                                            <button wire:click="markPacked({{ $order->id }})"
+                                                    wire:confirm="Marcar {{ $order->order_number }} como embalado sem conferência?"
+                                                    @click="open = false"
+                                                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                <x-heroicon-o-archive-box class="w-4 h-4 text-gray-400" />
+                                                Marcar Embalado
+                                            </button>
+                                            <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
+                                            @endif
+
+                                            @if($mlStep === 4 && $mlShippingId)
+                                            <a href="{{ route('orders.ml-label', $order) }}"
+                                               target="_blank"
+                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                <x-heroicon-o-tag class="w-4 h-4 text-amber-500" />
+                                                Etiqueta ML (Correios)
+                                            </a>
+                                            <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
+                                            @endif
+
+                                            <a href="{{ route('orders.show', $order) }}"
+                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                <x-heroicon-o-eye class="w-4 h-4 text-gray-400" />
+                                                Ver Pedido
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                @else
+                                    {{-- ──── PROGRESSO: dots para Genérico (2 etapas) ──── --}}
+                                    <div class="flex items-center gap-1" title="Embalar → Enviado">
+                                        @foreach([1,2] as $s)
+                                        <div class="w-2 h-2 rounded-full transition-colors
+                                            {{ $genStep > $s  ? 'bg-green-400 dark:bg-green-500'
+                                            : ($genStep === $s ? 'bg-primary-500 ring-2 ring-primary-300 dark:ring-primary-700'
+                                            : 'bg-gray-200 dark:bg-zinc-600') }}">
+                                        </div>
+                                        @endforeach
+                                        <span class="text-[10px] text-gray-400 dark:text-zinc-500 ml-0.5 tabular-nums">{{ $genStep }}/2</span>
+                                    </div>
+
+                                    {{-- ──── CTA PRINCIPAL ──── --}}
+                                    @if($genStep === 1)
+                                        <a href="{{ route('orders.pack', $order) }}" class="btn-secondary btn-xs">
+                                            <x-heroicon-o-qr-code class="w-3.5 h-3.5" />
+                                            Conferir
+                                        </a>
+                                    @elseif($genStep === 2)
+                                        <button wire:click="markShipped({{ $order->id }})"
+                                                wire:confirm="Marcar {{ $order->order_number }} como enviado?"
+                                                class="btn-primary btn-xs">
+                                            <x-heroicon-o-truck class="w-3.5 h-3.5" />
+                                            Enviado
+                                        </button>
+                                    @endif
+
+                                    {{-- ──── MENU ⋮ SECUNDÁRIO ──── --}}
+                                    <div x-data="{ open: false }" class="relative">
+                                        <button @click="open = !open" class="btn-ghost btn-xs px-1" title="Mais ações">
+                                            <x-heroicon-o-ellipsis-vertical class="w-4 h-4" />
+                                        </button>
+                                        <div x-show="open" x-cloak @click.outside="open = false"
+                                             x-transition:enter="transition ease-out duration-100"
+                                             x-transition:enter-start="opacity-0 scale-95"
+                                             x-transition:enter-end="opacity-100 scale-100"
+                                             class="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-gray-100 dark:border-zinc-700 z-50 py-1 text-left">
+
+                                            @if($genStep === 1)
+                                            <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
+                                               target="_blank"
+                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                <x-heroicon-o-document-text class="w-4 h-4 text-gray-400" />
+                                                Etiqueta de Volume
+                                            </a>
+                                            <button wire:click="markPacked({{ $order->id }})"
+                                                    wire:confirm="Marcar {{ $order->order_number }} como embalado?"
+                                                    @click="open = false"
+                                                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                <x-heroicon-o-archive-box class="w-4 h-4 text-gray-400" />
+                                                Marcar Embalado
+                                            </button>
+                                            <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
+                                            @endif
+
+                                            <a href="{{ route('orders.show', $order) }}"
+                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                <x-heroicon-o-eye class="w-4 h-4 text-gray-400" />
+                                                Ver Pedido
+                                            </a>
+                                        </div>
+                                    </div>
 
                                 @endif
 
