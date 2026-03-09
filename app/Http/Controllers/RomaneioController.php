@@ -64,17 +64,19 @@ class RomaneioController extends Controller
         if ($romaneio && $romaneio->exists) {
             // Vem de um romaneio já criado
             abort_unless($romaneio->company_id === Auth::user()->company_id, 403);
-            $romaneio->load(['items.order']);
+            $romaneio->load(['items.order.marketplaceAccount']);
 
             foreach ($romaneio->items as $item) {
+                $mktAccount = $item->order->marketplaceAccount;
                 for ($v = 1; $v <= $item->volumes; $v++) {
                     $labels[] = [
-                        'order'        => $item->order,
-                        'volume'       => $v,
-                        'total_volumes'=> $item->volumes,
-                        'company'      => $company,
-                        'account_name' => $item->order->marketplaceAccount?->account_name ?? '',
-                        'deadline'     => $item->order->meta['ml_shipping_deadline'] ?? null,
+                        'order'            => $item->order,
+                        'volume'           => $v,
+                        'total_volumes'    => $item->volumes,
+                        'company'          => $company,
+                        'account_name'     => $mktAccount?->account_name ?? '',
+                        'marketplace_type' => $mktAccount?->marketplace_type,
+                        'deadline'         => $item->order->meta['ml_shipping_deadline'] ?? null,
                     ];
                 }
             }
@@ -92,15 +94,17 @@ class RomaneioController extends Controller
                 ->get();
 
             foreach ($orders as $order) {
-                $totalVols = (int) ($order->meta['expedition_volumes'] ?? 1);
+                $mktAccount = $order->marketplaceAccount;
+                $totalVols  = (int) ($order->meta['expedition_volumes'] ?? 1);
                 for ($v = 1; $v <= $totalVols; $v++) {
                     $labels[] = [
-                        'order'        => $order,
-                        'volume'       => $v,
-                        'total_volumes'=> $totalVols,
-                        'company'      => $company,
-                        'account_name' => $order->marketplaceAccount?->account_name ?? '',
-                        'deadline'     => $order->meta['ml_shipping_deadline'] ?? null,
+                        'order'            => $order,
+                        'volume'           => $v,
+                        'total_volumes'    => $totalVols,
+                        'company'          => $company,
+                        'account_name'     => $mktAccount?->account_name ?? '',
+                        'marketplace_type' => $mktAccount?->marketplace_type,
+                        'deadline'         => $order->meta['ml_shipping_deadline'] ?? null,
                     ];
                 }
             }
