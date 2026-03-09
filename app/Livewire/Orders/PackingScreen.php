@@ -140,7 +140,7 @@ class PackingScreen extends Component
     public function render()
     {
         return view('livewire.orders.packing-screen')
-            ->layout('components.layouts.app', [
+            ->layout('layouts.app', [
                 'header'   => "Conferência — {$this->order->order_number}",
                 'subtitle' => $this->order->customer_name,
             ]);

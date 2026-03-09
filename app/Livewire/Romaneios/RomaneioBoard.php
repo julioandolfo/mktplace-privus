@@ -198,7 +198,7 @@ class RomaneioBoard extends Component
 
         return view('livewire.romaneios.romaneio-board', compact(
             'totalPedidos', 'pedidosCompletos', 'totalVolumes', 'bipados'
-        ))->layout('components.layouts.app', [
+        ))->layout('layouts.app', [
             'header'   => "Bipagem — {$this->romaneio->name}",
             'subtitle' => "{$pedidosCompletos}/{$totalPedidos} pedidos concluídos",
         ]);
