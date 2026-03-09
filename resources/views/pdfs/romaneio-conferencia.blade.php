@@ -149,12 +149,12 @@
         </div>
         <div class="qr-rom">
             @php
-                $qrRom = (new \Picqer\Barcode\BarcodeGeneratorPNG())->getBarcode(
+                $qrRom = (new \Picqer\Barcode\BarcodeGeneratorSVG())->getBarcode(
                     json_encode(['romaneio_id' => $romaneio->id, 'type' => 'romaneio']),
-                    \Picqer\Barcode\BarcodeGeneratorPNG::TYPE_QR_CODE, 5, 5
+                    \Picqer\Barcode\BarcodeGeneratorSVG::TYPE_QR_CODE
                 );
             @endphp
-            <img src="data:image/png;base64,{{ base64_encode($qrRom) }}" alt="QR Romaneio">
+            <div style="width:80px;height:80px">{!! $qrRom !!}</div>
             <p>ROM #{{ $romaneio->id }}</p>
         </div>
     </div>

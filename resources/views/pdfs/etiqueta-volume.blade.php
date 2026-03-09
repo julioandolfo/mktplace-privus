@@ -67,6 +67,7 @@
             text-align: center;
         }
         .qr-section img { width: 2.2cm; height: 2.2cm; }
+        .qr-section svg { width: 2.2cm; height: 2.2cm; display: block; }
         .qr-section .qr-label { font-size: 6pt; color: #999; margin-top: 2px; }
     </style>
 </head>
@@ -79,8 +80,8 @@
     $company = $label['company'];
     $addr    = $order->shipping_address ?? [];
     $qrData  = json_encode(['order_id' => $order->id, 'vol' => $vol, 'total' => $total, 'order_number' => $order->order_number]);
-    $qrPng   = (new \Picqer\Barcode\BarcodeGeneratorPNG())->getBarcode($qrData, \Picqer\Barcode\BarcodeGeneratorPNG::TYPE_QR_CODE, 5, 5);
-    $qrBase64 = 'data:image/png;base64,' . base64_encode($qrPng);
+    // SVG não requer extensão GD — mais compatível com ambientes Docker
+    $qrSvg = (new \Picqer\Barcode\BarcodeGeneratorSVG())->getBarcode($qrData, \Picqer\Barcode\BarcodeGeneratorSVG::TYPE_QR_CODE);
 @endphp
 <div class="page">
     {{-- Volume badge --}}
@@ -131,9 +132,9 @@
         @endif
     </div>
 
-    {{-- QR Code --}}
+    {{-- QR Code (SVG inline — sem dependência de GD) --}}
     <div class="qr-section">
-        <img src="{{ $qrBase64 }}" alt="QR">
+        <div style="width:2.2cm;height:2.2cm;overflow:hidden">{!! $qrSvg !!}</div>
         <div class="qr-label">VOL {{ $vol }}/{{ $total }}</div>
     </div>
 </div>

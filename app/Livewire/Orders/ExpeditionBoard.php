@@ -384,6 +384,11 @@ class ExpeditionBoard extends Component
         $this->selectAll        = false;
         $this->romaneioName     = '';
 
+        // Modo 2 (vazio/bipagem): vai direto para o board de bipagem
+        if ($this->romaneioMode === 2) {
+            return redirect()->route('romaneios.board', $romaneio);
+        }
+
         return redirect()->route('romaneios.show', $romaneio);
     }
 
