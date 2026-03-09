@@ -42,11 +42,8 @@ WORKDIR /var/www/html
 # Copy composer files first (for cache)
 COPY composer.json composer.lock ./
 
-# Install PHP dependencies
+# Install PHP dependencies (includes chillerlan/php-qrcode via composer.lock)
 RUN composer install --no-dev --optimize-autoloader --no-scripts --no-interaction --ignore-platform-reqs
-
-# Install QR code library (puro PHP, sem GD necessário)
-RUN composer require chillerlan/php-qrcode --no-dev --no-audit --no-interaction --ignore-platform-reqs
 
 # Copy application files
 COPY . .
