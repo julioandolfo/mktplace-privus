@@ -407,50 +407,66 @@
                                         </button>
                                     @endif
 
-                                    {{-- ──── MENU ⋮ SECUNDÁRIO ──── --}}
-                                    <div x-data="{ open: false }" class="relative">
-                                        <button @click="open = !open" class="btn-ghost btn-xs px-1" title="Mais ações">
+                                    {{-- ──── MENU ⋮ SECUNDÁRIO (teleport para escapar do overflow) ──── --}}
+                                    <div x-data="{
+                                            open: false,
+                                            top: 0, left: 0,
+                                            toggle() {
+                                                this.open = !this.open;
+                                                if (this.open) {
+                                                    const r = this.$refs.btn.getBoundingClientRect();
+                                                    this.top  = r.bottom + window.scrollY + 4;
+                                                    this.left = r.right  + window.scrollX - 208;
+                                                }
+                                            }
+                                        }">
+                                        <button x-ref="btn" @click="toggle()" class="btn-ghost btn-xs px-1" title="Mais ações">
                                             <x-heroicon-o-ellipsis-vertical class="w-4 h-4" />
                                         </button>
-                                        <div x-show="open" x-cloak @click.outside="open = false"
-                                             x-transition:enter="transition ease-out duration-100"
-                                             x-transition:enter-start="opacity-0 scale-95"
-                                             x-transition:enter-end="opacity-100 scale-100"
-                                             class="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-gray-100 dark:border-zinc-700 z-50 py-1 text-left">
+                                        <template x-teleport="body">
+                                            <div x-show="open" x-cloak
+                                                 @click.outside="open = false"
+                                                 @keydown.escape.window="open = false"
+                                                 x-transition:enter="transition ease-out duration-100"
+                                                 x-transition:enter-start="opacity-0 scale-95"
+                                                 x-transition:enter-end="opacity-100 scale-100"
+                                                 :style="`position:fixed;top:${top}px;left:${left}px;z-index:9999;`"
+                                                 class="w-52 bg-white dark:bg-zinc-800 rounded-lg shadow-2xl border border-gray-100 dark:border-zinc-700 py-1 text-left">
 
-                                            @if($mlStep === 1)
-                                            <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
-                                               target="_blank"
-                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                <x-heroicon-o-document-text class="w-4 h-4 text-gray-400" />
-                                                Etiqueta de Volume
-                                            </a>
-                                            <button wire:click="markPacked({{ $order->id }})"
-                                                    wire:confirm="Marcar {{ $order->order_number }} como embalado sem conferência?"
-                                                    @click="open = false"
-                                                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                <x-heroicon-o-archive-box class="w-4 h-4 text-gray-400" />
-                                                Marcar Embalado
-                                            </button>
-                                            <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
-                                            @endif
+                                                @if($mlStep === 1)
+                                                <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
+                                                   target="_blank"
+                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                    <x-heroicon-o-document-text class="w-4 h-4 text-gray-400" />
+                                                    Etiqueta de Volume
+                                                </a>
+                                                <button wire:click="markPacked({{ $order->id }})"
+                                                        wire:confirm="Marcar {{ $order->order_number }} como embalado sem conferência?"
+                                                        @click="open = false"
+                                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                    <x-heroicon-o-archive-box class="w-4 h-4 text-gray-400" />
+                                                    Marcar Embalado
+                                                </button>
+                                                <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
+                                                @endif
 
-                                            @if($mlStep === 4 && $mlShippingId)
-                                            <a href="{{ route('orders.ml-label', $order) }}"
-                                               target="_blank"
-                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                <x-heroicon-o-tag class="w-4 h-4 text-amber-500" />
-                                                Etiqueta ML (Correios)
-                                            </a>
-                                            <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
-                                            @endif
+                                                @if($mlStep === 4 && $mlShippingId)
+                                                <a href="{{ route('orders.ml-label', $order) }}"
+                                                   target="_blank"
+                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                    <x-heroicon-o-tag class="w-4 h-4 text-amber-500" />
+                                                    Etiqueta ML (Correios)
+                                                </a>
+                                                <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
+                                                @endif
 
-                                            <a href="{{ route('orders.show', $order) }}"
-                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                <x-heroicon-o-eye class="w-4 h-4 text-gray-400" />
-                                                Ver Pedido
-                                            </a>
-                                        </div>
+                                                <a href="{{ route('orders.show', $order) }}"
+                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                    <x-heroicon-o-eye class="w-4 h-4 text-gray-400" />
+                                                    Ver Pedido
+                                                </a>
+                                            </div>
+                                        </template>
                                     </div>
 
                                 @else
@@ -481,40 +497,56 @@
                                         </button>
                                     @endif
 
-                                    {{-- ──── MENU ⋮ SECUNDÁRIO ──── --}}
-                                    <div x-data="{ open: false }" class="relative">
-                                        <button @click="open = !open" class="btn-ghost btn-xs px-1" title="Mais ações">
+                                    {{-- ──── MENU ⋮ SECUNDÁRIO (teleport para escapar do overflow) ──── --}}
+                                    <div x-data="{
+                                            open: false,
+                                            top: 0, left: 0,
+                                            toggle() {
+                                                this.open = !this.open;
+                                                if (this.open) {
+                                                    const r = this.$refs.btn.getBoundingClientRect();
+                                                    this.top  = r.bottom + window.scrollY + 4;
+                                                    this.left = r.right  + window.scrollX - 208;
+                                                }
+                                            }
+                                        }">
+                                        <button x-ref="btn" @click="toggle()" class="btn-ghost btn-xs px-1" title="Mais ações">
                                             <x-heroicon-o-ellipsis-vertical class="w-4 h-4" />
                                         </button>
-                                        <div x-show="open" x-cloak @click.outside="open = false"
-                                             x-transition:enter="transition ease-out duration-100"
-                                             x-transition:enter-start="opacity-0 scale-95"
-                                             x-transition:enter-end="opacity-100 scale-100"
-                                             class="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-gray-100 dark:border-zinc-700 z-50 py-1 text-left">
+                                        <template x-teleport="body">
+                                            <div x-show="open" x-cloak
+                                                 @click.outside="open = false"
+                                                 @keydown.escape.window="open = false"
+                                                 x-transition:enter="transition ease-out duration-100"
+                                                 x-transition:enter-start="opacity-0 scale-95"
+                                                 x-transition:enter-end="opacity-100 scale-100"
+                                                 :style="`position:fixed;top:${top}px;left:${left}px;z-index:9999;`"
+                                                 class="w-52 bg-white dark:bg-zinc-800 rounded-lg shadow-2xl border border-gray-100 dark:border-zinc-700 py-1 text-left">
 
-                                            @if($genStep === 1)
-                                            <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
-                                               target="_blank"
-                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                <x-heroicon-o-document-text class="w-4 h-4 text-gray-400" />
-                                                Etiqueta de Volume
-                                            </a>
-                                            <button wire:click="markPacked({{ $order->id }})"
-                                                    wire:confirm="Marcar {{ $order->order_number }} como embalado?"
-                                                    @click="open = false"
-                                                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                <x-heroicon-o-archive-box class="w-4 h-4 text-gray-400" />
-                                                Marcar Embalado
-                                            </button>
-                                            <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
-                                            @endif
+                                                @if($genStep === 1)
+                                                <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
+                                                   target="_blank"
+                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                    <x-heroicon-o-document-text class="w-4 h-4 text-gray-400" />
+                                                    Etiqueta de Volume
+                                                </a>
+                                                <button wire:click="markPacked({{ $order->id }})"
+                                                        wire:confirm="Marcar {{ $order->order_number }} como embalado?"
+                                                        @click="open = false"
+                                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                    <x-heroicon-o-archive-box class="w-4 h-4 text-gray-400" />
+                                                    Marcar Embalado
+                                                </button>
+                                                <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
+                                                @endif
 
-                                            <a href="{{ route('orders.show', $order) }}"
-                                               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                                                <x-heroicon-o-eye class="w-4 h-4 text-gray-400" />
-                                                Ver Pedido
-                                            </a>
-                                        </div>
+                                                <a href="{{ route('orders.show', $order) }}"
+                                                   class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                                                    <x-heroicon-o-eye class="w-4 h-4 text-gray-400" />
+                                                    Ver Pedido
+                                                </a>
+                                            </div>
+                                        </template>
                                     </div>
 
                                 @endif
