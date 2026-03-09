@@ -114,8 +114,17 @@ class RomaneioController extends Controller
             abort(404, 'Nenhuma etiqueta para gerar.');
         }
 
+        // 100mm × 150mm em pontos PDF (1pt = 1/72in, 1in = 25.4mm)
+        // margin_top/bottom/left/right = 0 para evitar página em branco extra
         $pdf = Pdf::loadView('pdfs.etiqueta-volume', compact('labels'))
-            ->setPaper([0, 0, 283.465, 425.197], 'portrait'); // A5
+            ->setPaper([0, 0, 283.465, 425.197], 'portrait')
+            ->setOptions([
+                'margin_top'    => 0,
+                'margin_right'  => 0,
+                'margin_bottom' => 0,
+                'margin_left'   => 0,
+                'isHtml5ParserEnabled' => true,
+            ]);
 
         return $pdf->stream('etiquetas-despacho.pdf');
     }

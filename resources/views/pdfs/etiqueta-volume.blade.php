@@ -3,125 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <style>
+        @page { margin: 0; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; font-size: 9pt; }
 
+        /*
+         * Papel: 100mm × 150mm (283pt × 425pt) sem margens.
+         * Cada .page ocupa exatamente 100mm × 150mm.
+         */
         .page {
-            width: 10cm;
-            min-height: 15cm;
-            padding: 0.4cm;
+            width: 100mm;
+            height: 149mm; /* 1mm de margem para não criar página extra */
+            padding: 4mm;
             overflow: hidden;
         }
 
         /* ── Volume badge ── */
-        .volume-badge {
+        .vol-badge {
             background: #1a1a2e;
             color: white;
             text-align: center;
-            padding: 0.2cm 0;
-            border-radius: 4px 4px 0 0;
-            margin-bottom: 0;
+            padding: 2mm 0;
+            border-radius: 3px 3px 0 0;
         }
-        .volume-badge .vol-label {
-            font-size: 6.5pt;
-            opacity: 0.75;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-        }
-        .volume-badge .vol-number {
-            font-size: 20pt;
-            font-weight: bold;
-            line-height: 1.1;
-            letter-spacing: 2px;
-        }
+        .vol-badge-lbl { font-size: 6pt; letter-spacing: 3px; text-transform: uppercase; opacity: 0.75; }
+        .vol-badge-num { font-size: 20pt; font-weight: bold; line-height: 1.1; letter-spacing: 2px; }
 
-        /* ── Marketplace badge ── */
-        .mkt-badge {
-            display: table;
-            width: 100%;
-            border-radius: 0 0 4px 4px;
-            margin-bottom: 0.3cm;
-            padding: 0.12cm 0.25cm;
-        }
-        .mkt-badge-logo { display: table-cell; vertical-align: middle; width: 22pt; }
-        .mkt-badge-logo svg { width: 18pt; height: 18pt; }
-        .mkt-badge-name {
-            display: table-cell;
+        /* ── Marketplace badge (sem SVG, só tabela) ── */
+        .mkt-row { width: 100%; border-radius: 0 0 3px 3px; margin-bottom: 3mm; }
+        .mkt-code {
+            width: 20pt;
+            padding: 2px 4px;
+            text-align: center;
+            font-size: 7pt;
+            font-weight: bold;
             vertical-align: middle;
+        }
+        .mkt-code-inner {
+            border-radius: 2px;
+            padding: 2px 3px;
+            display: inline-block;
+        }
+        .mkt-name {
+            padding: 2px 4px;
             font-size: 10pt;
             font-weight: bold;
-            padding-left: 0.15cm;
-            letter-spacing: 0.5px;
-        }
-        .mkt-badge-account {
-            display: table-cell;
             vertical-align: middle;
-            text-align: right;
+        }
+        .mkt-acct {
+            padding: 2px 6px;
             font-size: 7pt;
-            opacity: 0.75;
+            text-align: right;
+            vertical-align: middle;
         }
 
         /* ── Seções ── */
-        .section { margin-bottom: 0.3cm; }
-        .section-title {
-            font-size: 7pt;
+        .sec { margin-bottom: 3mm; }
+        .sec-title {
+            font-size: 6.5pt;
             color: #666;
             text-transform: uppercase;
             letter-spacing: 1px;
             border-bottom: 1px solid #eee;
-            padding-bottom: 2px;
-            margin-bottom: 4px;
+            padding-bottom: 1px;
+            margin-bottom: 2px;
         }
-        .section-content { font-size: 9pt; line-height: 1.4; }
-        .section-content strong { font-size: 10pt; }
+        .sec-body { font-size: 8.5pt; line-height: 1.4; }
+        .sec-body b  { font-size: 9.5pt; }
 
-        .divider { border-top: 2px solid #1a1a2e; margin: 0.2cm 0; }
+        /* ── Divider ── */
+        .div2 { border-top: 2px solid #1a1a2e; margin: 2mm 0; }
 
-        /* ── Linha de info ── */
-        .info-row {
-            display: table;
-            width: 100%;
-            margin-top: 0.2cm;
-            padding-top: 0.15cm;
-            border-top: 1px dashed #ccc;
-            font-size: 7pt;
-            color: #555;
-        }
-        .info-row .c1 { display: table-cell; width: 40%; }
-        .info-row .c2 { display: table-cell; width: 60%; text-align: right; }
+        /* ── Info row ── */
+        .info-tbl { width: 100%; border-top: 1px dashed #ccc; margin-top: 2mm; padding-top: 1.5mm; }
+        .info-tbl td { font-size: 6.5pt; color: #555; vertical-align: top; }
+        .info-tbl .r { text-align: right; }
 
         /* ── Barcode ── */
-        .barcode-row {
-            margin-top: 0.25cm;
-            text-align: center;
-            padding-top: 0.15cm;
-            border-top: 1px solid #eee;
-        }
-        .barcode-row img {
-            display: block;
-            margin: 0 auto;
-            width: 7.5cm;
-            height: 0.9cm;
-        }
-        .qr-row {
-            margin-top: 0.15cm;
-            text-align: center;
-        }
-        .qr-row img {
-            display: block;
-            margin: 0 auto;
-            width: 2cm;
-            height: 2cm;
-        }
-        .bc-label {
-            font-size: 7pt;
-            color: #444;
-            margin-top: 2px;
-            font-family: monospace;
-            letter-spacing: 1px;
-        }
+        .bc-wrap { text-align: center; margin-top: 2mm; border-top: 1px solid #eee; padding-top: 2mm; }
+        .bc-wrap img { display: block; margin: 0 auto; width: 82mm; height: 10mm; }
+        .bc-txt { font-family: monospace; font-size: 6.5pt; color: #444; margin-top: 1mm; text-align: center; }
 
-        .page-break { page-break-after: always; }
+        /* ── QR Code ── */
+        .qr-wrap { text-align: center; margin-top: 2mm; }
+        .qr-wrap img { display: block; margin: 0 auto; width: 20mm; height: 20mm; }
+
+        /* ── Page break entre etiquetas ── */
+        .pg-break { page-break-after: always; }
     </style>
 </head>
 <body>
@@ -132,97 +100,74 @@
     $total   = $label['total_volumes'];
     $company = $label['company'];
     $addr    = $order->shipping_address ?? [];
-    $mkt     = $label['marketplace_type'] ?? null; // \App\Enums\MarketplaceType
+    $mkt     = $label['marketplace_type'] ?? null;
 
-    // ── Cores e nome do marketplace ──
-    $mktColor   = $mkt?->color()           ?? '#4B5563';
-    $mktLabel   = $mkt?->label()           ?? ($label['account_name'] ?: 'Marketplace');
-    $mktAccount = $label['account_name']   ?? '';
-    $mktTextClr = in_array($mkt?->value, ['mercado_livre', 'amazon']) ? '#1a1a2e' : '#FFFFFF';
-
-    // SVG logos inline — simples, compatíveis com DomPDF
-    $mktLogoSvg = match($mkt?->value) {
-        'mercado_livre' => '
-            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-              <rect width="40" height="40" rx="6" fill="#FFE600"/>
-              <text x="20" y="15" text-anchor="middle" font-size="10" font-weight="bold" font-family="Arial" fill="#2d3436">ML</text>
-              <text x="20" y="28" text-anchor="middle" font-size="6.5" font-family="Arial" fill="#2d3436">Mercado</text>
-              <text x="20" y="36" text-anchor="middle" font-size="6.5" font-family="Arial" fill="#2d3436">Livre</text>
-            </svg>',
-        'shopee' => '
-            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-              <rect width="40" height="40" rx="6" fill="#EE4D2D"/>
-              <ellipse cx="20" cy="16" rx="9" ry="5" fill="none" stroke="white" stroke-width="2.5"/>
-              <rect x="14" y="14" width="12" height="14" rx="2" fill="white"/>
-              <rect x="17" y="17" width="6" height="8" rx="1" fill="#EE4D2D"/>
-            </svg>',
-        'amazon' => '
-            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-              <rect width="40" height="40" rx="6" fill="#FF9900"/>
-              <text x="20" y="18" text-anchor="middle" font-size="9" font-weight="bold" font-family="Arial" fill="#1a1a2e">amazon</text>
-              <path d="M8 27 Q20 34 32 27" stroke="#1a1a2e" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <polygon points="30,24 34,27 30,30" fill="#1a1a2e"/>
-            </svg>',
-        'woocommerce' => '
-            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-              <rect width="40" height="40" rx="6" fill="#7F54B3"/>
-              <text x="20" y="16" text-anchor="middle" font-size="8" font-weight="bold" font-family="Arial" fill="white">Woo</text>
-              <text x="20" y="28" text-anchor="middle" font-size="7" font-family="Arial" fill="white">Commerce</text>
-            </svg>',
-        'tiktok' => '
-            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-              <rect width="40" height="40" rx="6" fill="#010101"/>
-              <text x="20" y="16" text-anchor="middle" font-size="8" font-weight="bold" font-family="Arial" fill="white">TikTok</text>
-              <text x="20" y="28" text-anchor="middle" font-size="7" font-family="Arial" fill="#69C9D0">Shop</text>
-            </svg>',
-        default => '
-            <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-              <rect width="40" height="40" rx="6" fill="#4B5563"/>
-              <text x="20" y="24" text-anchor="middle" font-size="14" font-weight="bold" font-family="Arial" fill="white">M</text>
-            </svg>',
+    // Cores, nome e código do marketplace
+    $mktColor   = $mkt?->color()  ?? '#4B5563';
+    $mktLabel   = $mkt?->label()  ?? ($label['account_name'] ?: 'Marketplace');
+    $mktAccount = $label['account_name'] ?? '';
+    $isDark     = in_array($mkt?->value, ['mercado_livre', 'amazon']);
+    $mktTextClr = $isDark ? '#1a1a2e' : '#ffffff';
+    $mktCodeBg  = $isDark ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.2)';
+    $mktCode    = match($mkt?->value) {
+        'mercado_livre' => 'ML',
+        'shopee'        => 'SP',
+        'amazon'        => 'AMZ',
+        'woocommerce'   => 'WC',
+        'tiktok'        => 'TT',
+        default         => 'MKT',
     };
 
-    // Barcode Code128 como data URI base64
-    $barcodeData = $order->order_number . '-V' . $vol;
-    $barGen      = new \Picqer\Barcode\BarcodeGeneratorSVG();
-    $barcodeSvg  = $barGen->getBarcode($barcodeData, $barGen::TYPE_CODE_128, 2, 55);
-    $barcodeUri  = 'data:image/svg+xml;base64,' . base64_encode($barcodeSvg);
+    // Barcode Code128 → data URI base64
+    $bcData  = $order->order_number . '-V' . $vol;
+    $barGen  = new \Picqer\Barcode\BarcodeGeneratorSVG();
+    $bcSvg   = $barGen->getBarcode($bcData, $barGen::TYPE_CODE_128, 2, 55);
+    $bcUri   = 'data:image/svg+xml;base64,' . base64_encode($bcSvg);
 
-    // QR Code se chillerlan/php-qrcode estiver disponível (instalado no Dockerfile)
+    // QR Code (chillerlan/php-qrcode — instalado via composer.lock)
     $qrUri = null;
     if (class_exists(\chillerlan\QRCode\QRCode::class)) {
         try {
-            $qrOptions = new \chillerlan\QRCode\QROptions;
-            $qrOptions->outputType   = \chillerlan\QRCode\Output\QROutputInterface::GDIMAGE_PNG;
-            $qrOptions->scale        = 5;
-            $qrOptions->outputBase64 = false;
-            $qrPng = (new \chillerlan\QRCode\QRCode($qrOptions))->render($barcodeData);
+            $opts = new \chillerlan\QRCode\QROptions;
+            $opts->outputType   = \chillerlan\QRCode\Output\QROutputInterface::GDIMAGE_PNG;
+            $opts->scale        = 5;
+            $opts->outputBase64 = false;
+            $qrPng = (new \chillerlan\QRCode\QRCode($opts))->render($bcData);
             $qrUri = 'data:image/png;base64,' . base64_encode($qrPng);
         } catch (\Throwable) {}
     }
 @endphp
+
+@if(!$loop->first)<div class="pg-break"></div>@endif
+
 <div class="page">
 
-    {{-- Volume badge --}}
-    <div class="volume-badge">
-        <div class="vol-label">Volume</div>
-        <div class="vol-number">{{ $vol }}/{{ $total }}</div>
+    {{-- ── Volume badge ─────────────────────────── --}}
+    <div class="vol-badge">
+        <div class="vol-badge-lbl">Volume</div>
+        <div class="vol-badge-num">{{ $vol }}/{{ $total }}</div>
     </div>
 
-    {{-- Marketplace badge --}}
-    <div class="mkt-badge" style="background-color: {{ $mktColor }};">
-        <div class="mkt-badge-logo">{!! $mktLogoSvg !!}</div>
-        <div class="mkt-badge-name" style="color: {{ $mktTextClr }};">{{ $mktLabel }}</div>
-        @if($mktAccount && $mktAccount !== $mktLabel)
-        <div class="mkt-badge-account" style="color: {{ $mktTextClr }};">{{ $mktAccount }}</div>
-        @endif
-    </div>
+    {{-- ── Marketplace badge (tabela, sem SVG) ─── --}}
+    <table class="mkt-row" cellspacing="0" cellpadding="0" style="background:{{ $mktColor }};">
+        <tr>
+            <td class="mkt-code" style="color:{{ $mktTextClr }};">
+                <div class="mkt-code-inner" style="background:{{ $mktCodeBg }}; color:{{ $mktTextClr }};">
+                    {{ $mktCode }}
+                </div>
+            </td>
+            <td class="mkt-name" style="color:{{ $mktTextClr }};">{{ $mktLabel }}</td>
+            @if($mktAccount && $mktAccount !== $mktLabel)
+            <td class="mkt-acct" style="color:{{ $mktTextClr }};">{{ $mktAccount }}</td>
+            @endif
+        </tr>
+    </table>
 
-    {{-- Remetente --}}
-    <div class="section">
-        <div class="section-title">Remetente</div>
-        <div class="section-content">
-            <strong>{{ $company->trade_name ?? $company->name }}</strong><br>
+    {{-- ── Remetente ─────────────────────────────── --}}
+    <div class="sec">
+        <div class="sec-title">Remetente</div>
+        <div class="sec-body">
+            <b>{{ $company->trade_name ?? $company->name }}</b><br>
             @if($company->document)
                 {{ $company->document_type === 'cnpj' ? 'CNPJ' : 'CPF' }}: {{ $company->formatted_document }}<br>
             @endif
@@ -232,13 +177,13 @@
         </div>
     </div>
 
-    <div class="divider"></div>
+    <div class="div2"></div>
 
-    {{-- Destinatário --}}
-    <div class="section">
-        <div class="section-title">Destinatário</div>
-        <div class="section-content">
-            <strong>{{ $order->customer_name }}</strong><br>
+    {{-- ── Destinatário ─────────────────────────── --}}
+    <div class="sec">
+        <div class="sec-title">Destinatário</div>
+        <div class="sec-body">
+            <b>{{ $order->customer_name }}</b><br>
             @if(!empty($addr['street']))
                 {{ $addr['street'] }}@if(!empty($addr['number'])), {{ $addr['number'] }}@endif<br>
             @endif
@@ -250,33 +195,32 @@
         </div>
     </div>
 
-    {{-- Info: número do pedido + prazo ──}}
-    <div class="info-row">
-        <div class="c1">{{ $order->order_number }}</div>
-        <div class="c2">
-            @if($label['deadline'])
-                Despachar até {{ \Carbon\Carbon::parse($label['deadline'])->format('d/m/Y') }}
-            @endif
-        </div>
+    {{-- ── Info: pedido + prazo ─────────────────── --}}
+    <table class="info-tbl" cellspacing="0" cellpadding="0">
+        <tr>
+            <td>{{ $order->order_number }}</td>
+            <td class="r">
+                @if($label['deadline'])
+                    Despachar até {{ \Carbon\Carbon::parse($label['deadline'])->format('d/m/Y') }}
+                @endif
+            </td>
+        </tr>
+    </table>
+
+    {{-- ── Barcode Code128 ──────────────────────── --}}
+    <div class="bc-wrap">
+        <img src="{{ $bcUri }}" alt="{{ $bcData }}">
+        <div class="bc-txt">{{ $bcData }}</div>
     </div>
 
-    {{-- Barcode Code128 --}}
-    <div class="barcode-row">
-        <img src="{{ $barcodeUri }}" alt="{{ $barcodeData }}">
-        <div class="bc-label">{{ $barcodeData }}</div>
-    </div>
-
-    {{-- QR Code (somente se biblioteca disponível) --}}
+    {{-- ── QR Code ───────────────────────────────── --}}
     @if($qrUri)
-    <div class="qr-row">
-        <img src="{{ $qrUri }}" alt="QR {{ $barcodeData }}">
+    <div class="qr-wrap">
+        <img src="{{ $qrUri }}" alt="QR {{ $bcData }}">
     </div>
     @endif
 
 </div>
-@if(!$loop->last)
-<div class="page-break"></div>
-@endif
 @endforeach
 </body>
 </html>
