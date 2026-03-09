@@ -11,6 +11,7 @@ use App\Models\Romaneio;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -407,9 +408,61 @@ class ExpeditionBoard extends Component
 
     public function render()
     {
-        $orders = $this->buildQuery()->paginate(20);
+        $user = Auth::user();
 
-        // Preenche volumes locais a partir do meta dos pedidos
+        Log::channel('expedition')->info('=== ExpeditionBoard::render ===', [
+            'user_id'     => $user?->id,
+            'company_id'  => $user?->company_id,
+            'activeTab'   => $this->activeTab,
+            'search'      => $this->search,
+            'filterAccount' => $this->filterAccount,
+            'filterType'  => $this->filterType,
+            'db_driver'   => DB::getDriverName(),
+        ]);
+
+        // Debug: all orders with their pipeline_status
+        $allOrders = Order::select('id', 'order_number', 'status', 'pipeline_status', 'company_id', 'meta')
+            ->whereNotIn('status', [OrderStatus::Cancelled->value, OrderStatus::Delivered->value, OrderStatus::Shipped->value])
+            ->get();
+
+        Log::channel('expedition')->info('Pedidos NÃO finalizados no banco:', [
+            'total' => $allOrders->count(),
+            'orders' => $allOrders->map(fn ($o) => [
+                'id'              => $o->id,
+                'order_number'    => $o->order_number,
+                'status'          => $o->status?->value ?? $o->getRawOriginal('status'),
+                'pipeline_status' => $o->pipeline_status?->value ?? $o->getRawOriginal('pipeline_status'),
+                'company_id'      => $o->company_id,
+                'deadline'        => $o->meta['ml_shipping_deadline'] ?? null,
+            ])->toArray(),
+        ]);
+
+        try {
+            $query = $this->buildQuery();
+            $sql = $query->toSql();
+            $bindings = $query->getBindings();
+            Log::channel('expedition')->info('buildQuery SQL:', [
+                'sql'      => $sql,
+                'bindings' => $bindings,
+            ]);
+
+            $orders = $query->paginate(20);
+
+            Log::channel('expedition')->info('Resultado da query paginada:', [
+                'total'     => $orders->total(),
+                'count'     => $orders->count(),
+                'page'      => $orders->currentPage(),
+                'order_ids' => $orders->pluck('id')->toArray(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('expedition')->error('ERRO no buildQuery:', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile() . ':' . $e->getLine(),
+                'trace'   => array_slice($e->getTrace(), 0, 5),
+            ]);
+            $orders = new \Illuminate\Pagination\LengthAwarePaginator([], 0, 20);
+        }
+
         foreach ($orders as $order) {
             if (! isset($this->orderVolumes[$order->id])) {
                 $this->orderVolumes[$order->id] = $order->expedition_volumes;
@@ -417,12 +470,14 @@ class ExpeditionBoard extends Component
         }
 
         $accountQuery = MarketplaceAccount::active()->orderBy('account_name');
-        if ($cid = Auth::user()?->company_id) {
+        if ($cid = $user?->company_id) {
             $accountQuery->where('company_id', $cid);
         }
         $accounts = $accountQuery->get();
 
         $tabCounts = $this->getTabCounts();
+
+        Log::channel('expedition')->info('Tab counts:', $tabCounts);
 
         return view('livewire.orders.expedition-board', [
             'orders'    => $orders,
