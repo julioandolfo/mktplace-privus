@@ -8,6 +8,7 @@ use App\Models\Order;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
+
 class FixOrderPipelineStatus extends Command
 {
     protected $signature   = 'orders:fix-pipeline';
