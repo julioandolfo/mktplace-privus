@@ -90,17 +90,19 @@ class ExpeditionBoard extends Component
         return "json_extract(meta, '$.ml_shipping_deadline') IS NULL";
     }
 
-    /** NULL-safe date sentinel para ORDER BY — tipos compatíveis com cada DB */
-    protected function deadlineOrderSql(): string
+    /**
+     * Retorna o SQL completo para ordenação por deadline + paid_at.
+     * Usa NULLS LAST para colocar pedidos sem deadline no final.
+     * Elimina CASE WHEN para evitar incompatibilidade de tipos no PostgreSQL.
+     */
+    protected function deadlineOrderBySql(): string
     {
-        $dl = $this->deadlineDateSql();
-        $notNull = $this->deadlineNotNullSql();
+        if ($this->isPostgres()) {
+            return "(meta->>'ml_shipping_deadline')::timestamptz ASC NULLS LAST, paid_at DESC NULLS LAST";
+        }
 
-        // PostgreSQL: ELSE precisa ter o mesmo tipo (date) que o THEN
-        // SQLite: SUBSTR retorna texto, '9999-12-31' é texto — sem necessidade de cast
-        $elseSentinel = $this->isPostgres() ? "'9999-12-31'::date" : "'9999-12-31'";
-
-        return "CASE WHEN meta IS NOT NULL AND {$notNull} THEN {$dl} ELSE {$elseSentinel} END";
+        // SQLite 3.30+ suporta NULLS LAST
+        return "json_extract(meta, '$.ml_shipping_deadline') ASC NULLS LAST, paid_at DESC NULLS LAST";
     }
 
     // ----------------------------------------------------------------
@@ -240,7 +242,7 @@ class ExpeditionBoard extends Component
             default => $query->whereIn('pipeline_status', $expeditionPipeline),
         };
 
-        return $query->orderByRaw($this->deadlineOrderSql() . ' ASC')->orderByDesc('paid_at');
+        return $query->orderByRaw($this->deadlineOrderBySql());
     }
 
     // ----------------------------------------------------------------
