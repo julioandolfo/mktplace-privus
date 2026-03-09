@@ -399,7 +399,7 @@ class ExpeditionBoard extends Component
         }
 
         $ids = implode(',', $this->selectedOrders);
-        $this->redirect(route('romaneios.pdf.etiquetas', ['orders' => $ids]));
+        $this->redirect(route('romaneios.etiquetas-avulso', ['orders' => $ids]));
     }
 
     // ----------------------------------------------------------------

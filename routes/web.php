@@ -91,6 +91,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Romaneios
     Route::get('/romaneios', [\App\Http\Controllers\RomaneioController::class, 'index'])->name('romaneios.index');
     Route::post('/romaneios', [\App\Http\Controllers\RomaneioController::class, 'store'])->name('romaneios.store');
+    // Etiquetas avulsas (sem romaneio): ?orders=1,2,3 — deve vir ANTES de {romaneio}
+    Route::get('/romaneios/etiquetas-avulso', [\App\Http\Controllers\RomaneioController::class, 'pdfEtiquetas'])->name('romaneios.etiquetas-avulso');
     Route::get('/romaneios/{romaneio}', [\App\Http\Controllers\RomaneioController::class, 'show'])->name('romaneios.show');
     Route::get('/romaneios/{romaneio}/pdf/romaneio', [\App\Http\Controllers\RomaneioController::class, 'pdfRomaneio'])->name('romaneios.pdf.romaneio');
     Route::get('/romaneios/{romaneio}/pdf/etiquetas', [\App\Http\Controllers\RomaneioController::class, 'pdfEtiquetas'])->name('romaneios.pdf.etiquetas');

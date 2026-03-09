@@ -390,7 +390,7 @@
                                     @if($mlStep === 1)
                                         <div class="flex items-center gap-1">
                                             {{-- Etiqueta Romaneio interna --}}
-                                            <a href="{{ route('romaneios.pdf.etiquetas', ['orders' => $order->id]) }}"
+                                            <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
                                                target="_blank"
                                                class="btn-ghost btn-xs" title="Etiqueta de Volume (Romaneio)">
                                                 <x-heroicon-o-document-text class="w-4 h-4" />
@@ -496,7 +496,7 @@
                                     {{-- Step 1: Embalar --}}
                                     @if($genStep === 1)
                                         <div class="flex items-center gap-1">
-                                            <a href="{{ route('romaneios.pdf.etiquetas', ['orders' => $order->id]) }}"
+                                            <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
                                                target="_blank"
                                                class="btn-ghost btn-xs" title="Etiqueta de Volume">
                                                 <x-heroicon-o-document-text class="w-4 h-4" />
