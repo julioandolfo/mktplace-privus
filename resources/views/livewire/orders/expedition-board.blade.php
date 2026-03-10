@@ -476,17 +476,25 @@
                                     <div class="flex flex-col gap-2">
                                     @foreach($order->items as $item)
                                     @php
-                                        // Imagem: artwork → imagem primária do produto → primeira imagem disponível
+                                        // Anúncio interno vinculado (via ml_item_id)
+                                        $mlItemId = $item->meta['ml_item_id'] ?? null;
+                                        $listing  = $mlItemId ? ($listingsMap[$mlItemId] ?? null) : null;
+
+                                        // Imagem: artwork → thumbnail do anúncio → imagem primária do produto → primeira imagem
                                         $imgUrl = $item->artwork_url
+                                            ?? $listing?->meta['thumbnail']
                                             ?? $item->product?->primaryImage?->url
                                             ?? $item->product?->images->first()?->url;
 
-                                        // Links externos (ML, Shopee, etc.)
+                                        // Link externo (ML)
                                         $mlPermalink = $item->meta['ml_permalink']
-                                            ?? ($item->meta['ml_item_id'] ? 'https://www.mercadolivre.com.br/p/' . $item->meta['ml_item_id'] : null);
+                                            ?? ($mlItemId ? 'https://www.mercadolivre.com.br/p/' . $mlItemId : null);
 
                                         // Variante
                                         $variantLabel = $item->variant?->name ?? ($item->meta['variation_name'] ?? null);
+
+                                        // Variação ML (atributos)
+                                        $mlVariationAttrs = $item->meta['ml_variation_attrs'] ?? [];
 
                                         // Status de produção
                                         $prodStatus = $item->production_status ?? null;
@@ -535,6 +543,12 @@
                                                     <p class="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
                                                         Variação: <span class="font-medium text-gray-700 dark:text-zinc-300">{{ $variantLabel }}</span>
                                                     </p>
+                                                    @elseif(!empty($mlVariationAttrs))
+                                                    <p class="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
+                                                        @foreach($mlVariationAttrs as $attr)
+                                                        <span class="font-medium text-gray-700 dark:text-zinc-300">{{ $attr['name'] ?? '' }}: {{ $attr['value_name'] ?? '' }}</span>{{ !$loop->last ? ' · ' : '' }}
+                                                        @endforeach
+                                                    </p>
                                                     @endif
                                                     @if($item->sku)
                                                     <p class="text-[11px] font-mono text-gray-400 dark:text-zinc-500 mt-0.5">SKU: {{ $item->sku }}</p>
@@ -582,7 +596,16 @@
                                                 @endif
 
                                                 {{-- Links --}}
-                                                @if($item->product_id)
+                                                {{-- Anúncio interno (no sistema) --}}
+                                                @if($listing)
+                                                <a href="{{ route('listings.show', $listing->id) }}"
+                                                   target="_blank"
+                                                   @click.stop
+                                                   class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 font-medium transition-colors">
+                                                    <x-heroicon-o-megaphone class="w-2.5 h-2.5" />
+                                                    Anúncio (sistema)
+                                                </a>
+                                                @elseif($item->product_id)
                                                 <a href="{{ route('products.edit', $item->product_id) }}"
                                                    target="_blank"
                                                    @click.stop

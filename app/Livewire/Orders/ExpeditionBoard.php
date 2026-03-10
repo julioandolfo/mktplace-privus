@@ -6,6 +6,7 @@ use App\Enums\MarketplaceType;
 use App\Enums\OrderStatus;
 use App\Enums\PipelineStatus;
 use App\Models\MarketplaceAccount;
+use App\Models\MarketplaceListing;
 use App\Models\Order;
 use App\Models\Romaneio;
 use Illuminate\Support\Carbon;
@@ -481,16 +482,31 @@ class ExpeditionBoard extends Component
             }
         }
 
+        // Mapa external_id → MarketplaceListing para imagens e links internos
+        $mlItemIds = $orders->flatMap(fn ($o) => $o->items->pluck('meta')
+            ->map(fn ($m) => $m['ml_item_id'] ?? null)
+            ->filter()
+        )->unique()->values()->all();
+
+        $listingsMap = collect();
+        if (! empty($mlItemIds)) {
+            $listingsMap = MarketplaceListing::whereIn('external_id', $mlItemIds)
+                ->select(['id', 'external_id', 'title', 'meta'])
+                ->get()
+                ->keyBy('external_id');
+        }
+
         $accountQuery = MarketplaceAccount::active()->orderBy('account_name');
         if ($cid = Auth::user()?->company_id) {
             $accountQuery->where('company_id', $cid);
         }
 
         return view('livewire.orders.expedition-board', [
-            'orders'    => $orders,
-            'accounts'  => $accountQuery->get(),
-            'tabCounts' => $tabCounts,
-            'types'     => MarketplaceType::cases(),
+            'orders'      => $orders,
+            'accounts'    => $accountQuery->get(),
+            'tabCounts'   => $tabCounts,
+            'types'       => MarketplaceType::cases(),
+            'listingsMap' => $listingsMap,
         ]);
     }
 }
