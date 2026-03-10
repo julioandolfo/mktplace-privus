@@ -75,7 +75,10 @@
                 <tbody>
                     @foreach($romaneio->items as $item)
                     @php
-                        $order    = $item->order;
+                        $order = $item->order;
+                    @endphp
+                    @if(!$order) @continue @endif
+                    @php
                         $addr     = $order->shipping_address ?? [];
                         $deadline = $order->meta['ml_shipping_deadline'] ?? null;
                         $complete = $item->isComplete();
@@ -140,7 +143,7 @@
                 <div class="space-y-2 text-sm">
                     <div class="flex justify-between">
                         <span class="text-gray-500 dark:text-zinc-400">Criado por</span>
-                        <span>{{ $romaneio->createdBy->name }}</span>
+                        <span>{{ $romaneio->createdBy?->name ?? '—' }}</span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-gray-500 dark:text-zinc-400">Criado em</span>
