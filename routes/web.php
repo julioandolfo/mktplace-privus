@@ -212,7 +212,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/settings/accounts/{account}', [\App\Http\Controllers\MarketplaceAccountSettingsController::class, 'update'])->name('settings.accounts.update');
 
     // Configurações — Operadores de Expedição
-    Route::get('/settings/expedition-operators', \App\Livewire\Settings\ExpeditionOperators::class)->name('settings.operators.index');
+    Route::get('/settings/expedition-operators', fn () => view('settings.expedition-operators'))->name('settings.operators.index');
 });
 
 require __DIR__.'/auth.php';
