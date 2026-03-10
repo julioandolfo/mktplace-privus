@@ -45,7 +45,7 @@
             </div>
 
             {{-- Filtro conta --}}
-            <select wire:model.live="filterAccount" class="form-input w-48">
+            <select wire:model.live="filterAccount" class="form-input w-full sm:w-48">
                 <option value="">Todas as contas</option>
                 @foreach($accounts as $acc)
                     <option value="{{ $acc->id }}">{{ $acc->account_name }}</option>
@@ -53,7 +53,7 @@
             </select>
 
             {{-- Filtro tipo marketplace --}}
-            <select wire:model.live="filterType" class="form-input w-40">
+            <select wire:model.live="filterType" class="form-input w-full sm:w-40">
                 <option value="">Todos canais</option>
                 @foreach($types as $type)
                     <option value="{{ $type->value }}">{{ $type->label() }}</option>
