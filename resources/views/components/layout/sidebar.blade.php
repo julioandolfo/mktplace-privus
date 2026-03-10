@@ -118,6 +118,8 @@
             <span x-show="sidebarOpen" x-transition.opacity>Configuracoes</span>
         </a>
 
+        <p x-show="sidebarOpen" x-transition.opacity class="text-[10px] text-zinc-600 text-center mt-2 select-none">v{{ config('app.version', '0.0.0') }}</p>
+
         {{-- Collapse button --}}
         <button @click="sidebarOpen = !sidebarOpen" class="sidebar-link w-full mt-1">
             <x-heroicon-o-chevron-double-left class="icon transition-transform" ::class="!sidebarOpen && 'rotate-180'" />
@@ -197,5 +199,7 @@
             <x-heroicon-o-cog-6-tooth class="icon" />
             <span>Configuracoes</span>
         </a>
+
+        <p class="text-[10px] text-zinc-600 text-center mt-2 select-none">v{{ config('app.version', '0.0.0') }}</p>
     </nav>
 </aside>
