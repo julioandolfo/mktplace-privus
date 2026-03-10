@@ -40,7 +40,7 @@
             <div class="flex-1 relative">
                 <x-heroicon-o-magnifying-glass class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input type="text" wire:model.live.debounce.300ms="search"
-                       placeholder="Buscar por número, cliente..."
+                       placeholder="Buscar por número, cliente, produto, SKU..."
                        class="form-input pl-10">
             </div>
 
@@ -72,6 +72,13 @@
                     class="btn-secondary btn-sm">
                 <x-heroicon-o-archive-box class="w-4 h-4" />
                 Marcar Embalados
+            </button>
+
+            <button wire:click="markBulkShipped"
+                    wire:confirm="Marcar {{ count($selectedOrders) }} pedido(s) como enviado(s)?"
+                    class="btn-secondary btn-sm">
+                <x-heroicon-o-truck class="w-4 h-4" />
+                Marcar Enviados
             </button>
 
             <button wire:click="printVolumeLabels"
@@ -167,6 +174,10 @@
                         $mktType  = $account?->marketplace_type;
                         $isMl     = $mktType === \App\Enums\MarketplaceType::MercadoLivre;
 
+                        // Integrações vinculadas
+                        $hasWebmania = (bool) ($account?->webmania_account_id ?? false);
+                        $hasME       = (bool) ($account?->melhor_envios_account_id ?? false);
+
                         // NF-e
                         $approvedNfe = $order->invoices
                             ->firstWhere('status', \App\Enums\NfeStatus::Approved);
@@ -237,6 +248,26 @@
                                     @if($isPartial)
                                     <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-medium">
                                         PARCIAL
+                                    </span>
+                                    @endif
+                                    @if($order->tracking_code)
+                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium" title="Rastreio: {{ $order->tracking_code }}">
+                                        <x-heroicon-o-truck class="w-2.5 h-2.5" /> {{ $order->tracking_code }}
+                                    </span>
+                                    @endif
+                                    @if($approvedNfe)
+                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium">
+                                        <x-heroicon-o-document-check class="w-2.5 h-2.5" /> NF-e
+                                    </span>
+                                    @elseif($pendingNfe)
+                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium">
+                                        <x-heroicon-o-arrow-path class="w-2.5 h-2.5 animate-spin" /> NF-e
+                                    </span>
+                                    @endif
+                                    @php $orderMeLabel = $labelsMap[$order->id] ?? null; @endphp
+                                    @if($orderMeLabel)
+                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-medium" title="{{ $orderMeLabel->carrier }} - {{ $orderMeLabel->service }}">
+                                        <x-heroicon-o-tag class="w-2.5 h-2.5" /> ME
                                     </span>
                                     @endif
                                 </div>
@@ -321,18 +352,30 @@
                                  AÇÕES: dots de progresso + 1 CTA principal + menu ⋮
                             ═══════════════════════════════════════════════════════ --}}
                             @php
-                                // Calcular etapa ML
+                                // Calcular etapa ML (5 etapas: Embalar → NF-e → NF-e Processando → Etiqueta ML → Enviado)
                                 if ($isMl) {
                                     if ($isPrePack)        $mlStep = 1;
                                     elseif ($pendingNfe)   $mlStep = 3;
                                     elseif (!$hasNfe)      $mlStep = 2;
-                                    else                   $mlStep = 4;
+                                    elseif ($hasNfe && $mlShippingId) $mlStep = 4;
+                                    else                   $mlStep = 5;
                                 }
-                                // Calcular etapa genérica
+
+                                // Calcular etapa genérica (dinâmico baseado em integrações)
+                                $meLabel = $labelsMap[$order->id] ?? null;
+
                                 if (!$isMl) {
-                                    if ($isPrePack)    $genStep = 1;
-                                    elseif ($isPacked) $genStep = 2;
-                                    else               $genStep = 3;
+                                    $genTotalSteps = 1; // Embalar
+                                    if ($hasWebmania) $genTotalSteps++; // + NF-e
+                                    if ($hasME)       $genTotalSteps++; // + Etiqueta ME
+                                    $genTotalSteps++; // + Enviado
+
+                                    if ($isPrePack)                          $genStep = 1;
+                                    elseif ($hasWebmania && !$hasNfe)         $genStep = 2;
+                                    elseif ($hasWebmania && $pendingNfe)      $genStep = 2; // NF-e processando
+                                    elseif ($hasME && !$meLabel)             $genStep = $hasWebmania ? 3 : 2;
+                                    elseif ($isPacked || $isPartial)          $genStep = $genTotalSteps;
+                                    else                                      $genStep = $genTotalSteps;
                                 }
                             @endphp
                             <td class="text-right pr-3">
@@ -347,6 +390,8 @@
                                         'genStep' => !$isMl ? ($genStep ?? 1) : null,
                                         'isMl'    => $isMl,
                                         'mlShippingId' => $mlShippingId,
+                                        'hasWebmania' => $hasWebmania ?? false,
+                                        'hasME'       => $hasME ?? false,
                                     ])
 
                                 @elseif($isShipped || $activeTab === 'shipped')
@@ -362,42 +407,48 @@
                                         'isMl'    => $isMl,
                                         'mlShippingId' => $mlShippingId,
                                         'isShipped' => true,
+                                        'hasWebmania' => $hasWebmania ?? false,
+                                        'hasME'       => $hasME ?? false,
                                     ])
 
                                 @elseif($isMl)
-                                    {{-- ──── PROGRESSO: dots para ML (4 etapas) ──── --}}
-                                    <div class="flex items-center gap-1" title="Embalar → NF-e → Etiqueta ML → Enviado">
-                                        @foreach([1,2,3,4] as $s)
+                                    {{-- ──── PROGRESSO: dots para ML (5 etapas) ──── --}}
+                                    <div class="flex items-center gap-1" title="Embalar → NF-e → NF-e Processando → Etiqueta ML → Enviado">
+                                        @foreach([1,2,3,4,5] as $s)
                                         <div class="w-2 h-2 rounded-full transition-colors
                                             {{ $mlStep > $s  ? 'bg-green-400 dark:bg-green-500'
                                             : ($mlStep === $s ? 'bg-primary-500 ring-2 ring-primary-300 dark:ring-primary-700'
                                             : 'bg-gray-200 dark:bg-zinc-600') }}">
                                         </div>
                                         @endforeach
-                                        <span class="text-[10px] text-gray-400 dark:text-zinc-500 ml-0.5 tabular-nums">{{ $mlStep }}/4</span>
+                                        <span class="text-[10px] text-gray-400 dark:text-zinc-500 ml-0.5 tabular-nums">{{ $mlStep }}/5</span>
                                     </div>
 
                                     {{-- ──── CTA PRINCIPAL ──── --}}
                                     @if($mlStep === 1)
-                                        <button wire:click="openPackingModal({{ $order->id }})" class="btn-secondary btn-xs">
+                                        <button wire:click="openPackingModal({{ $order->id }})" @click.stop class="btn-secondary btn-xs">
                                             <x-heroicon-o-clipboard-document-check class="w-3.5 h-3.5" />
                                             Conferir
                                         </button>
                                     @elseif($mlStep === 2)
-                                        <form method="POST" action="{{ route('orders.invoice.emit', $order) }}" class="inline">
-                                            @csrf
-                                            <button type="submit" class="btn-primary btn-xs">
-                                                <x-heroicon-o-document-check class="w-3.5 h-3.5" />
-                                                Emitir NF-e
-                                            </button>
-                                        </form>
+                                        <button wire:click="openNfeModal({{ $order->id }})" @click.stop class="btn-primary btn-xs">
+                                            <x-heroicon-o-document-check class="w-3.5 h-3.5" />
+                                            Emitir NF-e
+                                        </button>
                                     @elseif($mlStep === 3)
                                         <span class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
                                             <x-heroicon-o-arrow-path class="w-3.5 h-3.5 animate-spin" />
                                             NF-e processando
                                         </span>
                                     @elseif($mlStep === 4)
-                                        <button wire:click="markShipped({{ $order->id }})"
+                                        @if($mlShippingId)
+                                        <a href="{{ route('orders.ml-label', $order) }}" target="_blank" @click.stop class="btn-primary btn-xs">
+                                            <x-heroicon-o-tag class="w-3.5 h-3.5" />
+                                            Etiqueta ML
+                                        </a>
+                                        @endif
+                                    @elseif($mlStep === 5)
+                                        <button wire:click="markShipped({{ $order->id }})" @click.stop
                                                 wire:confirm="Marcar {{ $order->order_number }} como enviado?"
                                                 class="btn-primary btn-xs">
                                             <x-heroicon-o-truck class="w-3.5 h-3.5" />
@@ -412,29 +463,52 @@
                                         'isMl'         => true,
                                         'mlShippingId' => $mlShippingId,
                                         'isShipped'    => false,
+                                        'hasWebmania'  => true,
+                                        'hasME'        => false,
                                     ])
 
                                 @else
-                                    {{-- ──── PROGRESSO: dots para Genérico (2 etapas) ──── --}}
-                                    <div class="flex items-center gap-1" title="Embalar → Enviado">
-                                        @foreach([1,2] as $s)
+                                    {{-- ──── PROGRESSO: dots para Genérico (dinâmico) ──── --}}
+                                    @php
+                                        $genLabels = ['Embalar'];
+                                        if ($hasWebmania) $genLabels[] = 'NF-e';
+                                        if ($hasME)       $genLabels[] = 'Etiqueta';
+                                        $genLabels[] = 'Enviado';
+                                    @endphp
+                                    <div class="flex items-center gap-1" title="{{ implode(' → ', $genLabels) }}">
+                                        @foreach(range(1, $genTotalSteps) as $s)
                                         <div class="w-2 h-2 rounded-full transition-colors
                                             {{ $genStep > $s  ? 'bg-green-400 dark:bg-green-500'
                                             : ($genStep === $s ? 'bg-primary-500 ring-2 ring-primary-300 dark:ring-primary-700'
                                             : 'bg-gray-200 dark:bg-zinc-600') }}">
                                         </div>
                                         @endforeach
-                                        <span class="text-[10px] text-gray-400 dark:text-zinc-500 ml-0.5 tabular-nums">{{ $genStep }}/2</span>
+                                        <span class="text-[10px] text-gray-400 dark:text-zinc-500 ml-0.5 tabular-nums">{{ $genStep }}/{{ $genTotalSteps }}</span>
                                     </div>
 
                                     {{-- ──── CTA PRINCIPAL ──── --}}
                                     @if($genStep === 1)
-                                        <button wire:click="openPackingModal({{ $order->id }})" class="btn-secondary btn-xs">
+                                        <button wire:click="openPackingModal({{ $order->id }})" @click.stop class="btn-secondary btn-xs">
                                             <x-heroicon-o-clipboard-document-check class="w-3.5 h-3.5" />
                                             Conferir
                                         </button>
-                                    @elseif($genStep === 2)
-                                        <button wire:click="markShipped({{ $order->id }})"
+                                    @elseif($hasWebmania && !$hasNfe && !$pendingNfe)
+                                        <button wire:click="openNfeModal({{ $order->id }})" @click.stop class="btn-primary btn-xs">
+                                            <x-heroicon-o-document-check class="w-3.5 h-3.5" />
+                                            Emitir NF-e
+                                        </button>
+                                    @elseif($hasWebmania && $pendingNfe)
+                                        <span class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                                            <x-heroicon-o-arrow-path class="w-3.5 h-3.5 animate-spin" />
+                                            NF-e processando
+                                        </span>
+                                    @elseif($hasME && !$meLabel)
+                                        <button wire:click="openShippingModal({{ $order->id }})" @click.stop class="btn-primary btn-xs">
+                                            <x-heroicon-o-truck class="w-3.5 h-3.5" />
+                                            Cotar Frete
+                                        </button>
+                                    @elseif($genStep >= $genTotalSteps)
+                                        <button wire:click="markShipped({{ $order->id }})" @click.stop
                                                 wire:confirm="Marcar {{ $order->order_number }} como enviado?"
                                                 class="btn-primary btn-xs">
                                             <x-heroicon-o-truck class="w-3.5 h-3.5" />
@@ -449,6 +523,8 @@
                                         'isMl'         => false,
                                         'mlShippingId' => null,
                                         'isShipped'    => false,
+                                        'hasWebmania'  => $hasWebmania ?? false,
+                                        'hasME'        => $hasME ?? false,
                                     ])
 
                                 @endif
@@ -717,6 +793,41 @@
                                         </button>
                                     </div>
                                     @endif
+                                    @endif
+
+                                    {{-- ── Etiqueta Melhor Envios ── --}}
+                                    @php $expandedMeLabel = $labelsMap[$order->id] ?? null; @endphp
+                                    @if($expandedMeLabel)
+                                    <div class="mt-4 rounded-xl border border-teal-200 dark:border-teal-800 overflow-hidden">
+                                        <div class="flex items-center justify-between px-4 py-2.5 bg-teal-50 dark:bg-teal-900/20">
+                                            <div class="flex items-center gap-2">
+                                                <x-heroicon-o-tag class="w-4 h-4 text-teal-500" />
+                                                <span class="text-xs font-semibold text-teal-700 dark:text-teal-300 uppercase tracking-wide">
+                                                    Etiqueta Melhor Envios
+                                                </span>
+                                                <span class="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-semibold">
+                                                    {{ ucfirst($expandedMeLabel->status) }}
+                                                </span>
+                                            </div>
+                                            <div class="flex items-center gap-3 text-xs">
+                                                <span class="text-gray-500 dark:text-zinc-400">
+                                                    {{ $expandedMeLabel->carrier }} — {{ $expandedMeLabel->service }}
+                                                    · R$ {{ number_format($expandedMeLabel->cost, 2, ',', '.') }}
+                                                </span>
+                                                @if($expandedMeLabel->tracking_code)
+                                                <span class="font-mono font-semibold text-teal-700 dark:text-teal-300">
+                                                    {{ $expandedMeLabel->tracking_code }}
+                                                </span>
+                                                @endif
+                                                @if($expandedMeLabel->label_url)
+                                                <a href="{{ $expandedMeLabel->label_url }}" target="_blank"
+                                                   class="text-primary-600 dark:text-primary-400 hover:underline font-medium">
+                                                    Imprimir
+                                                </a>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
                                     @endif
 
                                 </div>
@@ -1005,6 +1116,232 @@
                 <button wire:click="$set('showBulkPackModal', false)" class="btn-secondary">Cancelar</button>
                 <button wire:click="markBulkPacked" class="btn-primary">Confirmar</button>
             </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ============================================================
+         MODAL — Emissão NF-e (Webmaniabr)
+    ============================================================ --}}
+    @if($showNfeModal && $nfeOrderId)
+    @php $nfeOrder = \App\Models\Order::select('id','order_number','customer_name')->find($nfeOrderId); @endphp
+    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+         @keydown.escape.window="$wire.closeNfeModal()">
+        <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col"
+             style="max-height: 85vh"
+             @click.outside="$wire.closeNfeModal()">
+
+            {{-- Header --}}
+            <div class="flex items-start justify-between px-6 py-4 border-b border-gray-200 dark:border-zinc-700">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <x-heroicon-o-document-check class="w-5 h-5 text-primary-500" />
+                        Emitir NF-e
+                    </h2>
+                    <p class="text-sm text-gray-500 dark:text-zinc-400 mt-0.5">
+                        <span class="font-mono font-semibold text-gray-700 dark:text-zinc-300">{{ $nfeOrder?->order_number }}</span>
+                        @if($nfeOrder?->customer_name) · {{ $nfeOrder->customer_name }} @endif
+                    </p>
+                </div>
+                <button wire:click="closeNfeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 mt-0.5">
+                    <x-heroicon-o-x-mark class="w-5 h-5" />
+                </button>
+            </div>
+
+            {{-- Corpo --}}
+            <div class="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+                <div>
+                    <label class="form-label">Natureza da Operação</label>
+                    <input type="text" wire:model="nfeNatureOp" class="form-input" placeholder="Venda">
+                </div>
+                <div>
+                    <label class="form-label">Informações ao Fisco <span class="text-gray-400 font-normal">(opcional)</span></label>
+                    <textarea wire:model="nfeInfoFisco" rows="2" class="form-input" placeholder="Informações adicionais ao fisco..."></textarea>
+                </div>
+                <div>
+                    <label class="form-label">Informações ao Consumidor <span class="text-gray-400 font-normal">(opcional)</span></label>
+                    <textarea wire:model="nfeInfoConsumer" rows="2" class="form-input" placeholder="Informações para o consumidor..."></textarea>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" wire:model="nfeHomologation" id="nfe-homolog"
+                           class="rounded border-gray-300 dark:border-zinc-600 text-primary-600 focus:ring-primary-500">
+                    <label for="nfe-homolog" class="text-sm text-gray-700 dark:text-zinc-300">Emitir em homologação (teste)</label>
+                </div>
+
+                @error('nfe')
+                <div class="flex items-start gap-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded-xl px-4 py-3 border border-red-200 dark:border-red-700">
+                    <x-heroicon-s-exclamation-triangle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{{ $message }}</span>
+                </div>
+                @enderror
+            </div>
+
+            {{-- Footer --}}
+            <div class="px-6 py-4 border-t border-gray-200 dark:border-zinc-700 flex items-center justify-between gap-3">
+                <button wire:click="closeNfeModal" class="btn-ghost btn-sm">Cancelar</button>
+                <div class="flex items-center gap-2">
+                    <button wire:click="emitNfe('preview')"
+                            wire:loading.attr="disabled"
+                            wire:target="emitNfe"
+                            class="btn-secondary btn-sm"
+                            @if($nfeLoading) disabled @endif>
+                        <x-heroicon-o-eye class="w-4 h-4" />
+                        Pré-visualizar
+                    </button>
+                    <button wire:click="emitNfe('emit')"
+                            wire:loading.attr="disabled"
+                            wire:target="emitNfe"
+                            class="btn-primary btn-sm"
+                            @if($nfeLoading) disabled @endif>
+                        <span wire:loading.remove wire:target="emitNfe">
+                            <x-heroicon-o-document-check class="w-4 h-4 inline" />
+                            Emitir NF-e
+                        </span>
+                        <span wire:loading wire:target="emitNfe" class="text-sm">Emitindo...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ============================================================
+         MODAL — Cotação de Frete (Melhor Envios)
+    ============================================================ --}}
+    @if($showShippingModal && $shippingOrderId)
+    @php $shipOrder = \App\Models\Order::select('id','order_number','customer_name')->find($shippingOrderId); @endphp
+    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+         @keydown.escape.window="$wire.closeShippingModal()">
+        <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col"
+             style="max-height: 92vh"
+             @click.outside="$wire.closeShippingModal()">
+
+            {{-- Header --}}
+            <div class="flex items-start justify-between px-6 py-4 border-b border-gray-200 dark:border-zinc-700">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <x-heroicon-o-truck class="w-5 h-5 text-primary-500" />
+                        Cotação de Frete — Melhor Envios
+                    </h2>
+                    <p class="text-sm text-gray-500 dark:text-zinc-400 mt-0.5">
+                        <span class="font-mono font-semibold text-gray-700 dark:text-zinc-300">{{ $shipOrder?->order_number }}</span>
+                        @if($shipOrder?->customer_name) · {{ $shipOrder->customer_name }} @endif
+                    </p>
+                </div>
+                <button wire:click="closeShippingModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 mt-0.5">
+                    <x-heroicon-o-x-mark class="w-5 h-5" />
+                </button>
+            </div>
+
+            {{-- Corpo --}}
+            <div class="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+                {{-- Dimensões --}}
+                <div class="grid grid-cols-4 gap-3">
+                    <div>
+                        <label class="form-label text-xs">Peso (kg)</label>
+                        <input type="number" step="0.01" wire:model="shippingWeight" class="form-input text-sm" min="0.01">
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Largura (cm)</label>
+                        <input type="number" step="0.1" wire:model="shippingWidth" class="form-input text-sm" min="1">
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Altura (cm)</label>
+                        <input type="number" step="0.1" wire:model="shippingHeight" class="form-input text-sm" min="1">
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Comprimento (cm)</label>
+                        <input type="number" step="0.1" wire:model="shippingLength" class="form-input text-sm" min="1">
+                    </div>
+                </div>
+
+                <button wire:click="calculateShippingQuote"
+                        wire:loading.attr="disabled"
+                        wire:target="calculateShippingQuote"
+                        class="btn-primary btn-sm w-full"
+                        @if($shippingLoading) disabled @endif>
+                    <span wire:loading.remove wire:target="calculateShippingQuote">
+                        <x-heroicon-o-calculator class="w-4 h-4 inline" />
+                        Calcular Cotação
+                    </span>
+                    <span wire:loading wire:target="calculateShippingQuote" class="text-sm">Calculando...</span>
+                </button>
+
+                {{-- Erro --}}
+                @if($shippingError)
+                <div class="flex items-start gap-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded-xl px-4 py-3 border border-red-200 dark:border-red-700">
+                    <x-heroicon-s-exclamation-triangle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{{ $shippingError }}</span>
+                </div>
+                @endif
+
+                {{-- Resultados --}}
+                @if(!empty($shippingQuotes))
+                <div class="space-y-2">
+                    <p class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wide">
+                        {{ count($shippingQuotes) }} opções de frete
+                    </p>
+                    @foreach($shippingQuotes as $qKey => $quote)
+                    <div wire:click="selectShippingQuote('{{ $qKey }}')"
+                         class="flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all
+                            {{ $shippingSelectedKey == $qKey
+                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                                : 'border-gray-200 dark:border-zinc-700 hover:border-primary-300 dark:hover:border-primary-700' }}">
+                        {{-- Radio --}}
+                        <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0
+                            {{ $shippingSelectedKey == $qKey
+                                ? 'border-primary-500'
+                                : 'border-gray-300 dark:border-zinc-600' }}">
+                            @if($shippingSelectedKey == $qKey)
+                            <div class="w-2.5 h-2.5 rounded-full bg-primary-500"></div>
+                            @endif
+                        </div>
+                        {{-- Info --}}
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-sm text-gray-900 dark:text-white">
+                                {{ $quote['company']['name'] ?? 'N/A' }} — {{ $quote['name'] ?? '' }}
+                            </p>
+                            <p class="text-xs text-gray-500 dark:text-zinc-400">
+                                Prazo: {{ $quote['delivery_time'] ?? '?' }} dias úteis
+                                @if(!empty($quote['delivery_range']))
+                                    ({{ $quote['delivery_range']['min'] ?? '?' }}-{{ $quote['delivery_range']['max'] ?? '?' }})
+                                @endif
+                            </p>
+                        </div>
+                        {{-- Preço --}}
+                        <div class="text-right flex-shrink-0">
+                            <p class="text-lg font-bold text-gray-900 dark:text-white tabular-nums">
+                                R$ {{ number_format((float)($quote['price'] ?? 0), 2, ',', '.') }}
+                            </p>
+                            @if(!empty($quote['discount']))
+                            <p class="text-[10px] text-green-600 dark:text-green-400 line-through">
+                                R$ {{ number_format((float)($quote['custom_price'] ?? $quote['price']), 2, ',', '.') }}
+                            </p>
+                            @endif
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+                @endif
+            </div>
+
+            {{-- Footer --}}
+            @if(!empty($shippingQuotes))
+            <div class="px-6 py-4 border-t border-gray-200 dark:border-zinc-700 flex items-center justify-between gap-3">
+                <button wire:click="closeShippingModal" class="btn-ghost btn-sm">Cancelar</button>
+                <button wire:click="purchaseShippingLabel"
+                        wire:loading.attr="disabled"
+                        wire:target="purchaseShippingLabel"
+                        class="btn-primary btn-sm"
+                        @if(!$shippingSelectedKey || $shippingPurchasing) disabled @endif>
+                    <span wire:loading.remove wire:target="purchaseShippingLabel">
+                        <x-heroicon-o-shopping-cart class="w-4 h-4 inline" />
+                        Comprar Etiqueta
+                    </span>
+                    <span wire:loading wire:target="purchaseShippingLabel" class="text-sm">Comprando...</span>
+                </button>
+            </div>
+            @endif
         </div>
     </div>
     @endif

@@ -10,6 +10,9 @@ use App\Models\MarketplaceListing;
 use App\Models\Order;
 use App\Models\OrderTimeline;
 use App\Models\Romaneio;
+use App\Models\ShipmentLabel;
+use App\Services\MelhorEnviosService;
+use App\Services\WebmaniaService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -48,6 +51,28 @@ class ExpeditionBoard extends Component
     public array  $packingChecks    = []; // "item_id" => qty_confirmada
     public string $packingNotes     = '';
 
+    // ── Modal de Emissão NF-e ────────────────────────────────────────────────
+    public bool   $showNfeModal     = false;
+    public ?int   $nfeOrderId       = null;
+    public string $nfeNatureOp      = 'Venda';
+    public string $nfeInfoFisco     = '';
+    public string $nfeInfoConsumer  = '';
+    public bool   $nfeHomologation  = false;
+    public bool   $nfeLoading       = false;
+
+    // ── Modal de Cotação Frete (genéricos/WooCommerce) ───────────────────────
+    public bool   $showShippingModal  = false;
+    public ?int   $shippingOrderId    = null;
+    public float  $shippingWeight     = 0.5;
+    public float  $shippingWidth      = 12;
+    public float  $shippingHeight     = 4;
+    public float  $shippingLength     = 17;
+    public array  $shippingQuotes     = [];
+    public ?string $shippingSelectedKey = null;
+    public string $shippingError      = '';
+    public bool   $shippingLoading    = false;
+    public bool   $shippingPurchasing = false;
+
     protected $queryString = [
         'activeTab'     => ['except' => 'today'],
         'search'        => ['except' => ''],
@@ -67,22 +92,14 @@ class ExpeditionBoard extends Component
         return DB::getDriverName() === 'pgsql';
     }
 
-    /**
-     * Extrai a data (YYYY-MM-DD) de um campo JSON de deadline.
-     * SQLite: SUBSTR(json_extract(meta,'$.ml_shipping_deadline'), 1, 10)
-     * PostgreSQL: (meta->>'ml_shipping_deadline')::timestamptz::date
-     */
     protected function deadlineDateSql(): string
     {
         if ($this->isPostgres()) {
             return "(meta->>'ml_shipping_deadline')::timestamptz::date";
         }
-
-        // SQLite: ISO string "2026-03-11T23:59:59.000-03:00" → substr = "2026-03-11"
         return "SUBSTR(json_extract(meta, '$.ml_shipping_deadline'), 1, 10)";
     }
 
-    /** Null check para o campo deadline, compatível com ambos os bancos */
     protected function deadlineNotNullSql(): string
     {
         if ($this->isPostgres()) {
@@ -91,7 +108,6 @@ class ExpeditionBoard extends Component
         return "json_extract(meta, '$.ml_shipping_deadline') IS NOT NULL";
     }
 
-    /** IS NULL para o campo deadline (inverso de notNull) */
     protected function deadlineIsNullSql(): string
     {
         if ($this->isPostgres()) {
@@ -100,18 +116,11 @@ class ExpeditionBoard extends Component
         return "json_extract(meta, '$.ml_shipping_deadline') IS NULL";
     }
 
-    /**
-     * Retorna o SQL completo para ordenação por deadline + paid_at.
-     * Usa NULLS LAST para colocar pedidos sem deadline no final.
-     * Elimina CASE WHEN para evitar incompatibilidade de tipos no PostgreSQL.
-     */
     protected function deadlineOrderBySql(): string
     {
         if ($this->isPostgres()) {
             return "(meta->>'ml_shipping_deadline')::timestamptz ASC NULLS LAST, paid_at DESC NULLS LAST";
         }
-
-        // SQLite 3.30+ suporta NULLS LAST
         return "json_extract(meta, '$.ml_shipping_deadline') ASC NULLS LAST, paid_at DESC NULLS LAST";
     }
 
@@ -193,7 +202,7 @@ class ExpeditionBoard extends Component
     }
 
     // ----------------------------------------------------------------
-    //  Query helper
+    //  Query helper — busca expandida (número, cliente, produto, SKU)
     // ----------------------------------------------------------------
 
     protected function buildQuery()
@@ -207,8 +216,21 @@ class ExpeditionBoard extends Component
         $notnull = $this->deadlineNotNullSql();
 
         $query = $this->baseQuery()
-            ->with(['items.product.primaryImage', 'items.product.images', 'items.variant', 'marketplaceAccount', 'invoices'])
-            ->when($this->search, fn ($q) => $q->search($this->search))
+            ->with(['items.product.primaryImage', 'items.product.images', 'items.variant', 'marketplaceAccount', 'invoices', 'shipmentLabels'])
+            ->when($this->search, function ($q) {
+                $term = $this->search;
+                $q->where(function ($sub) use ($term) {
+                    $sub->where('order_number', 'ilike', "%{$term}%")
+                        ->orWhere('customer_name', 'ilike', "%{$term}%")
+                        ->orWhere('customer_email', 'ilike', "%{$term}%")
+                        ->orWhere('customer_document', 'ilike', "%{$term}%")
+                        ->orWhere('tracking_code', 'ilike', "%{$term}%")
+                        ->orWhereHas('items', fn ($iq) =>
+                            $iq->where('name', 'ilike', "%{$term}%")
+                               ->orWhere('sku', 'ilike', "%{$term}%")
+                        );
+                });
+            })
             ->when($this->filterType, fn ($q) => $q->whereHas('marketplaceAccount', fn ($mq) =>
                 $mq->where('marketplace_type', $this->filterType)
             ));
@@ -321,7 +343,40 @@ class ExpeditionBoard extends Component
             'pipeline_status' => PipelineStatus::Shipped,
             'shipped_at'      => now(),
         ]);
+
+        OrderTimeline::log($order, 'shipped', "Pedido marcado como enviado");
+
         session()->flash('success', "Pedido {$order->order_number} marcado como enviado.");
+    }
+
+    /**
+     * Marca pedidos em lote como enviados.
+     */
+    public function markBulkShipped(): void
+    {
+        if (empty($this->selectedOrders)) {
+            return;
+        }
+
+        $q = Order::whereIn('id', $this->selectedOrders);
+        if ($cid = Auth::user()?->company_id) {
+            $q->where('company_id', $cid);
+        }
+        $orders = $q->get();
+
+        foreach ($orders as $order) {
+            $order->update([
+                'status'          => OrderStatus::Shipped,
+                'pipeline_status' => PipelineStatus::Shipped,
+                'shipped_at'      => now(),
+            ]);
+            OrderTimeline::log($order, 'shipped', "Pedido marcado como enviado (lote)");
+        }
+
+        $count = $orders->count();
+        $this->selectedOrders = [];
+        $this->selectAll = false;
+        session()->flash('success', "{$count} pedido(s) marcado(s) como enviado(s).");
     }
 
     // ----------------------------------------------------------------
@@ -330,6 +385,9 @@ class ExpeditionBoard extends Component
 
     public function openPackingModal(int $orderId): void
     {
+        // Fecha outros modais que possam estar abertos
+        $this->closeAllModals();
+
         $order = $this->scopedOrder($orderId);
         $order->load(['items.product.primaryImage', 'items.product.images']);
 
@@ -404,14 +462,14 @@ class ExpeditionBoard extends Component
 
         if (! $force && ! $allConfirmed) {
             $missing = $totalOrdered - $totalConfirmed;
-            $this->addError('packingChecks', "Faltam {$missing} unidade(s). Clique em 'Forçar (parcial)' para confirmar mesmo assim, ou ajuste as quantidades.");
+            $this->addError('packingChecks', "Faltam {$missing} unidade(s). Clique em 'Forcar (parcial)' para confirmar mesmo assim, ou ajuste as quantidades.");
             return;
         }
 
         $status = $allConfirmed ? 'complete' : 'partial';
         $title  = $allConfirmed
-            ? "Embalagem conferida — {$totalConfirmed}/{$totalOrdered} unid."
-            : "Conferência parcial — {$totalConfirmed}/{$totalOrdered} unid.";
+            ? "Embalagem conferida - {$totalConfirmed}/{$totalOrdered} unid."
+            : "Conferencia parcial - {$totalConfirmed}/{$totalOrdered} unid.";
 
         OrderTimeline::log(
             $order,
@@ -450,7 +508,256 @@ class ExpeditionBoard extends Component
     }
 
     // ----------------------------------------------------------------
-    //  Actions — Seleção e Romaneio
+    //  NF-e Emission (Modal) — via Webmaniabr
+    // ----------------------------------------------------------------
+
+    public function openNfeModal(int $orderId): void
+    {
+        $this->closeAllModals();
+
+        $order = $this->scopedOrder($orderId);
+        $account = $order->marketplaceAccount;
+
+        if (! $account?->webmania_account_id) {
+            session()->flash('error', 'Nenhuma conta Webmaniabr vinculada a este canal.');
+            return;
+        }
+
+        $this->nfeOrderId      = $orderId;
+        $this->nfeNatureOp     = 'Venda';
+        $this->nfeInfoFisco    = '';
+        $this->nfeInfoConsumer = '';
+        $this->nfeHomologation = false;
+        $this->nfeLoading      = false;
+        $this->showNfeModal    = true;
+        $this->resetErrorBag();
+    }
+
+    public function emitNfe(string $action = 'emit'): void
+    {
+        if (! $this->nfeOrderId) {
+            return;
+        }
+
+        $this->nfeLoading = true;
+
+        $order = $this->scopedOrder($this->nfeOrderId);
+        $account = $order->marketplaceAccount;
+
+        if (! $account?->webmania_account_id) {
+            $this->addError('nfe', 'Conta Webmaniabr nao vinculada.');
+            $this->nfeLoading = false;
+            return;
+        }
+
+        $order->load(['items.product', 'company', 'marketplaceAccount.webmaniaAccount']);
+        $webmaniaAccount = $account->webmaniaAccount;
+
+        try {
+            $service = new WebmaniaService($webmaniaAccount);
+
+            $overrides = [];
+            if (! empty($this->nfeNatureOp)) {
+                $overrides['natureza_operacao'] = $this->nfeNatureOp;
+            }
+            if (! empty($this->nfeInfoFisco)) {
+                $overrides['informacoes_adicionais']['fisco'] = $this->nfeInfoFisco;
+            }
+            if (! empty($this->nfeInfoConsumer)) {
+                $overrides['informacoes_adicionais']['contribuinte'] = $this->nfeInfoConsumer;
+            }
+            if ($this->nfeHomologation) {
+                $overrides['homologacao'] = true;
+            }
+
+            if ($action === 'preview') {
+                $result = $service->preview($order, $overrides);
+                $this->showNfeModal = false;
+                $this->nfeOrderId   = null;
+                $this->nfeLoading   = false;
+                session()->flash('success', 'Pre-visualizacao gerada. PDF: ' . ($result['danfe'] ?? 'N/A'));
+            } else {
+                $result = $service->emit($order, $overrides);
+                $this->showNfeModal = false;
+                $this->nfeOrderId   = null;
+                $this->nfeLoading   = false;
+                session()->flash('success', "NF-e no {$result['numero']} emitida com sucesso.");
+            }
+        } catch (\Throwable $e) {
+            Log::error("emitNfe order #{$order->id}: " . $e->getMessage());
+            $this->addError('nfe', 'Erro na emissao: ' . $e->getMessage());
+            $this->nfeLoading = false;
+        }
+    }
+
+    public function closeNfeModal(): void
+    {
+        $this->showNfeModal = false;
+        $this->nfeOrderId   = null;
+        $this->nfeLoading   = false;
+        $this->resetErrorBag();
+    }
+
+    // ----------------------------------------------------------------
+    //  Shipping Quote Modal — Melhor Envios (for generic/WooCommerce)
+    // ----------------------------------------------------------------
+
+    public function openShippingModal(int $orderId): void
+    {
+        $this->closeAllModals();
+
+        $order   = $this->scopedOrder($orderId);
+        $account = $order->marketplaceAccount;
+
+        $meAccount = $account?->melhorEnviosAccount;
+        if (! $meAccount) {
+            session()->flash('error', 'Nenhuma conta Melhor Envios vinculada a este canal.');
+            return;
+        }
+
+        $defaults = $meAccount->default_package ?? [];
+        $this->shippingOrderId    = $orderId;
+        $this->shippingWeight     = $defaults['weight'] ?? 0.5;
+        $this->shippingWidth      = $defaults['width']  ?? 12;
+        $this->shippingHeight     = $defaults['height'] ?? 4;
+        $this->shippingLength     = $defaults['length'] ?? 17;
+        $this->shippingQuotes     = [];
+        $this->shippingSelectedKey = null;
+        $this->shippingError      = '';
+        $this->shippingLoading    = false;
+        $this->shippingPurchasing = false;
+        $this->showShippingModal  = true;
+
+        // Verifica se ja tem etiqueta
+        $existing = ShipmentLabel::where('order_id', $orderId)
+            ->whereIn('status', ['purchased', 'printed'])
+            ->latest()
+            ->first();
+
+        if ($existing) {
+            session()->flash('info', "Este pedido ja possui etiqueta: {$existing->carrier} - {$existing->service} (R\$ " . number_format($existing->cost, 2, ',', '.') . ")");
+        }
+    }
+
+    public function calculateShippingQuote(): void
+    {
+        $this->shippingLoading = true;
+        $this->shippingQuotes  = [];
+        $this->shippingError   = '';
+
+        $order     = $this->scopedOrder($this->shippingOrderId);
+        $meAccount = $order->marketplaceAccount?->melhorEnviosAccount;
+
+        if (! $meAccount) {
+            $this->shippingError   = 'Conta Melhor Envios nao encontrada.';
+            $this->shippingLoading = false;
+            return;
+        }
+
+        try {
+            $service = new MelhorEnviosService($meAccount);
+            $results = $service->quoteForOrder($order, [
+                'weight' => $this->shippingWeight,
+                'width'  => $this->shippingWidth,
+                'height' => $this->shippingHeight,
+                'length' => $this->shippingLength,
+            ]);
+
+            $this->shippingQuotes = collect($results)
+                ->filter(fn ($q) => empty($q['error']) && isset($q['price']))
+                ->sortBy('price')
+                ->values()
+                ->toArray();
+
+        } catch (\Throwable $e) {
+            $this->shippingError = 'Erro na cotacao: ' . $e->getMessage();
+        } finally {
+            $this->shippingLoading = false;
+        }
+    }
+
+    public function selectShippingQuote(string $key): void
+    {
+        $this->shippingSelectedKey = $key;
+    }
+
+    public function purchaseShippingLabel(): void
+    {
+        if ($this->shippingSelectedKey === null) {
+            return;
+        }
+
+        $quote = $this->shippingQuotes[$this->shippingSelectedKey] ?? null;
+        if (! $quote) {
+            return;
+        }
+
+        $this->shippingPurchasing = true;
+        $this->shippingError      = '';
+
+        $order     = $this->scopedOrder($this->shippingOrderId);
+        $meAccount = $order->marketplaceAccount?->melhorEnviosAccount;
+
+        if (! $meAccount) {
+            $this->shippingError     = 'Conta ME nao encontrada.';
+            $this->shippingPurchasing = false;
+            return;
+        }
+
+        try {
+            $service = new MelhorEnviosService($meAccount);
+            $label   = $service->purchaseLabel($order, $quote, [
+                'weight' => $this->shippingWeight,
+                'width'  => $this->shippingWidth,
+                'height' => $this->shippingHeight,
+                'length' => $this->shippingLength,
+            ]);
+
+            // Atualiza tracking_code no pedido
+            if ($label->tracking_code) {
+                $order->update(['tracking_code' => $label->tracking_code]);
+            }
+
+            $this->showShippingModal  = false;
+            $this->shippingOrderId    = null;
+            $this->shippingPurchasing = false;
+
+            session()->flash('success', "Etiqueta {$quote['company']['name']} - {$quote['name']} comprada com sucesso!");
+
+        } catch (\Throwable $e) {
+            $this->shippingError     = 'Erro na compra: ' . $e->getMessage();
+            $this->shippingPurchasing = false;
+        }
+    }
+
+    public function closeShippingModal(): void
+    {
+        $this->showShippingModal  = false;
+        $this->shippingOrderId    = null;
+        $this->shippingQuotes     = [];
+        $this->shippingSelectedKey = null;
+        $this->shippingError      = '';
+        $this->shippingLoading    = false;
+        $this->shippingPurchasing = false;
+    }
+
+    // ----------------------------------------------------------------
+    //  Helper: fecha todos os modais
+    // ----------------------------------------------------------------
+
+    protected function closeAllModals(): void
+    {
+        $this->closePackingModal();
+        $this->showNfeModal      = false;
+        $this->nfeOrderId        = null;
+        $this->showShippingModal = false;
+        $this->shippingOrderId   = null;
+        $this->showRomaneioModal = false;
+        $this->showBulkPackModal = false;
+    }
+
+    // ----------------------------------------------------------------
+    //  Actions — Selecao e Romaneio
     // ----------------------------------------------------------------
 
     public function updatedSelectAll(bool $value): void
@@ -492,7 +799,7 @@ class ExpeditionBoard extends Component
             'status'     => 'open',
         ]);
 
-        $this->redirect(route('romaneios.board', $romaneio));
+        $this->redirectRoute('romaneios.board', ['romaneio' => $romaneio->id], navigate: true);
     }
 
     public function createRomaneio()
@@ -540,7 +847,6 @@ class ExpeditionBoard extends Component
 
     /**
      * Reverte pedido enviado para "Pronto para Envio" — permite reprocessar
-     * (gerar nova etiqueta MelhorEnvios, corrigir endereço, etc.)
      */
     public function revertToReadyToShip(int $orderId): void
     {
@@ -550,6 +856,9 @@ class ExpeditionBoard extends Component
             'pipeline_status' => PipelineStatus::Packed,
             'shipped_at'      => null,
         ]);
+
+        OrderTimeline::log($order, 'status_changed', "Pedido reaberto para re-envio");
+
         session()->flash('success', "Pedido {$order->order_number} reaberto para re-envio.");
     }
 
@@ -573,12 +882,12 @@ class ExpeditionBoard extends Component
     // ----------------------------------------------------------------
 
     /**
-     * Na primeira renderização, se a aba atual não tem pedidos,
+     * Na primeira renderizacao, se a aba atual nao tem pedidos,
      * seleciona automaticamente a primeira aba que tenha.
      */
     protected function autoSelectTab(array $tabCounts): void
     {
-        if ($tabCounts[$this->activeTab] ?? 0 > 0) {
+        if (($tabCounts[$this->activeTab] ?? 0) > 0) {
             return;
         }
 
@@ -615,7 +924,7 @@ class ExpeditionBoard extends Component
             }
         }
 
-        // Mapa external_id → MarketplaceListing para imagens e links internos
+        // Mapa external_id -> MarketplaceListing para imagens e links internos
         $mlItemIds = $orders->flatMap(fn ($o) => $o->items->pluck('meta')
             ->map(fn ($m) => $m['ml_item_id'] ?? null)
             ->filter()
@@ -629,7 +938,7 @@ class ExpeditionBoard extends Component
                 ->keyBy('external_id');
         }
 
-        // Mapa order_id → último evento de conferência de embalagem
+        // Mapa order_id -> ultimo evento de conferencia de embalagem
         $orderIds = $orders->pluck('id')->all();
         $packingHistoryMap = collect();
         if (! empty($orderIds)) {
@@ -640,6 +949,16 @@ class ExpeditionBoard extends Component
                 ->get()
                 ->groupBy('order_id')
                 ->map(fn ($events) => $events->first());
+        }
+
+        // Mapa order_id -> ShipmentLabel ativa
+        $labelsMap = collect();
+        if (! empty($orderIds)) {
+            $labelsMap = ShipmentLabel::whereIn('order_id', $orderIds)
+                ->whereIn('status', ['purchased', 'printed'])
+                ->latest()
+                ->get()
+                ->keyBy('order_id');
         }
 
         $accountQuery = MarketplaceAccount::active()->orderBy('account_name');
@@ -654,6 +973,7 @@ class ExpeditionBoard extends Component
             'types'             => MarketplaceType::cases(),
             'listingsMap'       => $listingsMap,
             'packingHistoryMap' => $packingHistoryMap,
+            'labelsMap'         => $labelsMap,
         ]);
     }
 }

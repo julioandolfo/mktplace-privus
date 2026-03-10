@@ -2,16 +2,20 @@
     Partial: menu ⋮ de ações da expedição
     Variáveis recebidas:
       $order         — Order model
-      $mlStep        — int|null (1..4)
-      $genStep       — int|null (1..2)
+      $mlStep        — int|null (1..5)
+      $genStep       — int|null (1..N)
       $isMl          — bool
       $mlShippingId  — string|null
       $isShipped     — bool
+      $hasWebmania   — bool|null  (conta Webmaniabr vinculada)
+      $hasME         — bool|null  (conta Melhor Envios vinculada)
 --}}
 @php
-    $isShipped ??= false;
-    $mlStep    ??= null;
-    $genStep   ??= null;
+    $isShipped   ??= false;
+    $mlStep      ??= null;
+    $genStep     ??= null;
+    $hasWebmania ??= false;
+    $hasME       ??= false;
 @endphp
 
 <div x-data="{
@@ -66,6 +70,26 @@
                     class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
                 <x-heroicon-o-archive-box class="w-4 h-4 text-gray-400" />
                 Marcar Embalado
+            </button>
+            @endif
+
+            {{-- ── Emitir NF-e (via Webmaniabr) ── --}}
+            @if(!$isShipped && ($hasWebmania || $isMl))
+            <button wire:click="openNfeModal({{ $order->id }})"
+                    @click="open = false"
+                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                <x-heroicon-o-document-check class="w-4 h-4 text-gray-400" />
+                Emitir NF-e
+            </button>
+            @endif
+
+            {{-- ── Cotação de Frete (Melhor Envios) ── --}}
+            @if(!$isShipped && $hasME && !$isMl)
+            <button wire:click="openShippingModal({{ $order->id }})"
+                    @click="open = false"
+                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                <x-heroicon-o-truck class="w-4 h-4 text-gray-400" />
+                Cotar Frete (ME)
             </button>
             @endif
 
