@@ -210,6 +210,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Configurações — Marketplace Accounts (vincular Webmania, ME, etc.)
     Route::get('/settings/accounts', [\App\Http\Controllers\MarketplaceAccountSettingsController::class, 'index'])->name('settings.accounts.index');
     Route::put('/settings/accounts/{account}', [\App\Http\Controllers\MarketplaceAccountSettingsController::class, 'update'])->name('settings.accounts.update');
+
+    // Configurações — Operadores de Expedição
+    Route::get('/settings/expedition-operators', \App\Livewire\Settings\ExpeditionOperators::class)->name('settings.operators.index');
 });
 
 require __DIR__.'/auth.php';

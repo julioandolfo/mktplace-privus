@@ -5,6 +5,7 @@ namespace App\Livewire\Orders;
 use App\Enums\MarketplaceType;
 use App\Enums\OrderStatus;
 use App\Enums\PipelineStatus;
+use App\Models\ExpeditionOperator;
 use App\Models\MarketplaceAccount;
 use App\Models\MarketplaceListing;
 use App\Models\Order;
@@ -73,6 +74,9 @@ class ExpeditionBoard extends Component
     public string $shippingError      = '';
     public bool   $shippingLoading    = false;
     public bool   $shippingPurchasing = false;
+
+    // ── Operador de Expedição selecionado ──────────────────────────────────
+    public ?int $selectedOperatorId = null;
 
     protected $queryString = [
         'activeTab'     => ['except' => 'today'],
@@ -382,7 +386,11 @@ class ExpeditionBoard extends Component
             'shipped_at'      => now(),
         ]);
 
-        OrderTimeline::log($order, 'shipped', "Pedido marcado como enviado");
+        $opName = $this->operatorName();
+        OrderTimeline::log($order, 'shipped', "Pedido marcado como enviado" . ($opName ? " (por {$opName})" : ''), null, [
+            'operator_id'   => $this->selectedOperatorId,
+            'operator_name' => $opName,
+        ]);
 
         session()->flash('success', "Pedido {$order->order_number} marcado como enviado.");
     }
@@ -464,6 +472,7 @@ class ExpeditionBoard extends Component
         $this->packingOrderId  = $orderId;
         $this->packingNotes    = '';
         $this->showPackingModal = true;
+        $this->preselectOperator();
         $this->resetErrorBag();
     }
 
@@ -509,10 +518,12 @@ class ExpeditionBoard extends Component
             ? "Embalagem conferida - {$totalConfirmed}/{$totalOrdered} unid."
             : "Conferencia parcial - {$totalConfirmed}/{$totalOrdered} unid.";
 
+        $opName = $this->operatorName();
+
         OrderTimeline::log(
             $order,
             'packing_checked',
-            $title,
+            $title . ($opName ? " (por {$opName})" : ''),
             $this->packingNotes,
             [
                 'status'          => $status,
@@ -520,6 +531,8 @@ class ExpeditionBoard extends Component
                 'total_confirmed' => $totalConfirmed,
                 'items'           => $itemsData,
                 'forced'          => $force,
+                'operator_id'     => $this->selectedOperatorId,
+                'operator_name'   => $opName,
             ]
         );
 
@@ -568,6 +581,7 @@ class ExpeditionBoard extends Component
         $this->nfeHomologation = false;
         $this->nfeLoading      = false;
         $this->showNfeModal    = true;
+        $this->preselectOperator();
         $this->resetErrorBag();
     }
 
@@ -665,6 +679,7 @@ class ExpeditionBoard extends Component
         $this->shippingLoading    = false;
         $this->shippingPurchasing = false;
         $this->showShippingModal  = true;
+        $this->preselectOperator();
 
         // Verifica se ja tem etiqueta
         $existing = ShipmentLabel::where('order_id', $orderId)
@@ -777,6 +792,26 @@ class ExpeditionBoard extends Component
         $this->shippingError      = '';
         $this->shippingLoading    = false;
         $this->shippingPurchasing = false;
+    }
+
+    // ----------------------------------------------------------------
+    //  Helper: pré-seleciona operador padrão
+    // ----------------------------------------------------------------
+
+    protected function preselectOperator(): void
+    {
+        if (! $this->selectedOperatorId) {
+            $default = ExpeditionOperator::defaultForCompany(Auth::user()?->company_id);
+            $this->selectedOperatorId = $default?->id;
+        }
+    }
+
+    protected function operatorName(): ?string
+    {
+        if (! $this->selectedOperatorId) {
+            return null;
+        }
+        return ExpeditionOperator::find($this->selectedOperatorId)?->name;
     }
 
     // ----------------------------------------------------------------
@@ -1004,14 +1039,17 @@ class ExpeditionBoard extends Component
             $accountQuery->where('company_id', $cid);
         }
 
+        $expeditionOperators = ExpeditionOperator::forCompany(Auth::user()?->company_id);
+
         return view('livewire.orders.expedition-board', [
-            'orders'            => $orders,
-            'accounts'          => $accountQuery->get(),
-            'tabCounts'         => $tabCounts,
-            'types'             => MarketplaceType::cases(),
-            'listingsMap'       => $listingsMap,
-            'packingHistoryMap' => $packingHistoryMap,
-            'labelsMap'         => $labelsMap,
+            'orders'              => $orders,
+            'accounts'            => $accountQuery->get(),
+            'tabCounts'           => $tabCounts,
+            'types'               => MarketplaceType::cases(),
+            'listingsMap'         => $listingsMap,
+            'packingHistoryMap'   => $packingHistoryMap,
+            'labelsMap'           => $labelsMap,
+            'expeditionOperators' => $expeditionOperators,
         ]);
     }
 }

@@ -69,6 +69,18 @@
                 <option value="invoicing">NF-e processando</option>
                 <option value="to_ship">Pronto p/ despacho</option>
             </select>
+
+            {{-- Operador ativo --}}
+            @if($expeditionOperators->isNotEmpty())
+            <select wire:model="selectedOperatorId" class="form-input w-full sm:w-44">
+                <option value="">Operador...</option>
+                @foreach($expeditionOperators as $op)
+                    <option value="{{ $op->id }}">
+                        {{ $op->name }}{{ $op->is_default ? ' ★' : '' }}
+                    </option>
+                @endforeach
+            </select>
+            @endif
         </div>
 
         {{-- Ações em lote — visível quando há selecionados --}}
@@ -1017,6 +1029,9 @@
                 </div>
                 @enderror
 
+                {{-- Operador --}}
+                @include('livewire.orders._operator-select')
+
                 {{-- Observações --}}
                 <div class="pt-2">
                     <label class="block text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wide mb-1">
@@ -1185,6 +1200,8 @@
                     <label class="form-label">Informações ao Consumidor <span class="text-gray-400 font-normal">(opcional)</span></label>
                     <textarea wire:model="nfeInfoConsumer" rows="2" class="form-input" placeholder="Informações para o consumidor..."></textarea>
                 </div>
+                @include('livewire.orders._operator-select')
+
                 <div class="flex items-center gap-2">
                     <input type="checkbox" wire:model="nfeHomologation" id="nfe-homolog"
                            class="rounded border-gray-300 dark:border-zinc-600 text-primary-600 focus:ring-primary-500">
@@ -1277,6 +1294,8 @@
                         <input type="number" step="0.1" wire:model="shippingLength" class="form-input text-sm" min="1">
                     </div>
                 </div>
+
+                @include('livewire.orders._operator-select')
 
                 <button wire:click="calculateShippingQuote"
                         wire:loading.attr="disabled"
