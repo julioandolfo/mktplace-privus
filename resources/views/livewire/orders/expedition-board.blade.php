@@ -287,7 +287,20 @@
 
                             {{-- Prazo / Status de envio --}}
                             <td @click="expanded = !expanded" class="cursor-pointer">
-                                @if($deadlineCarbon)
+                                @if($isShipped && $order->shipped_at)
+                                    <div class="flex flex-col gap-1">
+                                        <span class="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                            <x-heroicon-s-check-circle class="w-3 h-3" />
+                                            ENVIADO
+                                        </span>
+                                        <p class="text-xs text-gray-500 dark:text-zinc-400">
+                                            Enviado em<br>
+                                            <span class="font-semibold text-gray-700 dark:text-zinc-200">
+                                                {{ $order->shipped_at->format('d/m H:i') }}
+                                            </span>
+                                        </p>
+                                    </div>
+                                @elseif($deadlineCarbon)
                                     <div class="flex flex-col gap-1">
                                         @if($isOverdue)
                                             <span class="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
