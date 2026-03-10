@@ -88,6 +88,7 @@ class OrderTimeline extends Model
             'production_completed' => 'heroicon-o-check-circle',
             'ready_to_ship'        => 'heroicon-o-truck',
             'packing_started'      => 'heroicon-o-archive-box',
+            'packing_checked'      => 'heroicon-o-clipboard-document-check',
             'packing_completed'    => 'heroicon-o-archive-box-arrow-down',
             'invoice_emitted'      => 'heroicon-o-document-text',
             'shipped'              => 'heroicon-o-rocket-launch',
@@ -103,6 +104,9 @@ class OrderTimeline extends Model
         if (in_array($this->event_type, ['design_assigned', 'design_started'])) return 'purple';
         if (in_array($this->event_type, ['design_completed', 'ai_mockup_generated'])) return 'violet';
         if (in_array($this->event_type, ['production_started', 'production_completed'])) return 'orange';
+        if ($this->event_type === 'packing_checked') {
+            return ($this->data['status'] ?? '') === 'complete' ? 'green' : 'amber';
+        }
 
         return match ($this->event_type) {
             'order_created'   => 'blue',

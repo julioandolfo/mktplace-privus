@@ -379,10 +379,10 @@
 
                                     {{-- ──── CTA PRINCIPAL ──── --}}
                                     @if($mlStep === 1)
-                                        <a href="{{ route('orders.pack', $order) }}" class="btn-secondary btn-xs">
-                                            <x-heroicon-o-qr-code class="w-3.5 h-3.5" />
+                                        <button wire:click="openPackingModal({{ $order->id }})" class="btn-secondary btn-xs">
+                                            <x-heroicon-o-clipboard-document-check class="w-3.5 h-3.5" />
                                             Conferir
-                                        </a>
+                                        </button>
                                     @elseif($mlStep === 2)
                                         <form method="POST" action="{{ route('orders.invoice.emit', $order) }}" class="inline">
                                             @csrf
@@ -429,10 +429,10 @@
 
                                     {{-- ──── CTA PRINCIPAL ──── --}}
                                     @if($genStep === 1)
-                                        <a href="{{ route('orders.pack', $order) }}" class="btn-secondary btn-xs">
-                                            <x-heroicon-o-qr-code class="w-3.5 h-3.5" />
+                                        <button wire:click="openPackingModal({{ $order->id }})" class="btn-secondary btn-xs">
+                                            <x-heroicon-o-clipboard-document-check class="w-3.5 h-3.5" />
                                             Conferir
-                                        </a>
+                                        </button>
                                     @elseif($genStep === 2)
                                         <button wire:click="markShipped({{ $order->id }})"
                                                 wire:confirm="Marcar {{ $order->order_number }} como enviado?"
@@ -643,6 +643,82 @@
                                     @endforeach
                                     </div>
 
+                                    {{-- ── Histórico de Conferência ── --}}
+                                    @if(isset($packingHistoryMap[$order->id]))
+                                    @php $lastConf = $packingHistoryMap[$order->id]; @endphp
+                                    <div class="mt-4 rounded-xl border border-gray-200 dark:border-zinc-700 overflow-hidden">
+                                        <div class="flex items-center justify-between px-4 py-2.5 bg-gray-100 dark:bg-zinc-800">
+                                            <div class="flex items-center gap-2">
+                                                <x-heroicon-o-clipboard-document-check class="w-4 h-4 text-primary-500" />
+                                                <span class="text-xs font-semibold text-gray-700 dark:text-zinc-300 uppercase tracking-wide">
+                                                    Última Conferência
+                                                </span>
+                                                @if(($lastConf->data['status'] ?? '') === 'complete')
+                                                <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 font-semibold">
+                                                    <x-heroicon-s-check class="w-2.5 h-2.5" /> Completo
+                                                </span>
+                                                @elseif(($lastConf->data['status'] ?? '') === 'partial')
+                                                <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold">
+                                                    Parcial
+                                                </span>
+                                                @endif
+                                            </div>
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-[11px] text-gray-400 dark:text-zinc-500">
+                                                    {{ $lastConf->happened_at->format('d/m/Y H:i') }}
+                                                    @if($lastConf->performer) · {{ $lastConf->performer->name }} @endif
+                                                </span>
+                                                <button wire:click="openPackingModal({{ $order->id }})"
+                                                        class="text-[11px] text-primary-600 dark:text-primary-400 hover:underline font-medium">
+                                                    Reconferir
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="px-4 py-3 bg-white dark:bg-zinc-900">
+                                            {{-- Itens da conferência --}}
+                                            <div class="flex flex-wrap gap-x-6 gap-y-1">
+                                                @foreach($lastConf->data['items'] ?? [] as $ci)
+                                                @php
+                                                    $ciOk = ($ci['difference'] ?? 0) <= 0;
+                                                @endphp
+                                                <div class="flex items-center gap-1.5 text-xs">
+                                                    @if($ciOk)
+                                                    <x-heroicon-s-check-circle class="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                                                    @else
+                                                    <x-heroicon-s-exclamation-circle class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                                                    @endif
+                                                    <span class="text-gray-700 dark:text-zinc-300 truncate max-w-[200px]">{{ $ci['name'] ?? '—' }}</span>
+                                                    <span class="font-bold tabular-nums {{ $ciOk ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400' }}">
+                                                        {{ $ci['qty_confirmed'] }}/{{ $ci['qty_ordered'] }}
+                                                    </span>
+                                                    @if(!$ciOk)
+                                                    <span class="text-red-500 font-semibold">(-{{ $ci['difference'] }})</span>
+                                                    @endif
+                                                </div>
+                                                @endforeach
+                                            </div>
+                                            {{-- Observações da conferência --}}
+                                            @if(!empty($lastConf->description))
+                                            <p class="mt-2 text-xs text-gray-500 dark:text-zinc-400 italic">
+                                                "{{ $lastConf->description }}"
+                                            </p>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    @else
+                                    {{-- Sem conferência prévia --}}
+                                    @if(!$isShipped)
+                                    <div class="mt-4 flex items-center gap-2 text-xs text-gray-400 dark:text-zinc-500">
+                                        <x-heroicon-o-clipboard-document class="w-4 h-4" />
+                                        <span>Nenhuma conferência realizada ainda.</span>
+                                        <button wire:click="openPackingModal({{ $order->id }})"
+                                                class="text-primary-600 dark:text-primary-400 hover:underline font-medium">
+                                            Conferir agora
+                                        </button>
+                                    </div>
+                                    @endif
+                                    @endif
+
                                 </div>
                             </td>
                         </tr>
@@ -658,6 +734,200 @@
             </div>
             @endif
         </x-ui.card>
+    @endif
+
+    {{-- ============================================================
+         MODAL — Conferência de Embalagem
+    ============================================================ --}}
+    @if($showPackingModal && !empty($packingItems))
+    @php
+        $packTotalOrdered   = array_sum(array_column($packingItems, 'quantity'));
+        $packTotalConfirmed = array_sum(array_map(fn ($i) => max(0, (int) ($packingChecks[(string) $i['id']] ?? 0)), $packingItems));
+        $packAllOk          = $packTotalConfirmed >= $packTotalOrdered;
+        $packOrderObj       = \App\Models\Order::select('id','order_number','customer_name')->find($packingOrderId);
+    @endphp
+    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+         @keydown.escape.window="$wire.closePackingModal()">
+        <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col"
+             style="max-height: 92vh"
+             @click.outside="$wire.closePackingModal()">
+
+            {{-- Header --}}
+            <div class="flex items-start justify-between px-6 py-4 border-b border-gray-200 dark:border-zinc-700 flex-shrink-0">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <x-heroicon-o-clipboard-document-check class="w-5 h-5 text-primary-500" />
+                        Conferência de Embalagem
+                    </h2>
+                    <p class="text-sm text-gray-500 dark:text-zinc-400 mt-0.5">
+                        <span class="font-mono font-semibold text-gray-700 dark:text-zinc-300">{{ $packOrderObj?->order_number }}</span>
+                        @if($packOrderObj?->customer_name)
+                        · {{ $packOrderObj->customer_name }}
+                        @endif
+                    </p>
+                </div>
+                <button wire:click="closePackingModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 mt-0.5">
+                    <x-heroicon-o-x-mark class="w-5 h-5" />
+                </button>
+            </div>
+
+            {{-- Status summary --}}
+            <div class="px-6 py-3 flex-shrink-0
+                {{ $packAllOk
+                    ? 'bg-green-50 dark:bg-green-900/20 border-b border-green-200 dark:border-green-800'
+                    : 'bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800' }}">
+                <div class="flex items-center gap-3">
+                    @if($packAllOk)
+                        <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-green-700 dark:text-green-300">
+                            <x-heroicon-s-check-circle class="w-4 h-4" />
+                            Tudo conferido — pronto para embalar
+                        </span>
+                    @else
+                        <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                            <x-heroicon-s-exclamation-triangle class="w-4 h-4" />
+                            {{ $packTotalOrdered - $packTotalConfirmed }} unid. faltando
+                        </span>
+                    @endif
+                    <span class="ml-auto text-sm font-bold tabular-nums {{ $packAllOk ? 'text-green-700 dark:text-green-300' : 'text-amber-700 dark:text-amber-300' }}">
+                        {{ $packTotalConfirmed }} / {{ $packTotalOrdered }}
+                    </span>
+                    <span class="text-xs text-gray-400 dark:text-zinc-500">unidades</span>
+                </div>
+
+                {{-- Barra de progresso --}}
+                <div class="mt-2 h-1.5 rounded-full bg-gray-200 dark:bg-zinc-700 overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-300
+                        {{ $packAllOk ? 'bg-green-500' : 'bg-amber-400' }}"
+                         style="width: {{ $packTotalOrdered > 0 ? min(100, round($packTotalConfirmed / $packTotalOrdered * 100)) : 0 }}%">
+                    </div>
+                </div>
+            </div>
+
+            {{-- Lista de itens (scrollable) --}}
+            <div class="overflow-y-auto flex-1 px-6 py-4 space-y-2">
+                @foreach($packingItems as $pItem)
+                @php
+                    $pQtyConf = max(0, (int) ($packingChecks[(string) $pItem['id']] ?? 0));
+                    $pDiff    = $pItem['quantity'] - $pQtyConf;
+                    $pItemOk  = $pDiff <= 0;
+                @endphp
+                <div class="flex items-center gap-3 p-3 rounded-xl border transition-colors
+                    {{ $pItemOk
+                        ? 'border-green-200 dark:border-green-800/60 bg-green-50/60 dark:bg-green-900/10'
+                        : 'border-amber-200 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-900/10' }}">
+
+                    {{-- Imagem --}}
+                    @if($pItem['img_url'])
+                    <img src="{{ $pItem['img_url'] }}" alt="{{ $pItem['name'] }}"
+                         class="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-gray-200 dark:border-zinc-700">
+                    @else
+                    <div class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-zinc-700 flex items-center justify-center flex-shrink-0">
+                        <x-heroicon-o-cube class="w-6 h-6 text-gray-300 dark:text-zinc-500" />
+                    </div>
+                    @endif
+
+                    {{-- Info --}}
+                    <div class="flex-1 min-w-0">
+                        <p class="font-semibold text-sm text-gray-900 dark:text-white leading-tight line-clamp-2">{{ $pItem['name'] }}</p>
+                        @if($pItem['sku'])
+                        <p class="text-[11px] font-mono text-gray-400 dark:text-zinc-500 mt-0.5">{{ $pItem['sku'] }}</p>
+                        @endif
+                    </div>
+
+                    {{-- Pedido qty --}}
+                    <div class="text-center flex-shrink-0 w-14">
+                        <p class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-zinc-500">Pedido</p>
+                        <p class="text-lg font-bold text-gray-700 dark:text-zinc-200">{{ $pItem['quantity'] }}</p>
+                    </div>
+
+                    {{-- Seta --}}
+                    <x-heroicon-o-arrow-right class="w-4 h-4 text-gray-300 dark:text-zinc-600 flex-shrink-0" />
+
+                    {{-- Input qty conferida --}}
+                    <div class="text-center flex-shrink-0 w-20">
+                        <p class="text-[10px] uppercase tracking-wide {{ $pItemOk ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400' }}">Conferido</p>
+                        <input type="number"
+                               wire:model.live="packingChecks.{{ $pItem['id'] }}"
+                               min="0"
+                               max="{{ $pItem['quantity'] * 3 }}"
+                               class="w-20 text-center text-lg font-bold rounded-lg border-2 px-2 py-1 outline-none focus:ring-2 transition-colors
+                                   {{ $pItemOk
+                                       ? 'border-green-400 dark:border-green-600 text-green-700 dark:text-green-300 bg-white dark:bg-zinc-800 focus:ring-green-300'
+                                       : 'border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-300 bg-white dark:bg-zinc-800 focus:ring-amber-300' }}">
+                    </div>
+
+                    {{-- Status icon --}}
+                    <div class="flex-shrink-0 w-10 flex justify-center">
+                        @if($pItemOk)
+                        <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/40">
+                            <x-heroicon-s-check class="w-4 h-4 text-green-600 dark:text-green-400" />
+                        </span>
+                        @elseif($pQtyConf === 0)
+                        <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/40">
+                            <x-heroicon-o-x-mark class="w-4 h-4 text-red-500 dark:text-red-400" />
+                        </span>
+                        @else
+                        <span class="inline-flex items-center justify-center text-xs font-bold w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                            -{{ $pDiff }}
+                        </span>
+                        @endif
+                    </div>
+                </div>
+                @endforeach
+
+                {{-- Mensagem de erro (itens faltando ao tentar confirmar) --}}
+                @error('packingChecks')
+                <div class="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl px-4 py-3 border border-amber-200 dark:border-amber-700 mt-2">
+                    <x-heroicon-s-exclamation-triangle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{{ $message }}</span>
+                </div>
+                @enderror
+
+                {{-- Observações --}}
+                <div class="pt-2">
+                    <label class="block text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wide mb-1">
+                        Observações <span class="font-normal normal-case">(opcional — ficará no histórico)</span>
+                    </label>
+                    <textarea wire:model="packingNotes"
+                              rows="2"
+                              placeholder="Ex: embalagem danificada, item trocado, cliente autorizou envio parcial..."
+                              class="w-full text-sm rounded-xl border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none placeholder-gray-400 dark:placeholder-zinc-500"></textarea>
+                </div>
+            </div>
+
+            {{-- Footer --}}
+            <div class="px-6 py-4 border-t border-gray-200 dark:border-zinc-700 flex-shrink-0">
+                <div class="flex items-center justify-between gap-3">
+                    <button wire:click="closePackingModal" class="btn-ghost btn-sm">
+                        Cancelar
+                    </button>
+                    <div class="flex items-center gap-2">
+                        @if(!$packAllOk)
+                        <button wire:click="confirmPacking(true)"
+                                wire:confirm="Confirmar embalagem parcial ({{ $packTotalConfirmed }}/{{ $packTotalOrdered }} unid.)? Esta informação ficará registrada no histórico."
+                                wire:loading.attr="disabled"
+                                wire:target="confirmPacking"
+                                class="btn-secondary btn-sm">
+                            <x-heroicon-o-archive-box class="w-4 h-4" />
+                            Forçar (parcial)
+                        </button>
+                        @endif
+                        <button wire:click="confirmPacking(false)"
+                                wire:loading.attr="disabled"
+                                wire:target="confirmPacking"
+                                class="btn-primary btn-sm">
+                            <span wire:loading.remove wire:target="confirmPacking">
+                                <x-heroicon-o-archive-box-arrow-down class="w-4 h-4 inline" />
+                                {{ $packAllOk ? 'Confirmar e Embalar' : 'Salvar Conferência' }}
+                            </span>
+                            <span wire:loading wire:target="confirmPacking" class="text-sm">Salvando...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
     @endif
 
     {{-- ============================================================

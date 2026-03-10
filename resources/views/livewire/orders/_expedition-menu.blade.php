@@ -48,14 +48,14 @@
                 Etiqueta de Volume
             </a>
 
-            {{-- ── Conferir embalagem (bipagem) ── --}}
+            {{-- ── Conferir embalagem (modal) ── --}}
             @if(!$isShipped)
-            <a href="{{ route('orders.pack', $order) }}"
-               @click="open = false"
-               class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
-                <x-heroicon-o-qr-code class="w-4 h-4 text-gray-400" />
+            <button wire:click="openPackingModal({{ $order->id }})"
+                    @click="open = false"
+                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
+                <x-heroicon-o-clipboard-document-check class="w-4 h-4 text-gray-400" />
                 Conferir embalagem
-            </a>
+            </button>
             @endif
 
             {{-- ── Marcar Embalado (rápido, sem conferência) ── --}}

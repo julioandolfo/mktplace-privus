@@ -8,6 +8,7 @@ use App\Enums\PipelineStatus;
 use App\Models\MarketplaceAccount;
 use App\Models\MarketplaceListing;
 use App\Models\Order;
+use App\Models\OrderTimeline;
 use App\Models\Romaneio;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -39,6 +40,13 @@ class ExpeditionBoard extends Component
 
     // Modal de confirmar marcar embalado em lote
     public bool  $showBulkPackModal = false;
+
+    // ── Modal de Conferência de Embalagem ────────────────────────────────────
+    public bool   $showPackingModal = false;
+    public ?int   $packingOrderId   = null;
+    public array  $packingItems     = []; // [{id, name, sku, quantity, img_url}]
+    public array  $packingChecks    = []; // "item_id" => qty_confirmada
+    public string $packingNotes     = '';
 
     protected $queryString = [
         'activeTab'     => ['except' => 'today'],
@@ -317,6 +325,131 @@ class ExpeditionBoard extends Component
     }
 
     // ----------------------------------------------------------------
+    //  Conferência de Embalagem (Modal)
+    // ----------------------------------------------------------------
+
+    public function openPackingModal(int $orderId): void
+    {
+        $order = $this->scopedOrder($orderId);
+        $order->load(['items.product.primaryImage', 'items.product.images']);
+
+        // Carrega última conferência para pré-preencher quantidades
+        $lastCheck = OrderTimeline::where('order_id', $orderId)
+            ->where('event_type', 'packing_checked')
+            ->latest('happened_at')
+            ->first();
+
+        $previousChecks = $lastCheck
+            ? collect($lastCheck->data['items'] ?? [])
+                ->keyBy('item_id')
+                ->map(fn ($i) => (int) ($i['qty_confirmed'] ?? 0))
+                ->all()
+            : [];
+
+        $this->packingItems  = [];
+        $this->packingChecks = [];
+
+        foreach ($order->items as $item) {
+            $imgUrl = $item->artwork_url
+                ?? $item->product?->primaryImage?->url
+                ?? $item->product?->images->first()?->url;
+
+            $this->packingItems[] = [
+                'id'       => $item->id,
+                'name'     => $item->name,
+                'sku'      => $item->sku,
+                'quantity' => $item->quantity,
+                'img_url'  => $imgUrl,
+            ];
+
+            $this->packingChecks[(string) $item->id] = $previousChecks[$item->id] ?? $item->quantity;
+        }
+
+        $this->packingOrderId  = $orderId;
+        $this->packingNotes    = '';
+        $this->showPackingModal = true;
+        $this->resetErrorBag();
+    }
+
+    public function confirmPacking(bool $force = false): void
+    {
+        $order = $this->scopedOrder($this->packingOrderId);
+        $order->load('items');
+
+        $itemsData      = [];
+        $totalOrdered   = 0;
+        $totalConfirmed = 0;
+        $allConfirmed   = true;
+
+        foreach ($order->items as $item) {
+            $qtyConfirmed = max(0, (int) ($this->packingChecks[(string) $item->id] ?? 0));
+            $difference   = $item->quantity - $qtyConfirmed;
+
+            $itemsData[] = [
+                'item_id'       => $item->id,
+                'name'          => $item->name,
+                'sku'           => $item->sku,
+                'qty_ordered'   => $item->quantity,
+                'qty_confirmed' => $qtyConfirmed,
+                'difference'    => $difference,
+            ];
+
+            $totalOrdered   += $item->quantity;
+            $totalConfirmed += $qtyConfirmed;
+
+            if ($qtyConfirmed < $item->quantity) {
+                $allConfirmed = false;
+            }
+        }
+
+        if (! $force && ! $allConfirmed) {
+            $missing = $totalOrdered - $totalConfirmed;
+            $this->addError('packingChecks', "Faltam {$missing} unidade(s). Clique em 'Forçar (parcial)' para confirmar mesmo assim, ou ajuste as quantidades.");
+            return;
+        }
+
+        $status = $allConfirmed ? 'complete' : 'partial';
+        $title  = $allConfirmed
+            ? "Embalagem conferida — {$totalConfirmed}/{$totalOrdered} unid."
+            : "Conferência parcial — {$totalConfirmed}/{$totalOrdered} unid.";
+
+        OrderTimeline::log(
+            $order,
+            'packing_checked',
+            $title,
+            $this->packingNotes,
+            [
+                'status'          => $status,
+                'total_ordered'   => $totalOrdered,
+                'total_confirmed' => $totalConfirmed,
+                'items'           => $itemsData,
+                'forced'          => $force,
+            ]
+        );
+
+        $order->update(['pipeline_status' => PipelineStatus::Packed]);
+
+        $this->showPackingModal = false;
+        $this->packingOrderId  = null;
+        $this->packingChecks   = [];
+        $this->packingItems    = [];
+        $this->packingNotes    = '';
+        $this->resetErrorBag();
+
+        session()->flash('success', "Pedido {$order->order_number} embalado. {$title}");
+    }
+
+    public function closePackingModal(): void
+    {
+        $this->showPackingModal = false;
+        $this->packingOrderId  = null;
+        $this->packingChecks   = [];
+        $this->packingItems    = [];
+        $this->packingNotes    = '';
+        $this->resetErrorBag();
+    }
+
+    // ----------------------------------------------------------------
     //  Actions — Seleção e Romaneio
     // ----------------------------------------------------------------
 
@@ -496,17 +629,31 @@ class ExpeditionBoard extends Component
                 ->keyBy('external_id');
         }
 
+        // Mapa order_id → último evento de conferência de embalagem
+        $orderIds = $orders->pluck('id')->all();
+        $packingHistoryMap = collect();
+        if (! empty($orderIds)) {
+            $packingHistoryMap = OrderTimeline::whereIn('order_id', $orderIds)
+                ->where('event_type', 'packing_checked')
+                ->with('performer:id,name')
+                ->latest('happened_at')
+                ->get()
+                ->groupBy('order_id')
+                ->map(fn ($events) => $events->first());
+        }
+
         $accountQuery = MarketplaceAccount::active()->orderBy('account_name');
         if ($cid = Auth::user()?->company_id) {
             $accountQuery->where('company_id', $cid);
         }
 
         return view('livewire.orders.expedition-board', [
-            'orders'      => $orders,
-            'accounts'    => $accountQuery->get(),
-            'tabCounts'   => $tabCounts,
-            'types'       => MarketplaceType::cases(),
-            'listingsMap' => $listingsMap,
+            'orders'            => $orders,
+            'accounts'          => $accountQuery->get(),
+            'tabCounts'         => $tabCounts,
+            'types'             => MarketplaceType::cases(),
+            'listingsMap'       => $listingsMap,
+            'packingHistoryMap' => $packingHistoryMap,
         ]);
     }
 }
