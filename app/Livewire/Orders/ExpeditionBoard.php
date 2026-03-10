@@ -5,6 +5,7 @@ namespace App\Livewire\Orders;
 use App\Enums\MarketplaceType;
 use App\Enums\OrderStatus;
 use App\Enums\PipelineStatus;
+use App\Models\ExpeditionOperator;
 use App\Models\MarketplaceAccount;
 use App\Models\MarketplaceListing;
 use App\Models\Order;
@@ -29,6 +30,7 @@ class ExpeditionBoard extends Component
     public string $search       = '';
     public string $filterAccount = '';
     public string $filterType   = '';
+    public string $filterStep   = '';
 
     public array $selectedOrders = [];
     public bool  $selectAll      = false;
@@ -73,15 +75,20 @@ class ExpeditionBoard extends Component
     public bool   $shippingLoading    = false;
     public bool   $shippingPurchasing = false;
 
+    // ── Operador de Expedição selecionado ──────────────────────────────────
+    public ?int $selectedOperatorId = null;
+
     protected $queryString = [
         'activeTab'     => ['except' => 'today'],
         'search'        => ['except' => ''],
         'filterAccount' => ['except' => ''],
+        'filterStep'    => ['except' => ''],
     ];
 
     public function updatingSearch(): void    { $this->resetPage(); }
     public function updatingActiveTab(): void { $this->resetPage(); $this->selectedOrders = []; $this->selectAll = false; }
     public function updatingFilterAccount(): void { $this->resetPage(); }
+    public function updatingFilterStep(): void { $this->resetPage(); }
 
     // ----------------------------------------------------------------
     //  DB-agnostic helpers: suporta SQLite e PostgreSQL
@@ -234,7 +241,41 @@ class ExpeditionBoard extends Component
             })
             ->when($this->filterType, fn ($q) => $q->whereHas('marketplaceAccount', fn ($mq) =>
                 $mq->where('marketplace_type', $this->filterType)
-            ));
+            ))
+            ->when($this->filterStep, function ($q) {
+                match ($this->filterStep) {
+                    // A conferir / embalar
+                    'to_pack' => $q->whereIn('pipeline_status', [
+                        PipelineStatus::ReadyToShip->value,
+                        PipelineStatus::Packing->value,
+                    ]),
+
+                    // Embalado (aguardando próximo passo)
+                    'packed' => $q->where('pipeline_status', PipelineStatus::Packed->value),
+
+                    // Precisa emitir NF-e (embalado, sem NF-e aprovada)
+                    'to_invoice' => $q->where('pipeline_status', PipelineStatus::Packed->value)
+                        ->whereDoesntHave('invoices', fn ($iq) =>
+                            $iq->where('status', 'approved')
+                        )
+                        ->whereDoesntHave('invoices', fn ($iq) =>
+                            $iq->whereIn('status', ['pending', 'processing'])
+                        ),
+
+                    // NF-e em processamento
+                    'invoicing' => $q->whereHas('invoices', fn ($iq) =>
+                        $iq->whereIn('status', ['pending', 'processing'])
+                    ),
+
+                    // NF-e aprovada, pronto para despachar
+                    'to_ship' => $q->where('pipeline_status', PipelineStatus::Packed->value)
+                        ->whereHas('invoices', fn ($iq) =>
+                            $iq->where('status', 'approved')
+                        ),
+
+                    default => null,
+                };
+            });
 
         match ($this->activeTab) {
             'in_production' => $query->whereIn('pipeline_status',
@@ -345,7 +386,11 @@ class ExpeditionBoard extends Component
             'shipped_at'      => now(),
         ]);
 
-        OrderTimeline::log($order, 'shipped', "Pedido marcado como enviado");
+        $opName = $this->operatorName();
+        OrderTimeline::log($order, 'shipped', "Pedido marcado como enviado" . ($opName ? " (por {$opName})" : ''), null, [
+            'operator_id'   => $this->selectedOperatorId,
+            'operator_name' => $opName,
+        ]);
 
         session()->flash('success', "Pedido {$order->order_number} marcado como enviado.");
     }
@@ -427,6 +472,7 @@ class ExpeditionBoard extends Component
         $this->packingOrderId  = $orderId;
         $this->packingNotes    = '';
         $this->showPackingModal = true;
+        $this->preselectOperator();
         $this->resetErrorBag();
     }
 
@@ -472,10 +518,12 @@ class ExpeditionBoard extends Component
             ? "Embalagem conferida - {$totalConfirmed}/{$totalOrdered} unid."
             : "Conferencia parcial - {$totalConfirmed}/{$totalOrdered} unid.";
 
+        $opName = $this->operatorName();
+
         OrderTimeline::log(
             $order,
             'packing_checked',
-            $title,
+            $title . ($opName ? " (por {$opName})" : ''),
             $this->packingNotes,
             [
                 'status'          => $status,
@@ -483,6 +531,8 @@ class ExpeditionBoard extends Component
                 'total_confirmed' => $totalConfirmed,
                 'items'           => $itemsData,
                 'forced'          => $force,
+                'operator_id'     => $this->selectedOperatorId,
+                'operator_name'   => $opName,
             ]
         );
 
@@ -531,6 +581,7 @@ class ExpeditionBoard extends Component
         $this->nfeHomologation = false;
         $this->nfeLoading      = false;
         $this->showNfeModal    = true;
+        $this->preselectOperator();
         $this->resetErrorBag();
     }
 
@@ -628,6 +679,7 @@ class ExpeditionBoard extends Component
         $this->shippingLoading    = false;
         $this->shippingPurchasing = false;
         $this->showShippingModal  = true;
+        $this->preselectOperator();
 
         // Verifica se ja tem etiqueta
         $existing = ShipmentLabel::where('order_id', $orderId)
@@ -740,6 +792,26 @@ class ExpeditionBoard extends Component
         $this->shippingError      = '';
         $this->shippingLoading    = false;
         $this->shippingPurchasing = false;
+    }
+
+    // ----------------------------------------------------------------
+    //  Helper: pré-seleciona operador padrão
+    // ----------------------------------------------------------------
+
+    protected function preselectOperator(): void
+    {
+        if (! $this->selectedOperatorId) {
+            $default = ExpeditionOperator::defaultForCompany(Auth::user()?->company_id);
+            $this->selectedOperatorId = $default?->id;
+        }
+    }
+
+    protected function operatorName(): ?string
+    {
+        if (! $this->selectedOperatorId) {
+            return null;
+        }
+        return ExpeditionOperator::find($this->selectedOperatorId)?->name;
     }
 
     // ----------------------------------------------------------------
@@ -967,14 +1039,17 @@ class ExpeditionBoard extends Component
             $accountQuery->where('company_id', $cid);
         }
 
+        $expeditionOperators = ExpeditionOperator::forCompany(Auth::user()?->company_id);
+
         return view('livewire.orders.expedition-board', [
-            'orders'            => $orders,
-            'accounts'          => $accountQuery->get(),
-            'tabCounts'         => $tabCounts,
-            'types'             => MarketplaceType::cases(),
-            'listingsMap'       => $listingsMap,
-            'packingHistoryMap' => $packingHistoryMap,
-            'labelsMap'         => $labelsMap,
+            'orders'              => $orders,
+            'accounts'            => $accountQuery->get(),
+            'tabCounts'           => $tabCounts,
+            'types'               => MarketplaceType::cases(),
+            'listingsMap'         => $listingsMap,
+            'packingHistoryMap'   => $packingHistoryMap,
+            'labelsMap'           => $labelsMap,
+            'expeditionOperators' => $expeditionOperators,
         ]);
     }
 }

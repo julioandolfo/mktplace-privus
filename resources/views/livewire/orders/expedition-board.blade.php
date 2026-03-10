@@ -59,6 +59,28 @@
                     <option value="{{ $type->value }}">{{ $type->label() }}</option>
                 @endforeach
             </select>
+
+            {{-- Filtro etapa --}}
+            <select wire:model.live="filterStep" class="form-input w-full sm:w-44">
+                <option value="">Todas etapas</option>
+                <option value="to_pack">A conferir / embalar</option>
+                <option value="packed">Embalado</option>
+                <option value="to_invoice">Emitir NF-e</option>
+                <option value="invoicing">NF-e processando</option>
+                <option value="to_ship">Pronto p/ despacho</option>
+            </select>
+
+            {{-- Operador ativo --}}
+            @if($expeditionOperators->isNotEmpty())
+            <select wire:model="selectedOperatorId" class="form-input w-full sm:w-44">
+                <option value="">Operador...</option>
+                @foreach($expeditionOperators as $op)
+                    <option value="{{ $op->id }}">
+                        {{ $op->name }}{{ $op->is_default ? ' ★' : '' }}
+                    </option>
+                @endforeach
+            </select>
+            @endif
         </div>
 
         {{-- Ações em lote — visível quando há selecionados --}}
@@ -287,7 +309,20 @@
 
                             {{-- Prazo / Status de envio --}}
                             <td @click="expanded = !expanded" class="cursor-pointer">
-                                @if($deadlineCarbon)
+                                @if($isShipped && $order->shipped_at)
+                                    <div class="flex flex-col gap-1">
+                                        <span class="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                            <x-heroicon-s-check-circle class="w-3 h-3" />
+                                            ENVIADO
+                                        </span>
+                                        <p class="text-xs text-gray-500 dark:text-zinc-400">
+                                            Enviado em<br>
+                                            <span class="font-semibold text-gray-700 dark:text-zinc-200">
+                                                {{ $order->shipped_at->format('d/m H:i') }}
+                                            </span>
+                                        </p>
+                                    </div>
+                                @elseif($deadlineCarbon)
                                     <div class="flex flex-col gap-1">
                                         @if($isOverdue)
                                             <span class="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
@@ -994,6 +1029,9 @@
                 </div>
                 @enderror
 
+                {{-- Operador --}}
+                @include('livewire.orders._operator-select')
+
                 {{-- Observações --}}
                 <div class="pt-2">
                     <label class="block text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wide mb-1">
@@ -1162,6 +1200,8 @@
                     <label class="form-label">Informações ao Consumidor <span class="text-gray-400 font-normal">(opcional)</span></label>
                     <textarea wire:model="nfeInfoConsumer" rows="2" class="form-input" placeholder="Informações para o consumidor..."></textarea>
                 </div>
+                @include('livewire.orders._operator-select')
+
                 <div class="flex items-center gap-2">
                     <input type="checkbox" wire:model="nfeHomologation" id="nfe-homolog"
                            class="rounded border-gray-300 dark:border-zinc-600 text-primary-600 focus:ring-primary-500">
@@ -1254,6 +1294,8 @@
                         <input type="number" step="0.1" wire:model="shippingLength" class="form-input text-sm" min="1">
                     </div>
                 </div>
+
+                @include('livewire.orders._operator-select')
 
                 <button wire:click="calculateShippingQuote"
                         wire:loading.attr="disabled"
