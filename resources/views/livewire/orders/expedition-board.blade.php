@@ -59,6 +59,16 @@
                     <option value="{{ $type->value }}">{{ $type->label() }}</option>
                 @endforeach
             </select>
+
+            {{-- Filtro etapa --}}
+            <select wire:model.live="filterStep" class="form-input w-full sm:w-44">
+                <option value="">Todas etapas</option>
+                <option value="to_pack">A conferir / embalar</option>
+                <option value="packed">Embalado</option>
+                <option value="to_invoice">Emitir NF-e</option>
+                <option value="invoicing">NF-e processando</option>
+                <option value="to_ship">Pronto p/ despacho</option>
+            </select>
         </div>
 
         {{-- Ações em lote — visível quando há selecionados --}}

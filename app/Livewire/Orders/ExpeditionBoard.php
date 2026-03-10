@@ -29,6 +29,7 @@ class ExpeditionBoard extends Component
     public string $search       = '';
     public string $filterAccount = '';
     public string $filterType   = '';
+    public string $filterStep   = '';
 
     public array $selectedOrders = [];
     public bool  $selectAll      = false;
@@ -77,11 +78,13 @@ class ExpeditionBoard extends Component
         'activeTab'     => ['except' => 'today'],
         'search'        => ['except' => ''],
         'filterAccount' => ['except' => ''],
+        'filterStep'    => ['except' => ''],
     ];
 
     public function updatingSearch(): void    { $this->resetPage(); }
     public function updatingActiveTab(): void { $this->resetPage(); $this->selectedOrders = []; $this->selectAll = false; }
     public function updatingFilterAccount(): void { $this->resetPage(); }
+    public function updatingFilterStep(): void { $this->resetPage(); }
 
     // ----------------------------------------------------------------
     //  DB-agnostic helpers: suporta SQLite e PostgreSQL
@@ -234,7 +237,41 @@ class ExpeditionBoard extends Component
             })
             ->when($this->filterType, fn ($q) => $q->whereHas('marketplaceAccount', fn ($mq) =>
                 $mq->where('marketplace_type', $this->filterType)
-            ));
+            ))
+            ->when($this->filterStep, function ($q) {
+                match ($this->filterStep) {
+                    // A conferir / embalar
+                    'to_pack' => $q->whereIn('pipeline_status', [
+                        PipelineStatus::ReadyToShip->value,
+                        PipelineStatus::Packing->value,
+                    ]),
+
+                    // Embalado (aguardando próximo passo)
+                    'packed' => $q->where('pipeline_status', PipelineStatus::Packed->value),
+
+                    // Precisa emitir NF-e (embalado, sem NF-e aprovada)
+                    'to_invoice' => $q->where('pipeline_status', PipelineStatus::Packed->value)
+                        ->whereDoesntHave('invoices', fn ($iq) =>
+                            $iq->where('status', 'approved')
+                        )
+                        ->whereDoesntHave('invoices', fn ($iq) =>
+                            $iq->whereIn('status', ['pending', 'processing'])
+                        ),
+
+                    // NF-e em processamento
+                    'invoicing' => $q->whereHas('invoices', fn ($iq) =>
+                        $iq->whereIn('status', ['pending', 'processing'])
+                    ),
+
+                    // NF-e aprovada, pronto para despachar
+                    'to_ship' => $q->where('pipeline_status', PipelineStatus::Packed->value)
+                        ->whereHas('invoices', fn ($iq) =>
+                            $iq->where('status', 'approved')
+                        ),
+
+                    default => null,
+                };
+            });
 
         match ($this->activeTab) {
             'in_production' => $query->whereIn('pipeline_status',
