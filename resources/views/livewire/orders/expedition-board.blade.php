@@ -126,72 +126,86 @@
                 <table class="data-table">
                     <thead>
                         <tr>
+                            {{-- Expand toggle --}}
+                            <th class="w-6 px-2"></th>
                             <th class="w-8">
                                 <input type="checkbox" wire:model.live="selectAll"
                                        class="rounded border-gray-300 dark:border-zinc-600">
                             </th>
                             <th>Pedido</th>
                             <th>Cliente / Destino</th>
-                            <th>Itens</th>
                             <th>Prazo / Status</th>
                             <th class="text-center">Volumes</th>
                             <th>Pipeline</th>
                             <th class="text-right">Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        @foreach($orders as $order)
-                        @php
-                            $deadline       = $order->meta['ml_shipping_deadline'] ?? null;
-                            $deadlineCarbon = $deadline ? \Carbon\Carbon::parse($deadline) : null;
-                            $isOverdue      = $deadlineCarbon && $deadlineCarbon->isPast() && ! $deadlineCarbon->isToday();
-                            $isToday        = $deadlineCarbon?->isToday();
-                            $isTomorrow     = $deadlineCarbon?->isTomorrow();
-                            $hasArtwork     = $order->items->contains(fn ($i) => $i->has_artwork);
-                            $artworkUrl     = $order->items->firstWhere('has_artwork', true)?->artwork_url;
-                            $account        = $order->marketplaceAccount;
 
-                            // Pipeline state
-                            $pipeline    = $order->pipeline_status;
-                            $isPacked    = $pipeline === \App\Enums\PipelineStatus::Packed;
-                            $isShipped   = $pipeline === \App\Enums\PipelineStatus::Shipped;
-                            $isPartial   = $pipeline === \App\Enums\PipelineStatus::PartiallyShipped;
-                            $isPrePack   = in_array($pipeline, [
-                                \App\Enums\PipelineStatus::ReadyToShip,
-                                \App\Enums\PipelineStatus::Packing,
-                            ]);
+                    {{-- Múltiplos <tbody> — cada pedido é um grupo expansível --}}
+                    @foreach($orders as $order)
+                    @php
+                        $deadline       = $order->meta['ml_shipping_deadline'] ?? null;
+                        $deadlineCarbon = $deadline ? \Carbon\Carbon::parse($deadline) : null;
+                        $isOverdue      = $deadlineCarbon && $deadlineCarbon->isPast() && ! $deadlineCarbon->isToday();
+                        $isToday        = $deadlineCarbon?->isToday();
+                        $isTomorrow     = $deadlineCarbon?->isTomorrow();
+                        $hasArtwork     = $order->items->contains(fn ($i) => $i->has_artwork);
+                        $account        = $order->marketplaceAccount;
+                        $itemCount      = $order->items->count();
 
-                            // Marketplace
-                            $mktType  = $account?->marketplace_type;
-                            $isMl     = $mktType === \App\Enums\MarketplaceType::MercadoLivre;
+                        // Pipeline state
+                        $pipeline    = $order->pipeline_status;
+                        $isPacked    = $pipeline === \App\Enums\PipelineStatus::Packed;
+                        $isShipped   = $pipeline === \App\Enums\PipelineStatus::Shipped;
+                        $isPartial   = $pipeline === \App\Enums\PipelineStatus::PartiallyShipped;
+                        $isPrePack   = in_array($pipeline, [
+                            \App\Enums\PipelineStatus::ReadyToShip,
+                            \App\Enums\PipelineStatus::Packing,
+                        ]);
 
-                            // NF-e
-                            $approvedNfe = $order->invoices
-                                ->firstWhere('status', \App\Enums\NfeStatus::Approved);
-                            $pendingNfe  = $order->invoices->first(
-                                fn ($i) => in_array($i->status->value, ['pending', 'processing'])
-                            );
-                            $hasNfe      = (bool) $approvedNfe;
+                        // Marketplace
+                        $mktType  = $account?->marketplace_type;
+                        $isMl     = $mktType === \App\Enums\MarketplaceType::MercadoLivre;
 
-                            // ML shipping label
-                            $mlShippingId = $order->meta['ml_shipping_id'] ?? null;
+                        // NF-e
+                        $approvedNfe = $order->invoices
+                            ->firstWhere('status', \App\Enums\NfeStatus::Approved);
+                        $pendingNfe  = $order->invoices->first(
+                            fn ($i) => in_array($i->status->value, ['pending', 'processing'])
+                        );
+                        $hasNfe      = (bool) $approvedNfe;
 
-                            // Can mark shipped (ML needs NFE approved first)
-                            $canShip = ($isPacked || $isPartial)
-                                && (! $isMl || $hasNfe);
-                        @endphp
-                        <tr wire:key="exp-{{ $order->id }}"
-                            class="{{ $isOverdue ? 'bg-red-50/50 dark:bg-red-900/5' : '' }} {{ in_array((string)$order->id, $selectedOrders) ? 'bg-primary-50/50 dark:bg-primary-900/10' : '' }}">
+                        // ML shipping label
+                        $mlShippingId = $order->meta['ml_shipping_id'] ?? null;
+
+                        // Can mark shipped
+                        $canShip = ($isPacked || $isPartial)
+                            && (! $isMl || $hasNfe);
+                    @endphp
+
+                    <tbody x-data="{ expanded: false }" wire:key="exp-{{ $order->id }}"
+                           class="{{ $isOverdue ? 'bg-red-50/50 dark:bg-red-900/5' : '' }} {{ in_array((string)$order->id, $selectedOrders) ? 'bg-primary-50/50 dark:bg-primary-900/10' : '' }}">
+
+                        {{-- ── LINHA PRINCIPAL ── --}}
+                        <tr class="cursor-pointer group" @click.self="expanded = !expanded">
+
+                            {{-- Expand chevron --}}
+                            <td class="px-2 w-6" @click="expanded = !expanded">
+                                <x-heroicon-s-chevron-right
+                                    class="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500 transition-transform duration-200 group-hover:text-gray-600"
+                                    ::class="expanded ? 'rotate-90' : ''" />
+                            </td>
 
                             {{-- Checkbox --}}
                             <td>
                                 <input type="checkbox" wire:model.live="selectedOrders"
                                        value="{{ $order->id }}"
-                                       class="rounded border-gray-300 dark:border-zinc-600">
+                                       class="rounded border-gray-300 dark:border-zinc-600"
+                                       @click.stop>
                             </td>
 
-                            {{-- Pedido + marketplace --}}
-                            <td>
+                            {{-- Pedido + marketplace + hint de itens --}}
+                            <td @click="expanded = !expanded">
                                 <div class="flex items-center gap-2">
                                     @if($account)
                                         <div class="w-6 h-6 flex-shrink-0" title="{{ $account->account_name }}">
@@ -200,7 +214,8 @@
                                     @endif
                                     <div>
                                         <a href="{{ route('orders.show', $order) }}"
-                                           class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline text-sm">
+                                           class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline text-sm"
+                                           @click.stop>
                                             {{ $order->order_number }}
                                         </a>
                                         @if($account)
@@ -208,10 +223,27 @@
                                         @endif
                                     </div>
                                 </div>
+                                {{-- Badges de itens visíveis na linha colapsada --}}
+                                <div class="flex flex-wrap gap-1 mt-1">
+                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400">
+                                        <x-heroicon-o-cube class="w-2.5 h-2.5" />
+                                        {{ $itemCount }} {{ Str::plural('item', $itemCount) }}
+                                    </span>
+                                    @if($hasArtwork)
+                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">
+                                        <x-heroicon-s-paint-brush class="w-2.5 h-2.5" /> PERSONALIZADO
+                                    </span>
+                                    @endif
+                                    @if($isPartial)
+                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-medium">
+                                        PARCIAL
+                                    </span>
+                                    @endif
+                                </div>
                             </td>
 
                             {{-- Cliente + Destino --}}
-                            <td>
+                            <td @click="expanded = !expanded">
                                 <p class="font-medium text-gray-900 dark:text-white text-sm">{{ $order->customer_name }}</p>
                                 @if($order->shipping_address)
                                     @php $addr = $order->shipping_address; @endphp
@@ -222,56 +254,8 @@
                                 @endif
                             </td>
 
-                            {{-- Itens + Artwork --}}
-                            <td>
-                                <div class="flex items-start gap-2">
-                                    {{-- Thumbnail artwork se houver --}}
-                                    @if($hasArtwork && $artworkUrl)
-                                    <div x-data="{ open: false }" class="flex-shrink-0">
-                                        <div @mouseenter="open = true" @mouseleave="open = false" class="relative">
-                                            <img src="{{ $artworkUrl }}" alt="Arte"
-                                                 class="w-10 h-10 rounded object-cover border-2 border-purple-400 cursor-pointer">
-                                            <div x-show="open" x-transition
-                                                 class="absolute z-50 bottom-full left-0 mb-2 p-1 bg-white dark:bg-zinc-800 rounded-lg shadow-2xl border border-gray-200 dark:border-zinc-600">
-                                                <img src="{{ $artworkUrl }}" alt="Arte ampliada"
-                                                     class="w-48 h-48 object-contain rounded">
-                                            </div>
-                                        </div>
-                                    </div>
-                                    @endif
-
-                                    <div class="min-w-0">
-                                        @foreach($order->items->take(2) as $item)
-                                        <p class="text-xs text-gray-700 dark:text-zinc-300 truncate max-w-[160px]">
-                                            {{ $item->quantity }}× {{ $item->name }}
-                                            @if($item->pending_quantity < $item->quantity)
-                                                <span class="text-orange-500">({{ $item->pending_quantity }} pend.)</span>
-                                            @endif
-                                        </p>
-                                        @endforeach
-                                        @if($order->items->count() > 2)
-                                        <p class="text-xs text-gray-400">+{{ $order->items->count() - 2 }} mais</p>
-                                        @endif
-                                    </div>
-                                </div>
-
-                                {{-- Badges especiais --}}
-                                <div class="flex flex-wrap gap-1 mt-1">
-                                    @if($hasArtwork)
-                                    <span class="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">
-                                        <x-heroicon-s-paint-brush class="w-3 h-3" /> PERSONALIZADO
-                                    </span>
-                                    @endif
-                                    @if($isPartial)
-                                    <span class="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-medium">
-                                        PARCIAL
-                                    </span>
-                                    @endif
-                                </div>
-                            </td>
-
                             {{-- Prazo / Status de envio --}}
-                            <td>
+                            <td @click="expanded = !expanded" class="cursor-pointer">
                                 @if($deadlineCarbon)
                                     <div class="flex flex-col gap-1">
                                         @if($isOverdue)
@@ -327,7 +311,7 @@
                             </td>
 
                             {{-- Pipeline status --}}
-                            <td>
+                            <td @click="expanded = !expanded" class="cursor-pointer">
                                 <x-ui.badge :color="$order->pipeline_status->color()">
                                     {{ $order->pipeline_status->label() }}
                                 </x-ui.badge>
@@ -472,8 +456,176 @@
                                 </div>
                             </td>
                         </tr>
-                        @endforeach
+
+                        {{-- ── LINHA EXPANDIDA: itens com imagens e links ── --}}
+                        <tr x-show="expanded" x-cloak
+                            x-transition:enter="transition-all ease-out duration-150"
+                            x-transition:enter-start="opacity-0 -translate-y-1"
+                            x-transition:enter-end="opacity-100 translate-y-0"
+                            x-transition:leave="transition-all ease-in duration-100"
+                            x-transition:leave-start="opacity-100 translate-y-0"
+                            x-transition:leave-end="opacity-0 -translate-y-1">
+                            <td colspan="8" class="p-0 border-b border-gray-200 dark:border-zinc-700">
+                                <div class="bg-gray-50 dark:bg-zinc-800/60 px-6 py-4">
+
+                                    {{-- Cabeçalho do painel --}}
+                                    <p class="text-[10px] uppercase tracking-widest font-semibold text-gray-400 dark:text-zinc-500 mb-3">
+                                        {{ $itemCount }} {{ Str::plural('item', $itemCount) }} neste pedido
+                                    </p>
+
+                                    <div class="flex flex-col gap-2">
+                                    @foreach($order->items as $item)
+                                    @php
+                                        // Imagem: artwork → imagem primária do produto → primeira imagem disponível
+                                        $imgUrl = $item->artwork_url
+                                            ?? $item->product?->primaryImage?->url
+                                            ?? $item->product?->images->first()?->url;
+
+                                        // Links externos (ML, Shopee, etc.)
+                                        $mlPermalink = $item->meta['ml_permalink']
+                                            ?? ($item->meta['ml_item_id'] ? 'https://www.mercadolivre.com.br/p/' . $item->meta['ml_item_id'] : null);
+
+                                        // Variante
+                                        $variantLabel = $item->variant?->name ?? ($item->meta['variation_name'] ?? null);
+
+                                        // Status de produção
+                                        $prodStatus = $item->production_status ?? null;
+                                    @endphp
+                                    <div class="flex items-start gap-4 rounded-lg bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 p-3 shadow-xs">
+
+                                        {{-- Imagem --}}
+                                        <div class="flex-shrink-0">
+                                        @if($imgUrl)
+                                            <div x-data="{ lightbox: false }" class="relative">
+                                                <img src="{{ $imgUrl }}" alt="{{ $item->name }}"
+                                                     @click="lightbox = true"
+                                                     class="w-16 h-16 rounded-md object-cover border border-gray-200 dark:border-zinc-600 cursor-zoom-in">
+                                                {{-- Lightbox inline --}}
+                                                <div x-show="lightbox" x-cloak
+                                                     @click="lightbox = false"
+                                                     @keydown.escape.window="lightbox = false"
+                                                     class="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 cursor-zoom-out"
+                                                     x-transition>
+                                                    <img src="{{ $imgUrl }}" alt="{{ $item->name }}"
+                                                         class="max-w-[90vw] max-h-[85vh] rounded-xl shadow-2xl object-contain">
+                                                    @if($item->artwork_url)
+                                                    <span class="absolute top-4 left-1/2 -translate-x-1/2 bg-purple-600 text-white text-xs px-3 py-1 rounded-full">Arte personalizada</span>
+                                                    @endif
+                                                </div>
+                                                {{-- Indicador de arte --}}
+                                                @if($item->artwork_url)
+                                                <span class="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 rounded-full border-2 border-white dark:border-zinc-900" title="Arte personalizada"></span>
+                                                @endif
+                                            </div>
+                                        @else
+                                            <div class="w-16 h-16 rounded-md bg-gray-100 dark:bg-zinc-700 flex items-center justify-center border border-gray-200 dark:border-zinc-600">
+                                                <x-heroicon-o-cube class="w-7 h-7 text-gray-300 dark:text-zinc-500" />
+                                            </div>
+                                        @endif
+                                        </div>
+
+                                        {{-- Informações do item --}}
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-start justify-between gap-4">
+                                                <div class="min-w-0">
+                                                    <p class="font-semibold text-sm text-gray-900 dark:text-white leading-tight truncate">
+                                                        {{ $item->name }}
+                                                    </p>
+                                                    @if($variantLabel)
+                                                    <p class="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
+                                                        Variação: <span class="font-medium text-gray-700 dark:text-zinc-300">{{ $variantLabel }}</span>
+                                                    </p>
+                                                    @endif
+                                                    @if($item->sku)
+                                                    <p class="text-[11px] font-mono text-gray-400 dark:text-zinc-500 mt-0.5">SKU: {{ $item->sku }}</p>
+                                                    @endif
+                                                </div>
+
+                                                {{-- Quantidade + Preço --}}
+                                                <div class="text-right flex-shrink-0">
+                                                    <p class="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
+                                                        {{ $item->quantity }}×
+                                                        <span class="text-gray-700 dark:text-zinc-300">R$ {{ number_format($item->unit_price, 2, ',', '.') }}</span>
+                                                    </p>
+                                                    <p class="text-xs text-gray-500 dark:text-zinc-400 tabular-nums">
+                                                        = R$ {{ number_format($item->total, 2, ',', '.') }}
+                                                    </p>
+                                                    @if($item->shipped_quantity > 0)
+                                                    <p class="text-[10px] text-green-600 dark:text-green-400 mt-0.5">
+                                                        {{ $item->shipped_quantity }} enviado(s)
+                                                    </p>
+                                                    @endif
+                                                    @if($item->pending_quantity < $item->quantity && $item->pending_quantity > 0)
+                                                    <p class="text-[10px] text-orange-500 mt-0.5">
+                                                        {{ $item->pending_quantity }} pendente(s)
+                                                    </p>
+                                                    @endif
+                                                </div>
+                                            </div>
+
+                                            {{-- Badges + Links --}}
+                                            <div class="flex flex-wrap items-center gap-2 mt-2">
+                                                {{-- Status de produção --}}
+                                                @if($prodStatus)
+                                                <span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium
+                                                    {{ $prodStatus->value === 'completed' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                                    : ($prodStatus->value === 'in_progress' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                                    : 'bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400') }}">
+                                                    Produção: {{ $prodStatus->label() }}
+                                                </span>
+                                                @endif
+
+                                                @if($item->artwork_url)
+                                                <span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">
+                                                    <x-heroicon-s-paint-brush class="w-2.5 h-2.5" /> Arte personalizada
+                                                </span>
+                                                @endif
+
+                                                {{-- Links --}}
+                                                @if($item->product_id)
+                                                <a href="{{ route('products.edit', $item->product_id) }}"
+                                                   target="_blank"
+                                                   @click.stop
+                                                   class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/40 font-medium transition-colors">
+                                                    <x-heroicon-o-arrow-top-right-on-square class="w-2.5 h-2.5" />
+                                                    Ver produto (interno)
+                                                </a>
+                                                @endif
+
+                                                @if($mlPermalink)
+                                                <a href="{{ $mlPermalink }}"
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   @click.stop
+                                                   class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 font-medium transition-colors">
+                                                    <x-heroicon-o-arrow-top-right-on-square class="w-2.5 h-2.5" />
+                                                    Ver anúncio (ML)
+                                                </a>
+                                                @endif
+
+                                                @if(!empty($item->meta['shopee_item_id']))
+                                                <a href="https://shopee.com.br/product/{{ $item->meta['shopee_shop_id'] ?? 0 }}/{{ $item->meta['shopee_item_id'] }}"
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   @click.stop
+                                                   class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 font-medium transition-colors">
+                                                    <x-heroicon-o-arrow-top-right-on-square class="w-2.5 h-2.5" />
+                                                    Ver anúncio (Shopee)
+                                                </a>
+                                                @endif
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                    @endforeach
+                                    </div>
+
+                                </div>
+                            </td>
+                        </tr>
+
                     </tbody>
+                    @endforeach
                 </table>
             </div>
 

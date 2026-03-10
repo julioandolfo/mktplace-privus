@@ -198,7 +198,7 @@ class ExpeditionBoard extends Component
         $notnull = $this->deadlineNotNullSql();
 
         $query = $this->baseQuery()
-            ->with(['items.product', 'items.variant', 'marketplaceAccount', 'invoices'])
+            ->with(['items.product.primaryImage', 'items.product.images', 'items.variant', 'marketplaceAccount', 'invoices'])
             ->when($this->search, fn ($q) => $q->search($this->search))
             ->when($this->filterType, fn ($q) => $q->whereHas('marketplaceAccount', fn ($mq) =>
                 $mq->where('marketplace_type', $this->filterType)
