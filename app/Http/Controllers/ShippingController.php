@@ -112,15 +112,39 @@ class ShippingController extends Controller
     // ─── Melhor Envios ────────────────────────────────────────────────────────
 
     /**
-     * Cotação de frete via Melhor Envios.
-     * Payload: {to_cep, weight, width, height, length, insurance_value}
+     * Cotacao de frete via Melhor Envios.
      */
     public function quote(Request $request, Order $order)
     {
         abort_unless($order->company_id === Auth::user()->company_id, 403);
 
-        // Placeholder — MelhorEnviosService será implementado na próxima fase
-        return response()->json(['message' => 'Cotação Melhor Envios: em implementação.'], 501);
+        $meAccount = $order->marketplaceAccount?->melhorEnviosAccount;
+        if (! $meAccount) {
+            return response()->json(['error' => 'Nenhuma conta Melhor Envios vinculada a este canal.'], 422);
+        }
+
+        $validated = $request->validate([
+            'weight' => 'nullable|numeric|min:0.01',
+            'width'  => 'nullable|numeric|min:1',
+            'height' => 'nullable|numeric|min:1',
+            'length' => 'nullable|numeric|min:1',
+        ]);
+
+        try {
+            $service = new \App\Services\MelhorEnviosService($meAccount);
+            $results = $service->quoteForOrder($order, array_filter($validated));
+
+            $quotes = collect($results)
+                ->filter(fn ($q) => empty($q['error']) && isset($q['price']))
+                ->sortBy('price')
+                ->values()
+                ->toArray();
+
+            return response()->json(['quotes' => $quotes]);
+        } catch (\Throwable $e) {
+            Log::error("ME quote order #{$order->id}: " . $e->getMessage());
+            return response()->json(['error' => 'Erro na cotacao: ' . $e->getMessage()], 500);
+        }
     }
 
     /**
@@ -130,7 +154,57 @@ class ShippingController extends Controller
     {
         abort_unless($order->company_id === Auth::user()->company_id, 403);
 
-        return response()->json(['message' => 'Compra Melhor Envios: em implementação.'], 501);
+        $meAccount = $order->marketplaceAccount?->melhorEnviosAccount;
+        if (! $meAccount) {
+            return response()->json(['error' => 'Nenhuma conta Melhor Envios vinculada.'], 422);
+        }
+
+        $validated = $request->validate([
+            'service_id' => 'required|integer',
+            'price'      => 'required|numeric|min:0',
+            'company'    => 'nullable|array',
+            'name'       => 'nullable|string',
+            'weight'     => 'nullable|numeric|min:0.01',
+            'width'      => 'nullable|numeric|min:1',
+            'height'     => 'nullable|numeric|min:1',
+            'length'     => 'nullable|numeric|min:1',
+        ]);
+
+        try {
+            $service = new \App\Services\MelhorEnviosService($meAccount);
+
+            $label = $service->purchaseLabel($order, [
+                'id'      => $validated['service_id'],
+                'price'   => $validated['price'],
+                'company' => $validated['company'] ?? [],
+                'name'    => $validated['name'] ?? '',
+            ], array_filter([
+                'weight' => $validated['weight'] ?? null,
+                'width'  => $validated['width'] ?? null,
+                'height' => $validated['height'] ?? null,
+                'length' => $validated['length'] ?? null,
+            ]));
+
+            if ($label->tracking_code) {
+                $order->update(['tracking_code' => $label->tracking_code]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'label'   => [
+                    'id'            => $label->id,
+                    'carrier'       => $label->carrier,
+                    'service'       => $label->service,
+                    'tracking_code' => $label->tracking_code,
+                    'cost'          => $label->cost,
+                    'label_url'     => $label->label_url,
+                    'status'        => $label->status,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("ME purchase order #{$order->id}: " . $e->getMessage());
+            return response()->json(['error' => 'Erro na compra: ' . $e->getMessage()], 500);
+        }
     }
 
     /**
@@ -139,6 +213,27 @@ class ShippingController extends Controller
     public function webhook(Request $request)
     {
         Log::info('MelhorEnvios webhook received', $request->all());
+
+        $data = $request->all();
+        if (isset($data['id'])) {
+            $label = \App\Models\ShipmentLabel::where('me_label_id', (string) $data['id'])->first();
+            if ($label) {
+                if (! empty($data['tracking'])) {
+                    $label->update(['tracking_code' => $data['tracking']]);
+                    $label->order?->update(['tracking_code' => $data['tracking']]);
+                }
+                if (($data['status'] ?? '') === 'delivered') {
+                    $label->order?->update(['delivered_at' => now()]);
+                }
+                $meta = $label->meta ?? [];
+                $meta['webhook_events'][] = [
+                    'status'    => $data['status'] ?? 'unknown',
+                    'timestamp' => now()->toIso8601String(),
+                    'data'      => $data,
+                ];
+                $label->update(['meta' => $meta]);
+            }
+        }
 
         return response()->json(['received' => true]);
     }
