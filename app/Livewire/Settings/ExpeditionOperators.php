@@ -155,7 +155,6 @@ class ExpeditionOperators extends Component
 
     public function render()
     {
-        return view('livewire.settings.expedition-operators')
-            ->layout('layouts.app');
+        return view('livewire.settings.expedition-operators');
     }
 }
