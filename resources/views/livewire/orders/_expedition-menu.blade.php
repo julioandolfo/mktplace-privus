@@ -25,8 +25,14 @@
             this.open = !this.open;
             if (this.open) {
                 const r = this.$refs.btn.getBoundingClientRect();
-                this.top  = r.bottom + window.scrollY + 4;
-                this.left = r.right  + window.scrollX - 224;
+                const menuW = 224;
+                let l = r.right - menuW;
+                if (l < 8) l = 8;
+                if (l + menuW > window.innerWidth - 8) l = window.innerWidth - menuW - 8;
+                let t = r.bottom + 4;
+                if (t + 300 > window.innerHeight) t = Math.max(8, r.top - 300);
+                this.top  = t;
+                this.left = l;
             }
         }
     }">

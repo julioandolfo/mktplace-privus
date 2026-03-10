@@ -219,15 +219,16 @@ class ExpeditionBoard extends Component
             ->with(['items.product.primaryImage', 'items.product.images', 'items.variant', 'marketplaceAccount', 'invoices', 'shipmentLabels'])
             ->when($this->search, function ($q) {
                 $term = $this->search;
-                $q->where(function ($sub) use ($term) {
-                    $sub->where('order_number', 'ilike', "%{$term}%")
-                        ->orWhere('customer_name', 'ilike', "%{$term}%")
-                        ->orWhere('customer_email', 'ilike', "%{$term}%")
-                        ->orWhere('customer_document', 'ilike', "%{$term}%")
-                        ->orWhere('tracking_code', 'ilike', "%{$term}%")
+                $like = $this->isPostgres() ? 'ilike' : 'like';
+                $q->where(function ($sub) use ($term, $like) {
+                    $sub->where('order_number', $like, "%{$term}%")
+                        ->orWhere('customer_name', $like, "%{$term}%")
+                        ->orWhere('customer_email', $like, "%{$term}%")
+                        ->orWhere('customer_document', $like, "%{$term}%")
+                        ->orWhere('tracking_code', $like, "%{$term}%")
                         ->orWhereHas('items', fn ($iq) =>
-                            $iq->where('name', 'ilike', "%{$term}%")
-                               ->orWhere('sku', 'ilike', "%{$term}%")
+                            $iq->where('name', $like, "%{$term}%")
+                               ->orWhere('sku', $like, "%{$term}%")
                         );
                 });
             })
