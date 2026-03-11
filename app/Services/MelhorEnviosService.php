@@ -12,16 +12,16 @@ use Illuminate\Support\Facades\Log;
 /**
  * Serviço de integração com a API do Melhor Envios.
  *
- * Documentação: https://docs.melhorenvios.com.br/
+ * Documentação: https://docs.melhorenvio.com.br/
  * Autenticação: OAuth2 Authorization Code Flow.
  * Ambientes:
- *   - Sandbox: https://sandbox.melhorenvios.com.br
- *   - Produção: https://melhorenvios.com.br
+ *   - Sandbox: https://sandbox.melhorenvio.com.br
+ *   - Produção: https://melhorenvio.com.br
  */
 class MelhorEnviosService
 {
-    private const PROD_URL    = 'https://melhorenvios.com.br';
-    private const SANDBOX_URL = 'https://sandbox.melhorenvios.com.br';
+    private const PROD_URL    = 'https://melhorenvio.com.br';
+    private const SANDBOX_URL = 'https://sandbox.melhorenvio.com.br';
 
     public function __construct(private MelhorEnviosAccount $account) {}
 

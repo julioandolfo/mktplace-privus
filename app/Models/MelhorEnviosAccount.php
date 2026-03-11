@@ -72,7 +72,7 @@ class MelhorEnviosAccount extends Model
     public function baseUrl(): string
     {
         return $this->isSandbox()
-            ? 'https://sandbox.melhorenvios.com.br/api/v2'
-            : 'https://melhorenvios.com.br/api/v2';
+            ? 'https://sandbox.melhorenvio.com.br/api/v2'
+            : 'https://melhorenvio.com.br/api/v2';
     }
 }
