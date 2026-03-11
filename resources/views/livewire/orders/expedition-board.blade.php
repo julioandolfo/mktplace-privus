@@ -1364,9 +1364,27 @@
                             <div class="grid grid-cols-3 gap-2">
                                 <div>
                                     <label class="text-[10px] text-gray-500 dark:text-zinc-400">NCM * (8 dig.)</label>
-                                    <input type="text" wire:model="nfeFiscalForm.{{ $mlId }}.ncm"
-                                           maxlength="8" placeholder="00000000"
-                                           class="form-input text-xs font-mono py-1.5">
+                                    <div class="flex gap-1">
+                                        <input type="text" wire:model="nfeFiscalForm.{{ $mlId }}.ncm"
+                                               maxlength="8" placeholder="00000000"
+                                               class="form-input text-xs font-mono py-1.5 flex-1">
+                                        <button type="button"
+                                                wire:click="searchNcmWithAi('{{ $mlId }}')"
+                                                wire:loading.attr="disabled"
+                                                wire:target="searchNcmWithAi('{{ $mlId }}')"
+                                                class="px-2 py-1.5 rounded-lg text-xs bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-50"
+                                                title="Buscar NCM com IA">
+                                            <span wire:loading.remove wire:target="searchNcmWithAi('{{ $mlId }}')">
+                                                <x-heroicon-o-sparkles class="w-3.5 h-3.5" />
+                                            </span>
+                                            <span wire:loading wire:target="searchNcmWithAi('{{ $mlId }}')">
+                                                <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/>
+                                                    <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/>
+                                                </svg>
+                                            </span>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="text-[10px] text-gray-500 dark:text-zinc-400">Origem</label>
