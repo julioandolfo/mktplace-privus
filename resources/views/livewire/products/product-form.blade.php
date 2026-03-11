@@ -121,6 +121,14 @@
                             <input type="number" step="0.01" id="length" wire:model="length" class="form-input">
                         </div>
                     </div>
+                    <div class="mt-4 max-w-xs">
+                        <label for="expedition_points" class="form-label">
+                            Pontos de Expedição
+                            <span class="text-gray-400 font-normal">(opcional)</span>
+                        </label>
+                        <input type="number" min="0" id="expedition_points" wire:model="expedition_points" class="form-input" placeholder="Padrão da config">
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">Pontos por unidade para bonificação. Vazio = padrão global.</p>
+                    </div>
                 </x-ui.card>
 
                 {{-- Fiscal --}}

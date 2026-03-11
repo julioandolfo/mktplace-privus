@@ -40,6 +40,9 @@ class ProductForm extends Component
     public string $height = '';
     public string $length = '';
 
+    // Expedition bonus
+    public string $expedition_points = '';
+
     // Fiscal
     public string $ncm = '';
     public string $cest = '';
@@ -79,6 +82,7 @@ class ProductForm extends Component
             $this->width = (string) ($product->width ?? '');
             $this->height = (string) ($product->height ?? '');
             $this->length = (string) ($product->length ?? '');
+            $this->expedition_points = (string) ($product->expedition_points ?? '');
 
             $this->variants = $product->variants->map(fn ($v) => [
                 'id' => $v->id,
@@ -157,6 +161,7 @@ class ProductForm extends Component
             'width' => 'nullable|numeric|min:0',
             'height' => 'nullable|numeric|min:0',
             'length' => 'nullable|numeric|min:0',
+            'expedition_points' => 'nullable|integer|min:0',
             'ncm' => 'nullable|string|max:10',
             'ean_gtin' => 'nullable|string|max:14',
             'variants.*.sku' => 'required_if:type,variable|string|max:100',

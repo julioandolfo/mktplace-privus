@@ -82,6 +82,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return view('expedition.index');
     })->name('expedition.index');
 
+    Route::get('/expedition/bonuses', fn () => view('expedition.bonuses'))->name('expedition.bonuses');
+
     // Packing (conferência de embalagem)
     Route::get('/orders/{order}/pack', \App\Livewire\Orders\PackingScreen::class)->name('orders.pack');
     Route::post('/orders/{order}/mark-packed', [\App\Http\Controllers\OrderDispatchController::class, 'markPacked'])->name('orders.mark-packed');
@@ -213,6 +215,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Configurações — Operadores de Expedição
     Route::get('/settings/expedition-operators', fn () => view('settings.expedition-operators'))->name('settings.operators.index');
+
+    // Configurações — Bonificação Expedição
+    Route::get('/settings/expedition-bonus', fn () => view('settings.expedition-bonus'))->name('settings.bonus.index');
 });
 
 require __DIR__.'/auth.php';
