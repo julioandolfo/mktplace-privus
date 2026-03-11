@@ -1390,15 +1390,7 @@ class ExpeditionBoard extends Component
                 ->keyBy('order_id');
         }
 
-        $accountQuery = MarketplaceAccount::orderBy('account_name');
-        if ($cid = Auth::user()?->company_id) {
-            $accountQuery->where(function ($q) use ($cid) {
-                $q->where('company_id', $cid)
-                  ->orWhereIn('id', Order::where('company_id', $cid)
-                      ->distinct()
-                      ->pluck('marketplace_account_id'));
-            });
-        }
+        $accounts = MarketplaceAccount::orderBy('account_name')->get();
 
         $expeditionOperators = ExpeditionOperator::forCompany(Auth::user()?->company_id);
 
@@ -1411,7 +1403,7 @@ class ExpeditionBoard extends Component
 
         return view('livewire.orders.expedition-board', [
             'orders'              => $orders,
-            'accounts'            => $accountQuery->get(),
+            'accounts'            => $accounts,
             'tabCounts'           => $tabCounts,
             'types'               => MarketplaceType::cases(),
             'listingsMap'         => $listingsMap,
