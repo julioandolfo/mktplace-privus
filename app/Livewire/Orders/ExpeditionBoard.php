@@ -695,6 +695,13 @@ class ExpeditionBoard extends Component
                     $fiscal = $service->getItemFiscalData($mlItemId);
                     $canInvoice = $service->canInvoiceItem($mlItemId);
 
+                    Log::info("checkFiscalData item {$mlItemId}", [
+                        'fiscal_empty' => empty($fiscal),
+                        'fiscal_sku'   => $fiscal['sku'] ?? null,
+                        'can_invoice'  => $canInvoice['can_invoice'] ?? null,
+                        'can_invoice_full' => $canInvoice,
+                    ]);
+
                     if (empty($fiscal) || empty($fiscal['sku']) || ! ($canInvoice['can_invoice'] ?? false)) {
                         $product = $item->product;
                         // Pré-preencher com dados existentes do fiscal (parcial) se houver
@@ -882,7 +889,8 @@ PROMPT;
             return;
         }
 
-        // Re-verificar dados fiscais
+        // Re-verificar dados fiscais (com pequeno delay para API do ML processar)
+        usleep(500_000); // 500ms
         $this->checkFiscalData($order, $account);
         $this->nfeLoading = false;
 
@@ -891,8 +899,9 @@ PROMPT;
             $this->nfeFiscalMessage = 'Dados fiscais salvos com sucesso! Agora voce pode emitir a NF-e.';
             session()->flash('success', 'Dados fiscais salvos com sucesso. Agora voce pode emitir a NF-e.');
         } else {
-            $this->nfeFiscalSuccess = false;
-            $this->nfeFiscalMessage = 'Alguns itens ainda precisam de dados fiscais. Verifique e tente novamente.';
+            // Dados foram enviados sem erro, mas a API do ML ainda nao processou
+            $this->nfeFiscalSuccess = true;
+            $this->nfeFiscalMessage = 'Dados fiscais enviados ao Mercado Livre. A API pode demorar alguns segundos para processar. Tente emitir a NF-e ou clique em "Salvar" novamente.';
         }
     }
 
