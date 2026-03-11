@@ -1456,8 +1456,19 @@
                             </p>
                         </div>
                         <p class="text-xs text-blue-600 dark:text-blue-400">
-                            Verificando automaticamente a cada 5 segundos. Voce pode fechar este modal e voltar depois.
+                            Tentativa {{ $nfeFiscalRetries }}/12 &mdash; Verificando automaticamente a cada 5 segundos.
                         </p>
+
+                        {{-- Debug: mostrar resposta da API a cada verificacao --}}
+                        @if(!empty($nfeFiscalDebug))
+                        <details class="text-xs">
+                            <summary class="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline">
+                                Ver resposta da API (debug)
+                            </summary>
+                            <pre class="mt-1 p-2 bg-gray-900 text-gray-200 rounded text-[10px] overflow-x-auto max-h-48 overflow-y-auto">{{ json_encode($nfeFiscalDebug, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+                        </details>
+                        @endif
+
                         <button wire:click="recheckFiscalData"
                                 wire:loading.attr="disabled"
                                 wire:target="recheckFiscalData"
@@ -1473,7 +1484,7 @@
                     </div>
                     @endif
 
-                    {{-- Feedback de resultado --}}
+                    {{-- Feedback de resultado (sucesso ou erro apos timeout) --}}
                     @if($nfeFiscalMessage && !$nfeFiscalProcessing)
                     <div class="mt-2 p-3 rounded-lg text-sm {{ $nfeFiscalSuccess
                         ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
@@ -1485,6 +1496,32 @@
                         @endif
                         {{ $nfeFiscalMessage }}
                     </div>
+
+                    {{-- Debug apos timeout --}}
+                    @if(!$nfeFiscalSuccess && !empty($nfeFiscalDebug))
+                    <details class="mt-2 text-xs" open>
+                        <summary class="cursor-pointer text-red-600 dark:text-red-400 font-medium hover:underline">
+                            Detalhes da API do Mercado Livre
+                        </summary>
+                        <pre class="mt-1 p-2 bg-gray-900 text-gray-200 rounded text-[10px] overflow-x-auto max-h-64 overflow-y-auto">{{ json_encode($nfeFiscalDebug, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+                        <p class="mt-1 text-gray-500 dark:text-gray-400">
+                            Compartilhe esta informacao para ajudar no diagnostico.
+                        </p>
+                    </details>
+
+                    <button wire:click="saveFiscalData"
+                            wire:loading.attr="disabled"
+                            wire:target="saveFiscalData"
+                            class="btn-primary btn-sm w-full mt-2">
+                        <span wire:loading.remove wire:target="saveFiscalData">
+                            <x-heroicon-o-arrow-path class="w-4 h-4 inline" />
+                            Tentar novamente
+                        </span>
+                        <span wire:loading wire:target="saveFiscalData" class="text-sm">
+                            Reenviando...
+                        </span>
+                    </button>
+                    @endif
                     @endif
 
                     {{-- Dados fiscais OK --}}

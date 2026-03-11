@@ -68,6 +68,8 @@ class ExpeditionBoard extends Component
     public string $nfeFiscalMessage  = '';
     public bool   $nfeFiscalSuccess  = false;
     public bool   $nfeFiscalProcessing = false; // dados enviados, aguardando ML processar
+    public int    $nfeFiscalRetries = 0;       // contagem de tentativas de recheck
+    public array  $nfeFiscalDebug = [];        // info de debug da API do ML
     public array  $nfeTaxRules      = []; // regras tributarias do vendedor [{id, description}]
     public string $nfeNatureOp      = 'Venda';
     public string $nfeInfoFisco     = '';
@@ -634,6 +636,8 @@ class ExpeditionBoard extends Component
         $this->nfeFiscalMessage    = '';
         $this->nfeFiscalSuccess    = false;
         $this->nfeFiscalProcessing = false;
+        $this->nfeFiscalRetries    = 0;
+        $this->nfeFiscalDebug      = [];
         $this->nfeFiscalPending    = [];
         $this->nfeFiscalForm       = [];
         $this->nfeFiscalChecking   = false;
@@ -893,6 +897,8 @@ PROMPT;
 
         // Marcar como "enviado, aguardando processamento"
         $this->nfeFiscalProcessing = true;
+        $this->nfeFiscalRetries = 0;
+        $this->nfeFiscalDebug = [];
         $this->nfeFiscalSuccess = true;
         $this->nfeFiscalMessage = 'Dados fiscais enviados ao Mercado Livre. Aguardando processamento...';
         $this->nfeLoading = false;
@@ -907,8 +913,10 @@ PROMPT;
             return;
         }
 
+        $this->nfeFiscalRetries++;
         $this->nfeFiscalChecking = true;
-        $order = Order::with('marketplaceAccount')->find($this->nfeOrderId);
+
+        $order = Order::with(['marketplaceAccount', 'items.product'])->find($this->nfeOrderId);
         $account = $order?->marketplaceAccount;
 
         if (! $order || ! $account) {
@@ -916,23 +924,67 @@ PROMPT;
             return;
         }
 
-        $savedForm = $this->nfeFiscalForm;
-        $this->checkFiscalData($order, $account);
+        $service = new \App\Services\Marketplaces\MercadoLivreService($account);
+        $debug = [];
+        $allOk = true;
 
-        if (empty($this->nfeFiscalPending)) {
+        $checkedItems = [];
+        foreach ($order->items as $item) {
+            $mlItemId = $item->meta['ml_item_id'] ?? null;
+            if (! $mlItemId || isset($checkedItems[$mlItemId])) {
+                continue;
+            }
+            $checkedItems[$mlItemId] = true;
+
+            try {
+                $fiscal = $service->getItemFiscalData($mlItemId);
+                $canInvoice = $service->canInvoiceItem($mlItemId);
+
+                $itemDebug = [
+                    'ml_item_id'   => $mlItemId,
+                    'has_fiscal'   => ! empty($fiscal),
+                    'fiscal_sku'   => $fiscal['sku'] ?? null,
+                    'can_invoice'  => $canInvoice['can_invoice'] ?? false,
+                    'can_invoice_response' => $canInvoice,
+                ];
+
+                if (! empty($fiscal)) {
+                    $itemDebug['fiscal_tax_info'] = $fiscal['tax_information'] ?? null;
+                    $itemDebug['fiscal_cost']     = $fiscal['cost'] ?? null;
+                    $itemDebug['fiscal_title']    = $fiscal['title'] ?? null;
+                }
+
+                $debug[] = $itemDebug;
+
+                if (empty($fiscal) || empty($fiscal['sku']) || ! ($canInvoice['can_invoice'] ?? false)) {
+                    $allOk = false;
+                }
+            } catch (\Throwable $e) {
+                $debug[] = [
+                    'ml_item_id' => $mlItemId,
+                    'error'      => $e->getMessage(),
+                ];
+                $allOk = false;
+            }
+        }
+
+        $this->nfeFiscalDebug = $debug;
+        $this->nfeFiscalChecking = false;
+
+        if ($allOk) {
             $this->nfeFiscalProcessing = false;
+            $this->nfeFiscalPending = [];
             $this->nfeFiscalSuccess = true;
             $this->nfeFiscalMessage = 'Dados fiscais confirmados! Agora voce pode emitir a NF-e.';
             session()->flash('success', 'Dados fiscais confirmados. Agora voce pode emitir a NF-e.');
-        } else {
-            // Restaurar dados preenchidos pelo usuario
-            foreach ($savedForm as $mlId => $data) {
-                if (isset($this->nfeFiscalForm[$mlId])) {
-                    $this->nfeFiscalForm[$mlId] = $data;
-                }
-            }
+            return;
+        }
+
+        // Apos 12 tentativas (1 minuto com poll de 5s), parar polling e mostrar debug
+        if ($this->nfeFiscalRetries >= 12) {
+            $this->nfeFiscalProcessing = false;
             $this->nfeFiscalSuccess = false;
-            $this->nfeFiscalMessage = 'A API do Mercado Livre ainda nao confirmou os dados. Tente novamente em alguns segundos ou verifique os campos.';
+            $this->nfeFiscalMessage = 'A API do Mercado Livre nao confirmou os dados apos varias tentativas. Verifique os detalhes abaixo.';
         }
     }
 
@@ -1103,6 +1155,8 @@ PROMPT;
         $this->nfeFiscalProcessing = false;
         $this->nfeFiscalMessage    = '';
         $this->nfeFiscalSuccess    = false;
+        $this->nfeFiscalRetries    = 0;
+        $this->nfeFiscalDebug      = [];
         $this->nfeTaxRules         = [];
         $this->nfeLoading          = false;
         $this->resetErrorBag();
