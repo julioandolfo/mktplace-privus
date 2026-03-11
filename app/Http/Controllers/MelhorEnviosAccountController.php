@@ -143,7 +143,7 @@ class MelhorEnviosAccountController extends Controller
             'from_street'    => 'nullable|string|max:200',
             'from_number'    => 'nullable|string|max:10',
             'from_complement'=> 'nullable|string|max:100',
-            'from_district'  => 'nullable|string|max=100',
+            'from_district'  => 'nullable|string|max:100',
             'from_city'      => 'nullable|string|max:100',
             'from_state'     => 'nullable|string|max:2',
             'from_phone'     => 'nullable|string|max:20',
