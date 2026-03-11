@@ -393,6 +393,29 @@ class MelhorEnviosService
     }
 
     /**
+     * Insere saldo na carteira ME via PIX ou Boleto.
+     *
+     * @param  float   $value  Valor a inserir (máx R$ 50.000)
+     * @param  string  $slug   'pix' ou 'boleto'
+     * @param  string|null  $redirectUrl  URL de retorno após pagamento
+     * @return array  Contém link para QR Code PIX ou Boleto
+     */
+    public function addBalance(float $value, string $slug = 'pix', ?string $redirectUrl = null): array
+    {
+        $payload = [
+            'gateway' => 'yapay-transparente',
+            'slug'    => $slug,
+            'value'   => $value,
+        ];
+
+        if ($redirectUrl) {
+            $payload['redirect_url'] = $redirectUrl;
+        }
+
+        return $this->post('/me/balance', $payload) ?? [];
+    }
+
+    /**
      * Retorna histórico de compras de etiquetas.
      */
     public function purchaseHistory(int $page = 1, int $perPage = 20): array

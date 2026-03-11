@@ -17,6 +17,11 @@
         </li>
     </x-slot>
 
+    {{-- Saldo das Contas --}}
+    <div class="mb-6">
+        <livewire:melhor-envios.balance-widget mode="full" />
+    </div>
+
     <x-ui.card>
         @if($accounts->isEmpty())
         <div class="text-center py-10">

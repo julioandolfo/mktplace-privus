@@ -1,6 +1,13 @@
 <div x-data="{ showFilters: false }">
 
     {{-- ============================================================
+         Saldo Melhor Envios
+    ============================================================ --}}
+    <div class="mb-4">
+        <livewire:melhor-envios.balance-widget mode="compact" />
+    </div>
+
+    {{-- ============================================================
          Widget de Metas & Bonificação
     ============================================================ --}}
     @include('livewire.orders._goals-widget')
