@@ -1820,6 +1820,172 @@
             </x-ui.card>
             @endif
 
+            {{-- Dados Fiscais (NF-e) --}}
+            @php
+                $hasFiscal     = !empty($fiscalData) && !empty($fiscalData['sku']);
+                $canInvoiceOk  = ($canInvoice['can_invoice'] ?? false) === true;
+                $fiscalTax     = $fiscalData['tax_information'] ?? [];
+                $product       = $listing->product;
+            @endphp
+            <x-ui.card>
+                <x-slot name="title">
+                    <div class="flex items-center gap-2">
+                        <x-heroicon-o-document-text class="w-4 h-4 {{ $canInvoiceOk ? 'text-green-500' : ($hasFiscal ? 'text-amber-500' : 'text-red-500') }}" />
+                        Dados Fiscais
+                        @if($canInvoiceOk)
+                            <span class="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded font-medium">OK</span>
+                        @elseif(!$hasFiscal)
+                            <span class="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-1.5 py-0.5 rounded font-medium">Pendente</span>
+                        @else
+                            <span class="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">Incompleto</span>
+                        @endif
+                    </div>
+                </x-slot>
+
+                @if($hasFiscal)
+                {{-- Exibir dados fiscais atuais --}}
+                <div class="text-sm space-y-1.5 mb-3">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">SKU Fiscal</span>
+                        <span class="font-mono text-xs">{{ $fiscalData['sku'] }}</span>
+                    </div>
+                    @if(!empty($fiscalTax['ncm']))
+                    <div class="flex justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">NCM</span>
+                        <span class="font-mono text-xs">{{ $fiscalTax['ncm'] }}</span>
+                    </div>
+                    @endif
+                    @if(!empty($fiscalTax['origin_type']))
+                    <div class="flex justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">Origem</span>
+                        <span class="text-xs">{{ match($fiscalTax['origin_type']) { 'manufacturer' => 'Fabricante', 'reseller' => 'Revendedor', 'imported' => 'Importado', default => $fiscalTax['origin_type'] } }}</span>
+                    </div>
+                    @endif
+                    @if(!empty($fiscalTax['cest']))
+                    <div class="flex justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">CEST</span>
+                        <span class="font-mono text-xs">{{ $fiscalTax['cest'] }}</span>
+                    </div>
+                    @endif
+                    @if(!empty($fiscalData['cost']))
+                    <div class="flex justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">Custo</span>
+                        <span>R$ {{ number_format($fiscalData['cost'], 2, ',', '.') }}</span>
+                    </div>
+                    @endif
+                </div>
+                @else
+                <div class="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mb-3 border border-amber-200 dark:border-amber-700">
+                    <x-heroicon-o-exclamation-triangle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <p class="font-medium">Sem dados fiscais</p>
+                        <p class="text-xs mt-0.5">Este anuncio nao possui dados fiscais configurados no Mercado Livre. Preencha abaixo para habilitar a emissao de NF-e.</p>
+                    </div>
+                </div>
+                @endif
+
+                {{-- Formulário de edição --}}
+                <details {{ !$hasFiscal ? 'open' : '' }} class="group">
+                    <summary class="cursor-pointer text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1">
+                        <x-heroicon-o-pencil-square class="w-3.5 h-3.5" />
+                        {{ $hasFiscal ? 'Editar dados fiscais' : 'Preencher dados fiscais' }}
+                        <x-heroicon-o-chevron-down class="w-3 h-3 transition-transform group-open:rotate-180" />
+                    </summary>
+
+                    <form method="POST" action="{{ route('listings.update-fiscal-data', $listing) }}" class="mt-3 space-y-3">
+                        @csrf
+                        <div>
+                            <label class="text-xs text-gray-600 dark:text-zinc-400">SKU Fiscal *</label>
+                            <input type="text" name="fiscal_sku"
+                                   value="{{ old('fiscal_sku', $fiscalData['sku'] ?? $product?->sku ?? $listing->external_id) }}"
+                                   class="form-input text-sm font-mono" required>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600 dark:text-zinc-400">Descricao NF-e *</label>
+                            <input type="text" name="fiscal_title"
+                                   value="{{ old('fiscal_title', $fiscalData['title'] ?? $listing->title) }}"
+                                   class="form-input text-sm" required>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-600 dark:text-zinc-400">NCM * <span class="text-gray-400">(8 dig.)</span></label>
+                                <input type="text" name="ncm"
+                                       value="{{ old('ncm', $fiscalTax['ncm'] ?? $product?->ncm ?? '') }}"
+                                       class="form-input text-sm font-mono" maxlength="8" pattern="\d{8}" required
+                                       placeholder="00000000">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600 dark:text-zinc-400">Custo (R$) *</label>
+                                <input type="number" name="fiscal_cost" step="0.01" min="0"
+                                       value="{{ old('fiscal_cost', $fiscalData['cost'] ?? $product?->cost ?? '') }}"
+                                       class="form-input text-sm" required>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-600 dark:text-zinc-400">Origem *</label>
+                                <select name="origin_type" class="form-input text-sm" required>
+                                    @php $ot = old('origin_type', $fiscalTax['origin_type'] ?? 'reseller'); @endphp
+                                    <option value="manufacturer" {{ $ot === 'manufacturer' ? 'selected' : '' }}>Fabricante</option>
+                                    <option value="reseller" {{ $ot === 'reseller' ? 'selected' : '' }}>Revendedor</option>
+                                    <option value="imported" {{ $ot === 'imported' ? 'selected' : '' }}>Importado</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600 dark:text-zinc-400">Cod. Origem *</label>
+                                @php
+                                    $od = old('origin_detail', $fiscalTax['origin_detail'] ?? '0');
+                                    $originOptions = [
+                                        '0' => '0 - Nacional',
+                                        '1' => '1 - Importacao direta',
+                                        '2' => '2 - Adquirida merc. interno',
+                                        '3' => '3 - Nacional + imp. >40%',
+                                        '4' => '4 - Nacional + PPB',
+                                        '5' => '5 - Nacional + imp. <40%',
+                                        '6' => '6 - Importacao s/ similar',
+                                        '7' => '7 - Importacao + Confaz',
+                                        '8' => '8 - Nacional + imp. >70%',
+                                    ];
+                                @endphp
+                                <select name="origin_detail" class="form-input text-sm" required>
+                                    @foreach($originOptions as $val => $label)
+                                    <option value="{{ $val }}" {{ $od === $val ? 'selected' : '' }}>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-600 dark:text-zinc-400">CEST</label>
+                                <input type="text" name="cest"
+                                       value="{{ old('cest', $fiscalTax['cest'] ?? $product?->cest ?? '') }}"
+                                       class="form-input text-sm font-mono" maxlength="10" placeholder="Opcional">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600 dark:text-zinc-400">EAN/GTIN</label>
+                                <input type="text" name="ean"
+                                       value="{{ old('ean', $fiscalTax['ean'] ?? $product?->ean_gtin ?? '') }}"
+                                       class="form-input text-sm font-mono" maxlength="20" placeholder="Opcional">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600 dark:text-zinc-400">Unidade de Medida</label>
+                            <select name="measurement_unit" class="form-input text-sm">
+                                @php $mu = old('measurement_unit', $fiscalData['measurement_unit'] ?? 'UN'); @endphp
+                                @foreach(['UN' => 'Unidade (UN)', 'KG' => 'Quilograma (KG)', 'L' => 'Litro (L)', 'M' => 'Metro (M)', 'M2' => 'Metro² (M2)', 'CX' => 'Caixa (CX)', 'PC' => 'Peca (PC)'] as $v => $l)
+                                <option value="{{ $v }}" {{ $mu === $v ? 'selected' : '' }}>{{ $l }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn-primary btn-sm text-xs w-full">
+                            <x-heroicon-o-cloud-arrow-up class="w-3.5 h-3.5" />
+                            {{ $hasFiscal ? 'Atualizar dados fiscais' : 'Salvar dados fiscais' }}
+                        </button>
+                    </form>
+                </details>
+            </x-ui.card>
+
             {{-- Sincronizacao --}}
             <x-ui.card title="Sincronizacao">
                 <div class="text-sm space-y-2">

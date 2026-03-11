@@ -187,6 +187,8 @@ class MarketplaceListingController extends Controller
             $description       = null;
             $categoryAttributes    = [];
             $availableListingTypes = [];
+            $fiscalData            = [];
+            $canInvoice            = [];
             $apiError              = null;
 
             $step    = 'check-account';
@@ -238,6 +240,14 @@ class MarketplaceListingController extends Controller
                     $cleanMeta = $listing->meta ?? [];
                     unset($cleanMeta['handling_time_locked'], $cleanMeta['locked_fields']);
                     $listing->update(['meta' => array_merge($cleanMeta, $metaPatch)]);
+
+                    $step = 'api-fiscal';
+                    try {
+                        $fiscalData    = $service->getItemFiscalData($listing->external_id);
+                        $canInvoice    = $service->canInvoiceItem($listing->external_id);
+                    } catch (\Throwable $e) {
+                        Log::info("ListingController fiscal data [{$listing->external_id}]: " . $e->getMessage());
+                    }
 
                     $step = 'api-attributes';
                     if (! empty($liveData['category_id'])) {
@@ -291,6 +301,7 @@ class MarketplaceListingController extends Controller
             $viewData = compact(
                 'listing', 'products',
                 'liveData', 'quality', 'purchaseExperience', 'description', 'categoryAttributes', 'availableListingTypes', 'apiError',
+                'fiscalData', 'canInvoice',
                 'salesStats', 'totalQty', 'totalRevenue', 'avgTicket',
                 'aiConfigured'
             );
@@ -750,6 +761,86 @@ class MarketplaceListingController extends Controller
 
         return redirect()->route('listings.show', $listing)
             ->with('success', 'Configurações de envio atualizadas com sucesso.');
+    }
+
+    /**
+     * Cria ou atualiza os dados fiscais de um anúncio no ML.
+     * Se o SKU já tem dados fiscais, atualiza (PUT). Senão, cria (POST) e vincula ao item.
+     *
+     * @see https://developers.mercadolivre.com.br/pt_br/envio-dos-dados-fiscais
+     */
+    public function updateFiscalData(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'fiscal_sku'     => 'required|string|max:100',
+            'fiscal_title'   => 'required|string|max:200',
+            'fiscal_cost'    => 'required|numeric|min:0',
+            'ncm'            => 'required|string|size:8',
+            'origin_type'    => 'required|in:manufacturer,reseller,imported',
+            'origin_detail'  => 'required|string|max:10',
+            'cest'           => 'nullable|string|max:10',
+            'ean'            => 'nullable|string|max:20',
+            'measurement_unit' => 'nullable|string|max:10',
+            'tax_rule_id'    => 'nullable|integer',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta nao encontrada ou sem credenciais.');
+        }
+
+        $service = new MercadoLivreService($account);
+
+        $taxInfo = [
+            'ncm'           => $validated['ncm'],
+            'origin_type'   => $validated['origin_type'],
+            'origin_detail' => $validated['origin_detail'],
+        ];
+
+        if (! empty($validated['cest'])) {
+            $taxInfo['cest'] = $validated['cest'];
+        }
+        if (! empty($validated['ean'])) {
+            $taxInfo['ean'] = $validated['ean'];
+        }
+        if (! empty($validated['tax_rule_id'])) {
+            $taxInfo['tax_rule_id'] = (int) $validated['tax_rule_id'];
+        }
+
+        $payload = [
+            'sku'              => $validated['fiscal_sku'],
+            'title'            => $validated['fiscal_title'],
+            'type'             => 'single',
+            'cost'             => (float) $validated['fiscal_cost'],
+            'measurement_unit' => $validated['measurement_unit'] ?? 'UN',
+            'tax_information'  => $taxInfo,
+        ];
+
+        try {
+            // Tenta consultar se já existe dados fiscais para este SKU
+            $existing = [];
+            try {
+                $existing = $service->getItemFiscalData($listing->external_id);
+            } catch (\Throwable $e) {
+                // Sem dados fiscais ainda
+            }
+
+            if (! empty($existing) && ! empty($existing['sku'])) {
+                // Atualiza (PUT)
+                $service->updateFiscalData($existing['sku'], $payload);
+                $msg = 'Dados fiscais atualizados com sucesso.';
+            } else {
+                // Cria e vincula
+                $service->createFiscalData($payload);
+                $service->linkFiscalDataToItem($validated['fiscal_sku'], $listing->external_id);
+                $msg = 'Dados fiscais criados e vinculados ao anuncio com sucesso.';
+            }
+
+            return redirect()->route('listings.show', $listing)->with('success', $msg);
+        } catch (\Throwable $e) {
+            Log::error("updateFiscalData [{$listing->external_id}]: " . $e->getMessage());
+            return back()->with('error', 'Erro ao salvar dados fiscais: ' . self::friendlyMlError($e->getMessage()));
+        }
     }
 
     /**

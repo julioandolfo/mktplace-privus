@@ -173,6 +173,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/listings/{listing}/ai-improve', [MarketplaceListingController::class, 'improveWithAi'])->name('listings.ai-improve');
     Route::post('/listings/{listing}/listing-type', [MarketplaceListingController::class, 'updateListingType'])->name('listings.update-listing-type');
     Route::post('/listings/{listing}/shipping', [MarketplaceListingController::class, 'updateShipping'])->name('listings.update-shipping');
+    Route::post('/listings/{listing}/fiscal-data', [MarketplaceListingController::class, 'updateFiscalData'])->name('listings.update-fiscal-data');
     Route::post('/listings/{listing}/pictures', [MarketplaceListingController::class, 'addPicture'])->name('listings.add-picture');
     Route::delete('/listings/{listing}/pictures/{pictureId}', [MarketplaceListingController::class, 'removePicture'])->name('listings.remove-picture');
     Route::post('/listings/{listing}/link-product', [MarketplaceListingController::class, 'linkProduct'])->name('listings.link-product');

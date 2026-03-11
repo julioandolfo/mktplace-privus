@@ -84,6 +84,21 @@ class MercadoLivreService
         return $response->json() ?? [];
     }
 
+    private function patch(string $path, array $data): array
+    {
+        $response = Http::withToken($this->token())
+            ->timeout(30)
+            ->patch(self::BASE_URL . $path, $data);
+
+        if ($response->failed()) {
+            throw new \RuntimeException(
+                "ML API PATCH error [{$response->status()}] {$path}: " . $response->body()
+            );
+        }
+
+        return $response->json() ?? [];
+    }
+
     // ─── Diagnostics ────────────────────────────────────────────────────────
 
     /**
@@ -839,6 +854,118 @@ class MercadoLivreService
             'type'       => 'invoice',
             'invoice_id' => $accessKey,
         ]);
+    }
+
+    // ─── Fiscal Data (Dados Fiscais) ─────────────────────────────────────────
+
+    /**
+     * Consulta os dados fiscais de um anúncio.
+     *
+     * @see https://developers.mercadolivre.com.br/pt_br/envio-dos-dados-fiscais
+     */
+    public function getItemFiscalData(string $itemId): array
+    {
+        try {
+            return $this->get("/items/{$itemId}/fiscal_information/detail");
+        } catch (\Throwable $e) {
+            // 404 = sem dados fiscais cadastrados
+            if (str_contains($e->getMessage(), '404')) {
+                return [];
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Verifica se um anúncio pode ser faturado (tem dados fiscais completos).
+     */
+    public function canInvoiceItem(string $itemId): array
+    {
+        try {
+            return $this->get("/can_invoice/items/{$itemId}");
+        } catch (\Throwable $e) {
+            Log::warning("ML canInvoiceItem({$itemId}): " . $e->getMessage());
+            return ['can_invoice' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Cria dados fiscais para um produto (SKU).
+     *
+     * Campos obrigatórios:
+     *  - sku, title, type (single|bundle), cost
+     *  - tax_information: ncm, origin_type (manufacturer|reseller|imported), origin_detail
+     *
+     * Campos opcionais:
+     *  - tax_information: tax_rule_id (Regime Normal), csosn (Simples), cest, ean, fci, ex_tipi
+     *  - measurement_unit (UN, KG, L, etc.)
+     *
+     * @see https://developers.mercadolivre.com.br/pt_br/envio-dos-dados-fiscais
+     */
+    public function createFiscalData(array $data): array
+    {
+        return $this->post('/items/fiscal_information', $data);
+    }
+
+    /**
+     * Atualiza dados fiscais completos de um SKU (PUT — substitui tudo).
+     */
+    public function updateFiscalData(string $sku, array $data): array
+    {
+        return $this->put("/items/fiscal_information/{$sku}", $data);
+    }
+
+    /**
+     * Atualização parcial de dados fiscais (PATCH).
+     * Campos permitidos: cost, measurement_unit, fci, ex_tipi, tax_rule_id,
+     * med_anvisa_code, med_exemption_reason.
+     */
+    public function patchFiscalData(string $sku, array $data): array
+    {
+        return $this->patch("/items/fiscal_information/{$sku}", $data);
+    }
+
+    /**
+     * Vincula um SKU (com dados fiscais) a um anúncio/variação.
+     *
+     * @param  string       $sku          Código do produto (fiscal)
+     * @param  string       $itemId       ID do anúncio ML (ex: MLB1234567890)
+     * @param  string|null  $variationId  ID da variação (null se item sem variações)
+     */
+    public function linkFiscalDataToItem(string $sku, string $itemId, ?string $variationId = null): array
+    {
+        $payload = [
+            'sku'     => $sku,
+            'item_id' => $itemId,
+        ];
+
+        if ($variationId) {
+            $payload['variation_id'] = $variationId;
+        }
+
+        return $this->post('/items/fiscal_information/items', $payload);
+    }
+
+    /**
+     * Lista as regras tributárias do vendedor (Regime Normal).
+     *
+     * @see https://developers.mercadolivre.com.br/pt_br/envio-regras-tributarias
+     */
+    public function getTaxRules(): array
+    {
+        $sellerId = $this->requireShopId();
+
+        return $this->get("/users/{$sellerId}/invoices/tax_rules");
+    }
+
+    /**
+     * Consulta uma regra tributária específica.
+     */
+    public function getTaxRule(string $ruleId): array
+    {
+        $sellerId = $this->requireShopId();
+
+        return $this->get("/users/{$sellerId}/invoices/tax_rules/{$ruleId}");
     }
 
     // ─── Status Mappers ───────────────────────────────────────────────────────
