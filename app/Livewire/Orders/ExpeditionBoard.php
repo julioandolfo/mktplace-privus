@@ -1392,7 +1392,12 @@ class ExpeditionBoard extends Component
 
         $accountQuery = MarketplaceAccount::orderBy('account_name');
         if ($cid = Auth::user()?->company_id) {
-            $accountQuery->where('company_id', $cid);
+            $accountQuery->where(function ($q) use ($cid) {
+                $q->where('company_id', $cid)
+                  ->orWhereIn('id', Order::where('company_id', $cid)
+                      ->distinct()
+                      ->pluck('marketplace_account_id'));
+            });
         }
 
         $expeditionOperators = ExpeditionOperator::forCompany(Auth::user()?->company_id);
