@@ -41,6 +41,11 @@
                 <div class="h-px bg-gray-100 dark:bg-zinc-700 mx-1 my-1"></div>
 
                 {{-- Links externos (páginas separadas) --}}
+                <a href="{{ route('settings.users.index') }}"
+                   class="{{ $navBtn }} {{ request()->routeIs('settings.users.*') ? $navActive : $navInactive }}">
+                    <x-heroicon-o-users class="w-5 h-5" />
+                    Usuarios
+                </a>
                 <a href="{{ route('settings.designers.index') }}"
                    class="{{ $navBtn }} {{ request()->routeIs('settings.designers.*') ? $navActive : $navInactive }}">
                     <x-heroicon-o-paint-brush class="w-5 h-5" />
@@ -78,6 +83,66 @@
         <div class="flex-1 min-w-0">
             {{-- General settings --}}
             <div x-show="tab === 'general'" x-transition>
+                {{-- Logomarca --}}
+                <form method="POST" action="{{ route('settings.update') }}" enctype="multipart/form-data" class="mb-6">
+                    @csrf
+                    <input type="hidden" name="section" value="logo">
+                    <x-ui.card title="Logomarca">
+                        <div class="flex flex-col sm:flex-row items-start gap-6 max-w-lg">
+                            {{-- Preview --}}
+                            <div class="flex-shrink-0">
+                                @php $currentLogo = \App\Models\SystemSetting::get('general', 'logo_url'); @endphp
+                                <div class="w-28 h-28 rounded-xl border-2 border-dashed border-gray-300 dark:border-zinc-600 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 overflow-hidden">
+                                    @if($currentLogo)
+                                        <img src="{{ $currentLogo }}" alt="Logo" class="max-w-full max-h-full object-contain">
+                                    @else
+                                        <div class="text-center">
+                                            <x-heroicon-o-photo class="w-8 h-8 text-gray-300 dark:text-zinc-600 mx-auto" />
+                                            <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">Sem logo</p>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+
+                            {{-- Upload --}}
+                            <div class="flex-1 space-y-3">
+                                <div>
+                                    <label class="form-label">Enviar Logomarca</label>
+                                    <input type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                                           class="form-input text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 dark:file:bg-primary-900/20 dark:file:text-primary-400 hover:file:bg-primary-100">
+                                    <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">PNG, JPG, SVG ou WebP. Recomendado: 200x200px ou maior.</p>
+                                </div>
+
+                                @if($currentLogo)
+                                <div class="flex items-center gap-2">
+                                    <button type="submit" class="btn-primary btn-sm">
+                                        <x-heroicon-o-arrow-up-tray class="w-4 h-4" />
+                                        Atualizar Logo
+                                    </button>
+                                    <a href="{{ route('settings.logo.remove') }}"
+                                       onclick="event.preventDefault(); document.getElementById('remove-logo-form').submit();"
+                                       class="btn-secondary btn-sm text-red-600 dark:text-red-400">
+                                        <x-heroicon-o-trash class="w-4 h-4" />
+                                        Remover
+                                    </a>
+                                </div>
+                                @else
+                                <button type="submit" class="btn-primary btn-sm">
+                                    <x-heroicon-o-arrow-up-tray class="w-4 h-4" />
+                                    Enviar Logo
+                                </button>
+                                @endif
+                            </div>
+                        </div>
+                    </x-ui.card>
+                </form>
+
+                @if($currentLogo ?? false)
+                <form id="remove-logo-form" method="POST" action="{{ route('settings.logo.remove') }}" class="hidden">
+                    @csrf @method('DELETE')
+                </form>
+                @endif
+
                 <form method="POST" action="{{ route('settings.update') }}">
                     @csrf
                     <input type="hidden" name="section" value="general">

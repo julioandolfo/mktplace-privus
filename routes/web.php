@@ -197,6 +197,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Settings
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
+    Route::delete('/settings/logo', [SettingsController::class, 'removeLogo'])->name('settings.logo.remove');
 
     // Configurações — Melhor Envios
     Route::resource('settings/melhor-envios', \App\Http\Controllers\MelhorEnviosAccountController::class)
@@ -216,6 +217,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Configurações — Marketplace Accounts (vincular Webmania, ME, etc.)
     Route::get('/settings/accounts', [\App\Http\Controllers\MarketplaceAccountSettingsController::class, 'index'])->name('settings.accounts.index');
     Route::put('/settings/accounts/{account}', [\App\Http\Controllers\MarketplaceAccountSettingsController::class, 'update'])->name('settings.accounts.update');
+
+    // Configurações — Usuarios do Sistema
+    Route::prefix('settings/users')->middleware('role:admin')->group(function () {
+        Route::get('/', [\App\Http\Controllers\UserSettingsController::class, 'index'])->name('settings.users.index');
+        Route::post('/', [\App\Http\Controllers\UserSettingsController::class, 'store'])->name('settings.users.store');
+        Route::put('/{user}', [\App\Http\Controllers\UserSettingsController::class, 'update'])->name('settings.users.update');
+        Route::delete('/{user}', [\App\Http\Controllers\UserSettingsController::class, 'destroy'])->name('settings.users.destroy');
+    });
 
     // Configurações — Operadores de Expedição
     Route::get('/settings/expedition-operators', fn () => view('settings.expedition-operators'))->name('settings.operators.index');

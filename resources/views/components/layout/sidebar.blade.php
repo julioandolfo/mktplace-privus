@@ -3,12 +3,19 @@
        :class="sidebarOpen ? 'w-64' : 'w-[4.5rem]'">
 
     {{-- Logo area --}}
+    @php $sidebarLogo = \App\Models\SystemSetting::get('general', 'logo_url'); @endphp
     <div class="flex items-center h-16 px-4 border-b border-zinc-800">
         <a href="{{ route('dashboard') }}" class="flex items-center gap-3 min-w-0">
-            <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center flex-shrink-0">
-                <span class="text-white font-bold text-sm">MP</span>
-            </div>
-            <span x-show="sidebarOpen" x-transition.opacity class="text-white font-semibold text-lg truncate">Privus</span>
+            @if($sidebarLogo)
+                <img src="{{ $sidebarLogo }}" alt="Logo" class="w-8 h-8 rounded-lg object-contain flex-shrink-0">
+            @else
+                <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center flex-shrink-0">
+                    <span class="text-white font-bold text-sm">MP</span>
+                </div>
+            @endif
+            <span x-show="sidebarOpen" x-transition.opacity class="text-white font-semibold text-lg truncate">
+                {{ \App\Models\SystemSetting::get('general', 'system_name', 'Privus') }}
+            </span>
         </a>
     </div>
 
@@ -139,10 +146,14 @@
 
     <div class="flex items-center justify-between h-16 px-4 border-b border-zinc-800">
         <a href="{{ route('dashboard') }}" class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
-                <span class="text-white font-bold text-sm">MP</span>
-            </div>
-            <span class="text-white font-semibold text-lg">Privus</span>
+            @if($sidebarLogo)
+                <img src="{{ $sidebarLogo }}" alt="Logo" class="w-8 h-8 rounded-lg object-contain">
+            @else
+                <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
+                    <span class="text-white font-bold text-sm">MP</span>
+                </div>
+            @endif
+            <span class="text-white font-semibold text-lg">{{ \App\Models\SystemSetting::get('general', 'system_name', 'Privus') }}</span>
         </a>
         <button @click="mobileSidebar = false" class="text-zinc-400 hover:text-white">
             <x-heroicon-o-x-mark class="w-5 h-5" />
