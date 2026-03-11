@@ -781,13 +781,45 @@ class MercadoLivreService
     }
 
     /**
-     * Envia o documento fiscal (NF-e) para a ML via Faturador ML.
-     * Para pedidos sem pack, usa /users/{user_id}/invoices/orders/{order_id}.
-     * Para packs, usa /packs/{pack_id}/fiscal_documents.
+     * Emite NF-e via Faturador integrado do Mercado Livre.
      *
-     * @param  string  $mlOrderId   ID externo do pedido no ML
-     * @param  string  $accessKey   Chave de acesso de 44 dígitos da NF-e
-     * @param  string|null  $packId Pack ID se aplicável
+     * Pré-requisitos: vendedor PJ com certificado digital A1 e Inscrição Estadual
+     * configurados no ML. O Faturador emite a NF-e diretamente na SEFAZ.
+     *
+     * @param  array  $orderIds  Um ou mais IDs de pedido ML para consolidar numa NF-e
+     * @return array  Resposta da API com id, status, access_key, invoice_number, etc.
+     *
+     * @see https://developers.mercadolivre.com.br/pt_br/api-fiscal-faturamento-de-venda
+     */
+    public function emitInvoice(array $orderIds): array
+    {
+        $sellerId = $this->requireShopId();
+
+        return $this->post("/users/{$sellerId}/invoices/orders", [
+            'orders' => array_map('intval', $orderIds),
+        ]);
+    }
+
+    /**
+     * Consulta o status de uma NF-e emitida pelo Faturador do ML.
+     *
+     * @param  string  $invoiceId  ID da invoice retornado pela emissão
+     * @return array   Dados da NF-e: status, access_key, danfe_url, etc.
+     */
+    public function getInvoice(string $invoiceId): array
+    {
+        $sellerId = $this->requireShopId();
+
+        return $this->get("/users/{$sellerId}/invoices/{$invoiceId}");
+    }
+
+    /**
+     * Envia documento fiscal (PDF/XML de NF-e já emitida) ao pack do ML.
+     * Usado para submeter NF-e emitida externamente (ex: Webmaniabr).
+     *
+     * @param  string       $packId     Pack ID do envio
+     * @param  string       $accessKey  Chave de acesso de 44 dígitos
+     * @param  string|null  $xmlPath    Caminho do XML da NF-e (opcional)
      */
     public function submitFiscalDocument(
         string $mlOrderId,
