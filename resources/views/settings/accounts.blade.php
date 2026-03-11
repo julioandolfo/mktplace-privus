@@ -34,11 +34,63 @@
                 @csrf @method('PUT')
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {{-- NF-e — Webmaniabr --}}
+                    {{-- Metodo de emissao NF-e --}}
+                    <div class="md:col-span-2">
+                        <label class="form-label">
+                            <x-heroicon-o-document-check class="w-4 h-4 inline mr-1" />
+                            Metodo de Emissao NF-e
+                        </label>
+                        @php $nfeMethod = $account->nfe_method ?? 'webmaniabr'; @endphp
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-1">
+                            <label class="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors
+                                {{ $nfeMethod === 'native' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300' }}">
+                                <input type="radio" name="nfe_method" value="native" {{ $nfeMethod === 'native' ? 'checked' : '' }}
+                                       class="text-primary-600 focus:ring-primary-500">
+                                <div>
+                                    <p class="text-sm font-medium">Nativa</p>
+                                    <p class="text-[10px] text-gray-400 dark:text-zinc-500">Via API do marketplace</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors
+                                {{ $nfeMethod === 'webmaniabr' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300' }}">
+                                <input type="radio" name="nfe_method" value="webmaniabr" {{ $nfeMethod === 'webmaniabr' ? 'checked' : '' }}
+                                       class="text-primary-600 focus:ring-primary-500">
+                                <div>
+                                    <p class="text-sm font-medium">Webmaniabr</p>
+                                    <p class="text-[10px] text-gray-400 dark:text-zinc-500">Emissao direta</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors
+                                {{ $nfeMethod === 'both' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300' }}">
+                                <input type="radio" name="nfe_method" value="both" {{ $nfeMethod === 'both' ? 'checked' : '' }}
+                                       class="text-primary-600 focus:ring-primary-500">
+                                <div>
+                                    <p class="text-sm font-medium">Ambos</p>
+                                    <p class="text-[10px] text-gray-400 dark:text-zinc-500">Nativa + contingencia</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors
+                                {{ $nfeMethod === 'none' ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300' }}">
+                                <input type="radio" name="nfe_method" value="none" {{ $nfeMethod === 'none' ? 'checked' : '' }}
+                                       class="text-primary-600 focus:ring-primary-500">
+                                <div>
+                                    <p class="text-sm font-medium">Desabilitado</p>
+                                    <p class="text-[10px] text-gray-400 dark:text-zinc-500">Sem emissao NF-e</p>
+                                </div>
+                            </label>
+                        </div>
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1.5">
+                            <strong>Nativa:</strong> submete chave de acesso ao marketplace (ML, Shopee).
+                            <strong>Webmaniabr:</strong> emite NF-e via Webmaniabr e submete automaticamente.
+                            <strong>Ambos:</strong> escolha na expedicao (nativa como padrao, Webmaniabr como contingencia).
+                        </p>
+                    </div>
+
+                    {{-- NF-e — Webmaniabr (contingencia) --}}
                     <div>
                         <label class="form-label">
                             <x-heroicon-o-document-text class="w-4 h-4 inline mr-1" />
-                            Conta Webmaniabr (NF-e)
+                            Conta Webmaniabr (NF-e / Contingencia)
                         </label>
                         <select name="webmania_account_id" class="form-input">
                             <option value="">— Nenhuma —</option>

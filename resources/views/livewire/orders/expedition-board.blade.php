@@ -266,8 +266,10 @@
                         $isMl     = $mktType === \App\Enums\MarketplaceType::MercadoLivre;
 
                         // Integrações vinculadas
-                        $hasWebmania = (bool) ($account?->webmania_account_id ?? false);
-                        $hasME       = (bool) ($account?->melhor_envios_account_id ?? false);
+                        $hasWebmania  = (bool) ($account?->webmania_account_id ?? false);
+                        $hasME        = (bool) ($account?->melhor_envios_account_id ?? false);
+                        $nfeMethod    = $account?->nfe_method ?? 'webmaniabr';
+                        $hasNfeMethod = $nfeMethod !== 'none' && ($hasWebmania || in_array($nfeMethod, ['native', 'both']));
 
                         // NF-e
                         $approvedNfe = $order->invoices
@@ -470,16 +472,16 @@
 
                                 if (!$isMl) {
                                     $genTotalSteps = 1; // Embalar
-                                    if ($hasWebmania) $genTotalSteps++; // + NF-e
-                                    if ($hasME)       $genTotalSteps++; // + Etiqueta ME
+                                    if ($hasNfeMethod) $genTotalSteps++; // + NF-e
+                                    if ($hasME)        $genTotalSteps++; // + Etiqueta ME
                                     $genTotalSteps++; // + Enviado
 
-                                    if ($isPrePack)                          $genStep = 1;
-                                    elseif ($hasWebmania && !$hasNfe)         $genStep = 2;
-                                    elseif ($hasWebmania && $pendingNfe)      $genStep = 2; // NF-e processando
-                                    elseif ($hasME && !$meLabel)             $genStep = $hasWebmania ? 3 : 2;
-                                    elseif ($isPacked || $isPartial)          $genStep = $genTotalSteps;
-                                    else                                      $genStep = $genTotalSteps;
+                                    if ($isPrePack)                           $genStep = 1;
+                                    elseif ($hasNfeMethod && !$hasNfe)         $genStep = 2;
+                                    elseif ($hasNfeMethod && $pendingNfe)      $genStep = 2; // NF-e processando
+                                    elseif ($hasME && !$meLabel)              $genStep = $hasNfeMethod ? 3 : 2;
+                                    elseif ($isPacked || $isPartial)           $genStep = $genTotalSteps;
+                                    else                                       $genStep = $genTotalSteps;
                                 }
                             @endphp
                             <td class="text-right pr-3">
@@ -494,8 +496,9 @@
                                         'genStep' => !$isMl ? ($genStep ?? 1) : null,
                                         'isMl'    => $isMl,
                                         'mlShippingId' => $mlShippingId,
-                                        'hasWebmania' => $hasWebmania ?? false,
-                                        'hasME'       => $hasME ?? false,
+                                        'hasWebmania'  => $hasWebmania ?? false,
+                                        'hasNfeMethod' => $hasNfeMethod ?? false,
+                                        'hasME'        => $hasME ?? false,
                                     ])
 
                                 @elseif($isShipped || $activeTab === 'shipped')
@@ -511,8 +514,9 @@
                                         'isMl'    => $isMl,
                                         'mlShippingId' => $mlShippingId,
                                         'isShipped' => true,
-                                        'hasWebmania' => $hasWebmania ?? false,
-                                        'hasME'       => $hasME ?? false,
+                                        'hasWebmania'  => $hasWebmania ?? false,
+                                        'hasNfeMethod' => $hasNfeMethod ?? false,
+                                        'hasME'        => $hasME ?? false,
                                     ])
 
                                 @elseif($isMl)
@@ -567,7 +571,8 @@
                                         'isMl'         => true,
                                         'mlShippingId' => $mlShippingId,
                                         'isShipped'    => false,
-                                        'hasWebmania'  => true,
+                                        'hasWebmania'  => $hasWebmania ?? false,
+                                        'hasNfeMethod' => true,
                                         'hasME'        => false,
                                     ])
 
@@ -575,8 +580,8 @@
                                     {{-- ──── PROGRESSO: dots para Genérico (dinâmico) ──── --}}
                                     @php
                                         $genLabels = ['Embalar'];
-                                        if ($hasWebmania) $genLabels[] = 'NF-e';
-                                        if ($hasME)       $genLabels[] = 'Etiqueta';
+                                        if ($hasNfeMethod) $genLabels[] = 'NF-e';
+                                        if ($hasME)        $genLabels[] = 'Etiqueta';
                                         $genLabels[] = 'Enviado';
                                     @endphp
                                     <div class="flex items-center gap-1" title="{{ implode(' → ', $genLabels) }}">
@@ -596,12 +601,12 @@
                                             <x-heroicon-o-clipboard-document-check class="w-3.5 h-3.5" />
                                             Conferir
                                         </button>
-                                    @elseif($hasWebmania && !$hasNfe && !$pendingNfe)
+                                    @elseif($hasNfeMethod && !$hasNfe && !$pendingNfe)
                                         <button wire:click="openNfeModal({{ $order->id }})" @click.stop class="btn-primary btn-xs">
                                             <x-heroicon-o-document-check class="w-3.5 h-3.5" />
                                             Emitir NF-e
                                         </button>
-                                    @elseif($hasWebmania && $pendingNfe)
+                                    @elseif($hasNfeMethod && $pendingNfe)
                                         <span class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
                                             <x-heroicon-o-arrow-path class="w-3.5 h-3.5 animate-spin" />
                                             NF-e processando
@@ -1228,10 +1233,10 @@
     @endif
 
     {{-- ============================================================
-         MODAL — Emissão NF-e (Webmaniabr)
+         MODAL — Emissão NF-e (Nativa / Webmaniabr)
     ============================================================ --}}
     @if($showNfeModal && $nfeOrderId)
-    @php $nfeOrder = \App\Models\Order::select('id','order_number','customer_name')->find($nfeOrderId); @endphp
+    @php $nfeOrder = \App\Models\Order::select('id','order_number','customer_name','external_id','meta')->find($nfeOrderId); @endphp
     <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
          @keydown.escape.window="$wire.closeNfeModal()">
         <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col"
@@ -1257,25 +1262,90 @@
 
             {{-- Corpo --}}
             <div class="overflow-y-auto flex-1 px-6 py-4 space-y-4">
-                <div>
-                    <label class="form-label">Natureza da Operação</label>
-                    <input type="text" wire:model="nfeNatureOp" class="form-input" placeholder="Venda">
-                </div>
-                <div>
-                    <label class="form-label">Informações ao Fisco <span class="text-gray-400 font-normal">(opcional)</span></label>
-                    <textarea wire:model="nfeInfoFisco" rows="2" class="form-input" placeholder="Informações adicionais ao fisco..."></textarea>
-                </div>
-                <div>
-                    <label class="form-label">Informações ao Consumidor <span class="text-gray-400 font-normal">(opcional)</span></label>
-                    <textarea wire:model="nfeInfoConsumer" rows="2" class="form-input" placeholder="Informações para o consumidor..."></textarea>
-                </div>
-                @include('livewire.orders._operator-select')
 
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" wire:model="nfeHomologation" id="nfe-homolog"
-                           class="rounded border-gray-300 dark:border-zinc-600 text-primary-600 focus:ring-primary-500">
-                    <label for="nfe-homolog" class="text-sm text-gray-700 dark:text-zinc-300">Emitir em homologação (teste)</label>
+                {{-- Seletor de metodo (quando conta suporta ambos) --}}
+                @if($nfeAccountMethod === 'both' || ($nfeIsMarketplaceNative && $nfeHasWebmania))
+                <div>
+                    <label class="form-label">Metodo de Emissao</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button"
+                                wire:click="$set('nfeMethod', 'native')"
+                                class="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-medium transition-all
+                                    {{ $nfeMethod === 'native'
+                                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400'
+                                        : 'border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300' }}">
+                            <x-heroicon-o-globe-alt class="w-4 h-4" />
+                            Nativa (Marketplace)
+                        </button>
+                        <button type="button"
+                                wire:click="$set('nfeMethod', 'webmaniabr')"
+                                class="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-medium transition-all
+                                    {{ $nfeMethod === 'webmaniabr'
+                                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400'
+                                        : 'border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300' }}">
+                            <x-heroicon-o-building-office class="w-4 h-4" />
+                            Webmaniabr
+                        </button>
+                    </div>
                 </div>
+                @elseif($nfeMethod === 'native')
+                <div class="flex items-center gap-2 text-sm text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 rounded-lg px-3 py-2">
+                    <x-heroicon-o-globe-alt class="w-4 h-4" />
+                    Emissao nativa via API do Marketplace
+                </div>
+                @endif
+
+                {{-- ═══ FORMULARIO: Emissao Nativa ═══ --}}
+                @if($nfeMethod === 'native')
+                <div class="space-y-4">
+                    <div class="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                        <p class="text-xs text-blue-700 dark:text-blue-300">
+                            <x-heroicon-o-information-circle class="w-4 h-4 inline mr-1" />
+                            Informe a chave de acesso da NF-e (44 digitos) para submeter diretamente ao marketplace.
+                            A NF-e deve ter sido emitida previamente pelo Faturador do marketplace ou outro sistema.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="form-label">Chave de Acesso da NF-e <span class="text-red-500">*</span></label>
+                        <input type="text" wire:model="nfeNativeAccessKey"
+                               class="form-input font-mono text-sm tracking-wider"
+                               placeholder="0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000"
+                               maxlength="60">
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">
+                            44 digitos. A chave sera submetida via API ao
+                            {{ $nfeIsMarketplaceNative ? 'marketplace' : 'sistema' }}.
+                        </p>
+                    </div>
+
+                    @include('livewire.orders._operator-select')
+                </div>
+                @endif
+
+                {{-- ═══ FORMULARIO: Webmaniabr ═══ --}}
+                @if($nfeMethod === 'webmaniabr')
+                <div class="space-y-4">
+                    <div>
+                        <label class="form-label">Natureza da Operação</label>
+                        <input type="text" wire:model="nfeNatureOp" class="form-input" placeholder="Venda">
+                    </div>
+                    <div>
+                        <label class="form-label">Informações ao Fisco <span class="text-gray-400 font-normal">(opcional)</span></label>
+                        <textarea wire:model="nfeInfoFisco" rows="2" class="form-input" placeholder="Informações adicionais ao fisco..."></textarea>
+                    </div>
+                    <div>
+                        <label class="form-label">Informações ao Consumidor <span class="text-gray-400 font-normal">(opcional)</span></label>
+                        <textarea wire:model="nfeInfoConsumer" rows="2" class="form-input" placeholder="Informações para o consumidor..."></textarea>
+                    </div>
+                    @include('livewire.orders._operator-select')
+
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" wire:model="nfeHomologation" id="nfe-homolog"
+                               class="rounded border-gray-300 dark:border-zinc-600 text-primary-600 focus:ring-primary-500">
+                        <label for="nfe-homolog" class="text-sm text-gray-700 dark:text-zinc-300">Emitir em homologação (teste)</label>
+                    </div>
+                </div>
+                @endif
 
                 @error('nfe')
                 <div class="flex items-start gap-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded-xl px-4 py-3 border border-red-200 dark:border-red-700">
@@ -1289,14 +1359,16 @@
             <div class="px-6 py-4 border-t border-gray-200 dark:border-zinc-700 flex items-center justify-between gap-3">
                 <button wire:click="closeNfeModal" class="btn-ghost btn-sm">Cancelar</button>
                 <div class="flex items-center gap-2">
+                    @if($nfeMethod === 'webmaniabr')
                     <button wire:click="emitNfe('preview')"
                             wire:loading.attr="disabled"
                             wire:target="emitNfe"
                             class="btn-secondary btn-sm"
                             @if($nfeLoading) disabled @endif>
                         <x-heroicon-o-eye class="w-4 h-4" />
-                        Pré-visualizar
+                        Pre-visualizar
                     </button>
+                    @endif
                     <button wire:click="emitNfe('emit')"
                             wire:loading.attr="disabled"
                             wire:target="emitNfe"
@@ -1304,9 +1376,11 @@
                             @if($nfeLoading) disabled @endif>
                         <span wire:loading.remove wire:target="emitNfe">
                             <x-heroicon-o-document-check class="w-4 h-4 inline" />
-                            Emitir NF-e
+                            {{ $nfeMethod === 'native' ? 'Submeter NF-e' : 'Emitir NF-e' }}
                         </span>
-                        <span wire:loading wire:target="emitNfe" class="text-sm">Emitindo...</span>
+                        <span wire:loading wire:target="emitNfe" class="text-sm">
+                            {{ $nfeMethod === 'native' ? 'Submetendo...' : 'Emitindo...' }}
+                        </span>
                     </button>
                 </div>
             </div>

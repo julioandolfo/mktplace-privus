@@ -8,14 +8,16 @@
       $mlShippingId  — string|null
       $isShipped     — bool
       $hasWebmania   — bool|null  (conta Webmaniabr vinculada)
+      $hasNfeMethod  — bool|null  (conta tem metodo NF-e configurado)
       $hasME         — bool|null  (conta Melhor Envios vinculada)
 --}}
 @php
-    $isShipped   ??= false;
-    $mlStep      ??= null;
-    $genStep     ??= null;
-    $hasWebmania ??= false;
-    $hasME       ??= false;
+    $isShipped    ??= false;
+    $mlStep       ??= null;
+    $genStep      ??= null;
+    $hasWebmania  ??= false;
+    $hasNfeMethod ??= $hasWebmania;
+    $hasME        ??= false;
 @endphp
 
 <div x-data="{
@@ -79,8 +81,8 @@
             </button>
             @endif
 
-            {{-- ── Emitir NF-e (via Webmaniabr) ── --}}
-            @if(!$isShipped && ($hasWebmania || $isMl))
+            {{-- ── Emitir NF-e ── --}}
+            @if(!$isShipped && ($hasNfeMethod || $isMl))
             <button wire:click="openNfeModal({{ $order->id }})"
                     @click="open = false"
                     class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-700">
