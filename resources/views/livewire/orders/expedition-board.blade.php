@@ -1,5 +1,62 @@
 <div x-data="{ showFilters: false }">
 
+    {{-- Flash messages dentro do Livewire --}}
+    @if (session('success'))
+    <div class="mb-4 p-4 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400" x-data="{ show: true }" x-show="show" x-transition>
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <x-heroicon-s-check-circle class="w-5 h-5" />
+                <span>{{ session('success') }}</span>
+            </div>
+            <button @click="show = false" class="text-emerald-500 hover:text-emerald-700">
+                <x-heroicon-s-x-mark class="w-4 h-4" />
+            </button>
+        </div>
+    </div>
+    @endif
+
+    @if (session('error'))
+    <div class="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400" x-data="{ show: true }" x-show="show" x-transition>
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <x-heroicon-s-exclamation-circle class="w-5 h-5" />
+                <span>{{ session('error') }}</span>
+            </div>
+            <button @click="show = false" class="text-red-500 hover:text-red-700">
+                <x-heroicon-s-x-mark class="w-4 h-4" />
+            </button>
+        </div>
+    </div>
+    @endif
+
+    @if (session('warning'))
+    <div class="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400" x-data="{ show: true }" x-show="show" x-transition>
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <x-heroicon-s-exclamation-triangle class="w-5 h-5" />
+                <span>{{ session('warning') }}</span>
+            </div>
+            <button @click="show = false" class="text-amber-500 hover:text-amber-700">
+                <x-heroicon-s-x-mark class="w-4 h-4" />
+            </button>
+        </div>
+    </div>
+    @endif
+
+    @if (session('info'))
+    <div class="mb-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400" x-data="{ show: true }" x-show="show" x-transition>
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <x-heroicon-s-information-circle class="w-5 h-5" />
+                <span>{{ session('info') }}</span>
+            </div>
+            <button @click="show = false" class="text-blue-500 hover:text-blue-700">
+                <x-heroicon-s-x-mark class="w-4 h-4" />
+            </button>
+        </div>
+    </div>
+    @endif
+
     {{-- ============================================================
          Saldo Melhor Envios
     ============================================================ --}}

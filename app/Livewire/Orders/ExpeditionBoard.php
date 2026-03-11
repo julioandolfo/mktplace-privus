@@ -584,8 +584,13 @@ class ExpeditionBoard extends Component
         $order = $this->scopedOrder($orderId);
         $account = $order->marketplaceAccount;
 
-        if (! $account?->webmania_account_id) {
-            session()->flash('error', 'Nenhuma conta Webmaniabr vinculada a este canal.');
+        if (! $account) {
+            session()->flash('error', 'Este pedido nao possui conta de marketplace vinculada.');
+            return;
+        }
+
+        if (! $account->webmania_account_id) {
+            session()->flash('error', 'Nenhuma conta Webmaniabr vinculada a conta "' . ($account->account_name ?? 'sem nome') . '". Vincule em Configuracoes > Contas & Expedicao.');
             return;
         }
 
