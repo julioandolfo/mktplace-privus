@@ -62,8 +62,9 @@ class ExpeditionBoard extends Component
     public bool   $nfeHasWebmania   = false;
     public bool   $nfeIsMarketplaceNative = false; // conta suporta emissao nativa
     public array  $nfeFiscalPending = []; // itens do pedido sem dados fiscais [{item_id, ml_item_id, name, sku}]
-    public array  $nfeFiscalForm    = []; // form data por ml_item_id => {ncm, origin_type, origin_detail, cost, sku, title}
+    public array  $nfeFiscalForm    = []; // form data por ml_item_id => {ncm, origin_type, origin_detail, cost, sku, title, tax_rule_id}
     public bool   $nfeFiscalChecking = false;
+    public array  $nfeTaxRules      = []; // regras tributarias do vendedor [{id, description}]
     public string $nfeNatureOp      = 'Venda';
     public string $nfeInfoFisco     = '';
     public string $nfeInfoConsumer  = '';
@@ -660,6 +661,24 @@ class ExpeditionBoard extends Component
 
         try {
             $service = new \App\Services\Marketplaces\MercadoLivreService($account);
+
+            // Buscar regras tributarias do vendedor (Regime Normal)
+            try {
+                $rulesResponse = $service->getTaxRules();
+                $this->nfeTaxRules = collect($rulesResponse['results'] ?? $rulesResponse)
+                    ->map(fn ($r) => [
+                        'id'          => $r['id'] ?? '',
+                        'description' => $r['description'] ?? $r['name'] ?? ('Regra #' . ($r['id'] ?? '?')),
+                    ])
+                    ->values()
+                    ->toArray();
+            } catch (\Throwable $e) {
+                Log::info("getTaxRules: " . $e->getMessage());
+                $this->nfeTaxRules = [];
+            }
+
+            $defaultTaxRuleId = ! empty($this->nfeTaxRules) ? (string) $this->nfeTaxRules[0]['id'] : '';
+
             $pending = [];
             $form    = [];
 
@@ -678,6 +697,8 @@ class ExpeditionBoard extends Component
 
                     if (empty($fiscal) || empty($fiscal['sku']) || ! ($canInvoice['can_invoice'] ?? false)) {
                         $product = $item->product;
+                        // Pré-preencher com dados existentes do fiscal (parcial) se houver
+                        $existingTaxInfo = $fiscal['tax_information'] ?? [];
                         $pending[] = [
                             'ml_item_id' => $mlItemId,
                             'name'       => $item->name,
@@ -685,17 +706,17 @@ class ExpeditionBoard extends Component
                             'item_id'    => $item->id,
                         ];
                         $form[$mlItemId] = [
-                            'sku'           => $item->sku ?? $product?->sku ?? $mlItemId,
-                            'title'         => $item->name ?? '',
-                            'cost'          => (string) ($product?->cost ?? $item->unit_price ?? '0'),
-                            'ncm'           => $product?->ncm ?? '',
-                            'origin_type'   => 'reseller',
-                            'origin_detail' => '0',
+                            'sku'           => $fiscal['sku'] ?? $item->sku ?? $product?->sku ?? $mlItemId,
+                            'title'         => $fiscal['title'] ?? $item->name ?? '',
+                            'cost'          => (string) ($fiscal['cost'] ?? $product?->cost ?? $item->unit_price ?? '0'),
+                            'ncm'           => $existingTaxInfo['ncm'] ?? $product?->ncm ?? '',
+                            'origin_type'   => $existingTaxInfo['origin_type'] ?? 'reseller',
+                            'origin_detail' => (string) ($existingTaxInfo['origin_detail'] ?? '0'),
+                            'tax_rule_id'   => (string) ($existingTaxInfo['tax_rule_id'] ?? $defaultTaxRuleId),
                         ];
                     }
                 } catch (\Throwable $e) {
                     Log::warning("checkFiscalData item {$mlItemId}: " . $e->getMessage());
-                    // Considerar como pendente em caso de erro
                     $product = $item->product;
                     $pending[] = [
                         'ml_item_id' => $mlItemId,
@@ -710,6 +731,7 @@ class ExpeditionBoard extends Component
                         'ncm'           => $product?->ncm ?? '',
                         'origin_type'   => 'reseller',
                         'origin_detail' => '0',
+                        'tax_rule_id'   => $defaultTaxRuleId,
                     ];
                 }
             }
@@ -763,17 +785,24 @@ class ExpeditionBoard extends Component
                 continue;
             }
 
+            $taxInfo = [
+                'ncm'           => $formData['ncm'],
+                'origin_type'   => $formData['origin_type'] ?? 'reseller',
+                'origin_detail' => $formData['origin_detail'] ?? '0',
+            ];
+
+            // Regra tributaria (Regime Normal) — opcional
+            if (! empty($formData['tax_rule_id'])) {
+                $taxInfo['tax_rule_id'] = $formData['tax_rule_id'];
+            }
+
             $payload = [
                 'sku'              => $formData['sku'],
                 'title'            => $formData['title'],
                 'type'             => 'single',
                 'cost'             => (float) $formData['cost'],
                 'measurement_unit' => 'UN',
-                'tax_information'  => [
-                    'ncm'           => $formData['ncm'],
-                    'origin_type'   => $formData['origin_type'] ?? 'reseller',
-                    'origin_detail' => $formData['origin_detail'] ?? '0',
-                ],
+                'tax_information'  => $taxInfo,
             ];
 
             try {
@@ -972,6 +1001,7 @@ class ExpeditionBoard extends Component
         $this->nfeFiscalPending    = [];
         $this->nfeFiscalForm       = [];
         $this->nfeFiscalChecking   = false;
+        $this->nfeTaxRules         = [];
         $this->nfeLoading          = false;
         $this->resetErrorBag();
     }
