@@ -890,6 +890,7 @@ PROMPT;
         }
 
         // Re-verificar dados fiscais (com pequeno delay para API do ML processar)
+        $savedForm = $this->nfeFiscalForm; // preservar dados preenchidos pelo usuario
         usleep(500_000); // 500ms
         $this->checkFiscalData($order, $account);
         $this->nfeLoading = false;
@@ -899,7 +900,12 @@ PROMPT;
             $this->nfeFiscalMessage = 'Dados fiscais salvos com sucesso! Agora voce pode emitir a NF-e.';
             session()->flash('success', 'Dados fiscais salvos com sucesso. Agora voce pode emitir a NF-e.');
         } else {
-            // Dados foram enviados sem erro, mas a API do ML ainda nao processou
+            // Restaurar dados preenchidos pelo usuario para nao perder o que digitou
+            foreach ($savedForm as $mlId => $data) {
+                if (isset($this->nfeFiscalForm[$mlId])) {
+                    $this->nfeFiscalForm[$mlId] = $data;
+                }
+            }
             $this->nfeFiscalSuccess = true;
             $this->nfeFiscalMessage = 'Dados fiscais enviados ao Mercado Livre. A API pode demorar alguns segundos para processar. Tente emitir a NF-e ou clique em "Salvar" novamente.';
         }
