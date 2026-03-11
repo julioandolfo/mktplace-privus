@@ -539,9 +539,14 @@
                                             Conferir
                                         </button>
                                     @elseif($mlStep === 2)
-                                        <button wire:click="openNfeModal({{ $order->id }})" @click.stop class="btn-primary btn-xs">
-                                            <x-heroicon-o-document-check class="w-3.5 h-3.5" />
-                                            Emitir NF-e
+                                        <button wire:click="openNfeModal({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="openNfeModal({{ $order->id }})"
+                                                @click.stop class="btn-primary btn-xs">
+                                            <x-heroicon-o-document-check class="w-3.5 h-3.5" wire:loading.remove wire:target="openNfeModal({{ $order->id }})" />
+                                            <svg wire:loading wire:target="openNfeModal({{ $order->id }})" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/></svg>
+                                            <span wire:loading.remove wire:target="openNfeModal({{ $order->id }})">Emitir NF-e</span>
+                                            <span wire:loading wire:target="openNfeModal({{ $order->id }})">Abrindo...</span>
                                         </button>
                                     @elseif($mlStep === 3)
                                         <span class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
@@ -602,9 +607,14 @@
                                             Conferir
                                         </button>
                                     @elseif($hasNfeMethod && !$hasNfe && !$pendingNfe)
-                                        <button wire:click="openNfeModal({{ $order->id }})" @click.stop class="btn-primary btn-xs">
-                                            <x-heroicon-o-document-check class="w-3.5 h-3.5" />
-                                            Emitir NF-e
+                                        <button wire:click="openNfeModal({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="openNfeModal({{ $order->id }})"
+                                                @click.stop class="btn-primary btn-xs">
+                                            <x-heroicon-o-document-check class="w-3.5 h-3.5" wire:loading.remove wire:target="openNfeModal({{ $order->id }})" />
+                                            <svg wire:loading wire:target="openNfeModal({{ $order->id }})" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/></svg>
+                                            <span wire:loading.remove wire:target="openNfeModal({{ $order->id }})">Emitir NF-e</span>
+                                            <span wire:loading wire:target="openNfeModal({{ $order->id }})">Abrindo...</span>
                                         </button>
                                     @elseif($hasNfeMethod && $pendingNfe)
                                         <span class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
