@@ -43,6 +43,11 @@ class ProductForm extends Component
     // Expedition bonus
     public string $expedition_points = '';
 
+    // Flags de processo
+    public bool $requires_production = false;
+    public bool $requires_artwork    = false;
+    public bool $requires_purchase   = false;
+
     // Fiscal
     public string $ncm = '';
     public string $cest = '';
@@ -83,6 +88,9 @@ class ProductForm extends Component
             $this->height = (string) ($product->height ?? '');
             $this->length = (string) ($product->length ?? '');
             $this->expedition_points = (string) ($product->expedition_points ?? '');
+            $this->requires_production = (bool) $product->requires_production;
+            $this->requires_artwork    = (bool) $product->requires_artwork;
+            $this->requires_purchase   = (bool) $product->requires_purchase;
 
             $this->variants = $product->variants->map(fn ($v) => [
                 'id' => $v->id,
@@ -162,6 +170,9 @@ class ProductForm extends Component
             'height' => 'nullable|numeric|min:0',
             'length' => 'nullable|numeric|min:0',
             'expedition_points' => 'nullable|integer|min:0',
+            'requires_production' => 'boolean',
+            'requires_artwork' => 'boolean',
+            'requires_purchase' => 'boolean',
             'ncm' => 'nullable|string|max:10',
             'ean_gtin' => 'nullable|string|max:14',
             'variants.*.sku' => 'required_if:type,variable|string|max:100',

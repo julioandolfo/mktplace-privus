@@ -84,6 +84,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/expedition/bonuses', fn () => view('expedition.bonuses'))->name('expedition.bonuses');
 
+    // Compras
+    Route::get('/purchases', fn () => view('purchases.index'))->name('purchases.index');
+    Route::get('/purchases/suppliers', fn () => view('purchases.suppliers'))->name('purchases.suppliers');
+
     // Packing (conferência de embalagem)
     Route::get('/orders/{order}/pack', \App\Livewire\Orders\PackingScreen::class)->name('orders.pack');
     Route::post('/orders/{order}/mark-packed', [\App\Http\Controllers\OrderDispatchController::class, 'markPacked'])->name('orders.mark-packed');
