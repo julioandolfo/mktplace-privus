@@ -61,11 +61,6 @@
                     <x-heroicon-o-document-text class="w-5 h-5" />
                     Webmaniabr (NF-e)
                 </a>
-                <a href="{{ route('settings.accounts.index') }}"
-                   class="{{ $navBtn }} {{ request()->routeIs('settings.accounts.*') ? $navActive : $navInactive }}">
-                    <x-heroicon-o-link class="w-5 h-5" />
-                    Contas &amp; Expedição
-                </a>
                 <a href="{{ route('settings.operators.index') }}"
                    class="{{ $navBtn }} {{ request()->routeIs('settings.operators.*') ? $navActive : $navInactive }}">
                     <x-heroicon-o-user-group class="w-5 h-5" />

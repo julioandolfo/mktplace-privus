@@ -186,6 +186,126 @@
                         </div>
                     </div>
                 </x-ui.card>
+
+                {{-- NF-e & Expedicao --}}
+                <x-ui.card title="NF-e & Expedicao">
+                    <div class="space-y-5">
+                        {{-- Metodo de emissao NF-e --}}
+                        <div>
+                            <label class="form-label">
+                                <x-heroicon-o-document-check class="w-4 h-4 inline mr-1" />
+                                Metodo de Emissao NF-e
+                            </label>
+                            @php $nfeMethod = $hasErrors ? old('nfe_method', 'webmaniabr') : ($marketplace->nfe_method ?? 'webmaniabr'); @endphp
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-1">
+                                @foreach([
+                                    ['native', 'Nativa', 'Via API do marketplace'],
+                                    ['webmaniabr', 'Webmaniabr', 'Emissao direta'],
+                                    ['both', 'Ambos', 'Nativa + contingencia'],
+                                    ['none', 'Desabilitado', 'Sem emissao NF-e'],
+                                ] as [$val, $lbl, $hint])
+                                <label class="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors
+                                    {{ $nfeMethod === $val ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300' }}">
+                                    <input type="radio" name="nfe_method" value="{{ $val }}" {{ $nfeMethod === $val ? 'checked' : '' }}
+                                           class="text-primary-600 focus:ring-primary-500">
+                                    <div>
+                                        <p class="text-sm font-medium">{{ $lbl }}</p>
+                                        <p class="text-[10px] text-gray-400 dark:text-zinc-500">{{ $hint }}</p>
+                                    </div>
+                                </label>
+                                @endforeach
+                            </div>
+                            <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1.5">
+                                <strong>Nativa:</strong> submete chave de acesso ao marketplace.
+                                <strong>Webmaniabr:</strong> emite NF-e e submete automaticamente.
+                                <strong>Ambos:</strong> nativa como padrao, Webmaniabr como contingencia.
+                            </p>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {{-- Webmaniabr --}}
+                            <div>
+                                <label class="form-label">
+                                    <x-heroicon-o-document-text class="w-4 h-4 inline mr-1" />
+                                    Conta Webmaniabr (NF-e / Contingencia)
+                                </label>
+                                <select name="webmania_account_id" class="form-input">
+                                    <option value="">— Nenhuma —</option>
+                                    @foreach($webmaniaAccounts as $wa)
+                                    <option value="{{ $wa->id }}"
+                                            {{ ($hasErrors ? old('webmania_account_id') : $marketplace->webmania_account_id) == $wa->id ? 'selected' : '' }}>
+                                        {{ $wa->name }}
+                                    </option>
+                                    @endforeach
+                                </select>
+                                @if($webmaniaAccounts->isEmpty())
+                                <p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                    <a href="{{ route('settings.webmania.create') }}" class="underline">Criar conta Webmaniabr</a>
+                                </p>
+                                @endif
+                            </div>
+
+                            {{-- Melhor Envios --}}
+                            <div>
+                                <label class="form-label">
+                                    <x-heroicon-o-truck class="w-4 h-4 inline mr-1" />
+                                    Conta Melhor Envios
+                                </label>
+                                <select name="melhor_envios_account_id" class="form-input">
+                                    <option value="">— Nenhuma —</option>
+                                    @foreach($melhorEnviosAccounts as $me)
+                                    <option value="{{ $me->id }}"
+                                            {{ ($hasErrors ? old('melhor_envios_account_id') : $marketplace->melhor_envios_account_id) == $me->id ? 'selected' : '' }}>
+                                        {{ $me->name }}
+                                    </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        {{-- WooCommerce status --}}
+                        @if($marketplace->marketplace_type->value === 'woocommerce')
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-200 dark:border-zinc-700">
+                            <div>
+                                <label class="form-label">Status "Pronto para Envio" (WooCommerce)</label>
+                                <input type="text" name="woo_ready_to_ship_status"
+                                       value="{{ $hasErrors ? old('woo_ready_to_ship_status') : ($settings['woo_ready_to_ship_status'] ?? '') }}"
+                                       placeholder="Ex: processing" class="form-input font-mono text-sm">
+                            </div>
+                            <div>
+                                <label class="form-label">Status "Enviado" (WooCommerce)</label>
+                                <input type="text" name="woo_shipped_status"
+                                       value="{{ $hasErrors ? old('woo_shipped_status') : ($settings['woo_shipped_status'] ?? '') }}"
+                                       placeholder="Ex: completed" class="form-input font-mono text-sm">
+                            </div>
+                        </div>
+                        @endif
+
+                        {{-- Expedition settings --}}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-200 dark:border-zinc-700">
+                            <div>
+                                <label class="form-label">Formato de etiqueta de volume</label>
+                                <select name="expedition_label_format" class="form-input">
+                                    <option value="a4" {{ (($settings['expedition_label_format'] ?? 'a4') === 'a4') ? 'selected' : '' }}>
+                                        A4 (2 etiquetas por folha)
+                                    </option>
+                                    <option value="a6" {{ (($settings['expedition_label_format'] ?? '') === 'a6') ? 'selected' : '' }}>
+                                        A6 (termica / zebra)
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="flex items-center gap-3 pt-6">
+                                <input type="hidden" name="expedition_check_packing" value="0">
+                                <input type="checkbox" id="check_packing" name="expedition_check_packing" value="1"
+                                       {{ ($settings['expedition_check_packing'] ?? false) ? 'checked' : '' }}
+                                       class="rounded border-gray-300 dark:border-zinc-600 text-primary-600">
+                                <label for="check_packing" class="text-sm">
+                                    Exigir conferencia de embalagem antes de liberar etiqueta
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </x-ui.card>
             </div>
 
             {{-- Sidebar --}}
