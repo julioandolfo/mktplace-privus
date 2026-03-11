@@ -1298,22 +1298,115 @@
                 {{-- ═══ FORMULARIO: Emissao Nativa (Faturador ML) ═══ --}}
                 @if($nfeMethod === 'native')
                 <div class="space-y-4">
+
+                    {{-- Verificando dados fiscais... --}}
+                    @if($nfeFiscalChecking)
+                    <div class="flex items-center gap-2 text-sm text-gray-500 dark:text-zinc-400 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-lg">
+                        <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/>
+                            <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/>
+                        </svg>
+                        Verificando dados fiscais dos itens...
+                    </div>
+
+                    {{-- Dados fiscais PENDENTES --}}
+                    @elseif(!empty($nfeFiscalPending))
+                    <div class="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                        <p class="text-sm font-medium text-amber-700 dark:text-amber-300">
+                            <x-heroicon-o-exclamation-triangle class="w-4 h-4 inline mr-1" />
+                            {{ count($nfeFiscalPending) }} item(ns) sem dados fiscais
+                        </p>
+                        <p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                            Preencha os dados fiscais abaixo para habilitar a emissao de NF-e via Faturador do Mercado Livre.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4">
+                        @foreach($nfeFiscalPending as $idx => $pendingItem)
+                        @php $mlId = $pendingItem['ml_item_id']; @endphp
+                        <div class="p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <p class="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                    {{ $pendingItem['name'] }}
+                                </p>
+                                <span class="text-[10px] font-mono text-gray-400 dark:text-zinc-500">{{ $mlId }}</span>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-[10px] text-gray-500 dark:text-zinc-400">SKU Fiscal *</label>
+                                    <input type="text" wire:model="nfeFiscalForm.{{ $mlId }}.sku"
+                                           class="form-input text-xs font-mono py-1.5">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-500 dark:text-zinc-400">Custo (R$) *</label>
+                                    <input type="number" wire:model="nfeFiscalForm.{{ $mlId }}.cost"
+                                           step="0.01" min="0" class="form-input text-xs py-1.5">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="text-[10px] text-gray-500 dark:text-zinc-400">Descricao NF-e *</label>
+                                <input type="text" wire:model="nfeFiscalForm.{{ $mlId }}.title"
+                                       class="form-input text-xs py-1.5">
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label class="text-[10px] text-gray-500 dark:text-zinc-400">NCM * (8 dig.)</label>
+                                    <input type="text" wire:model="nfeFiscalForm.{{ $mlId }}.ncm"
+                                           maxlength="8" placeholder="00000000"
+                                           class="form-input text-xs font-mono py-1.5">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-500 dark:text-zinc-400">Origem</label>
+                                    <select wire:model="nfeFiscalForm.{{ $mlId }}.origin_type"
+                                            class="form-input text-xs py-1.5">
+                                        <option value="manufacturer">Fabricante</option>
+                                        <option value="reseller">Revendedor</option>
+                                        <option value="imported">Importado</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-gray-500 dark:text-zinc-400">Cod. Origem</label>
+                                    <select wire:model="nfeFiscalForm.{{ $mlId }}.origin_detail"
+                                            class="form-input text-xs py-1.5">
+                                        <option value="0">0 - Nacional</option>
+                                        <option value="1">1 - Imp. direta</option>
+                                        <option value="2">2 - Adq. interno</option>
+                                        <option value="3">3 - Nac. >40%</option>
+                                        <option value="5">5 - Nac. <40%</option>
+                                        <option value="8">8 - Nac. >70%</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+
+                    <button wire:click="saveFiscalData"
+                            wire:loading.attr="disabled"
+                            wire:target="saveFiscalData"
+                            class="btn-primary btn-sm w-full"
+                            @if($nfeLoading) disabled @endif>
+                        <span wire:loading.remove wire:target="saveFiscalData">
+                            <x-heroicon-o-cloud-arrow-up class="w-4 h-4 inline" />
+                            Salvar Dados Fiscais
+                        </span>
+                        <span wire:loading wire:target="saveFiscalData" class="text-sm">
+                            Salvando...
+                        </span>
+                    </button>
+
+                    {{-- Dados fiscais OK --}}
+                    @else
                     <div class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                         <p class="text-sm text-green-700 dark:text-green-300">
                             <x-heroicon-o-check-circle class="w-4 h-4 inline mr-1" />
                             A NF-e sera emitida diretamente na <strong>SEFAZ</strong> pelo Faturador integrado do Mercado Livre.
                         </p>
                     </div>
-
-                    <div class="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50 border border-gray-200 dark:border-zinc-700 space-y-2">
-                        <p class="text-xs font-medium text-gray-600 dark:text-zinc-400">Pre-requisitos (configurados no ML):</p>
-                        <ul class="text-xs text-gray-500 dark:text-zinc-500 space-y-1 list-disc list-inside">
-                            <li>Empresa cadastrada como Pessoa Juridica</li>
-                            <li>Inscricao Estadual atualizada</li>
-                            <li>Certificado Digital A1 configurado</li>
-                            <li>Dados fiscais dos produtos preenchidos</li>
-                        </ul>
-                    </div>
+                    @endif
 
                     @include('livewire.orders._operator-select')
                 </div>
@@ -1370,7 +1463,7 @@
                             wire:loading.attr="disabled"
                             wire:target="emitNfe"
                             class="btn-primary btn-sm"
-                            @if($nfeLoading) disabled @endif>
+                            @if($nfeLoading || !empty($nfeFiscalPending)) disabled @endif>
                         <span wire:loading.remove wire:target="emitNfe">
                             <x-heroicon-o-document-check class="w-4 h-4 inline" />
                             Emitir NF-e
