@@ -1426,6 +1426,7 @@
                         @endforeach
                     </div>
 
+                    @if(!$nfeFiscalProcessing)
                     <button wire:click="saveFiscalData"
                             wire:loading.attr="disabled"
                             wire:target="saveFiscalData"
@@ -1436,12 +1437,44 @@
                             Salvar Dados Fiscais
                         </span>
                         <span wire:loading wire:target="saveFiscalData" class="text-sm">
-                            Salvando...
+                            Enviando ao Mercado Livre...
                         </span>
                     </button>
+                    @endif
 
-                    {{-- Feedback de salvamento fiscal --}}
-                    @if($nfeFiscalMessage)
+                    {{-- Estado: Processando (aguardando ML) --}}
+                    @if($nfeFiscalProcessing)
+                    <div wire:poll.5s="recheckFiscalData"
+                         class="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 space-y-3">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5 text-blue-500 animate-spin" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/>
+                                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/>
+                            </svg>
+                            <p class="text-sm font-medium text-blue-700 dark:text-blue-300">
+                                Dados enviados! Aguardando o Mercado Livre processar...
+                            </p>
+                        </div>
+                        <p class="text-xs text-blue-600 dark:text-blue-400">
+                            Verificando automaticamente a cada 5 segundos. Voce pode fechar este modal e voltar depois.
+                        </p>
+                        <button wire:click="recheckFiscalData"
+                                wire:loading.attr="disabled"
+                                wire:target="recheckFiscalData"
+                                class="btn-secondary btn-sm w-full justify-center">
+                            <span wire:loading.remove wire:target="recheckFiscalData" class="flex items-center gap-1">
+                                <x-heroicon-o-arrow-path class="w-3.5 h-3.5" />
+                                Verificar agora
+                            </span>
+                            <span wire:loading wire:target="recheckFiscalData" class="text-sm">
+                                Verificando...
+                            </span>
+                        </button>
+                    </div>
+                    @endif
+
+                    {{-- Feedback de resultado --}}
+                    @if($nfeFiscalMessage && !$nfeFiscalProcessing)
                     <div class="mt-2 p-3 rounded-lg text-sm {{ $nfeFiscalSuccess
                         ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
                         : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300' }}">
