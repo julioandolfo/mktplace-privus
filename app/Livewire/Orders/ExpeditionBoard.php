@@ -61,6 +61,9 @@ class ExpeditionBoard extends Component
     public string $nfeAccountMethod = 'webmaniabr'; // metodo configurado na conta
     public bool   $nfeHasWebmania   = false;
     public bool   $nfeIsMarketplaceNative = false; // conta suporta emissao nativa
+    public array  $nfeFiscalPending = []; // itens do pedido sem dados fiscais [{item_id, ml_item_id, name, sku}]
+    public array  $nfeFiscalForm    = []; // form data por ml_item_id => {ncm, origin_type, origin_detail, cost, sku, title}
+    public bool   $nfeFiscalChecking = false;
     public string $nfeNatureOp      = 'Venda';
     public string $nfeInfoFisco     = '';
     public string $nfeInfoConsumer  = '';
@@ -628,6 +631,9 @@ class ExpeditionBoard extends Component
         $this->nfeAccountMethod    = $accountMethod;
         $this->nfeHasWebmania      = $hasWebmania;
         $this->nfeIsMarketplaceNative = $supportsNative;
+        $this->nfeFiscalPending    = [];
+        $this->nfeFiscalForm       = [];
+        $this->nfeFiscalChecking   = false;
         $this->nfeNatureOp         = 'Venda';
         $this->nfeInfoFisco        = '';
         $this->nfeInfoConsumer     = '';
@@ -636,11 +642,181 @@ class ExpeditionBoard extends Component
         $this->showNfeModal        = true;
         $this->preselectOperator();
         $this->resetErrorBag();
+
+        // Para emissao nativa ML, verificar dados fiscais dos itens
+        if ($isMl && in_array($defaultMethod, ['native', 'both'])) {
+            $this->checkFiscalData($order, $account);
+        }
+    }
+
+    /**
+     * Verifica dados fiscais dos itens do pedido via API do ML.
+     * Itens sem dados fiscais sao listados em $nfeFiscalPending.
+     */
+    protected function checkFiscalData(Order $order, MarketplaceAccount $account): void
+    {
+        $this->nfeFiscalChecking = true;
+        $order->load(['items.product']);
+
+        try {
+            $service = new \App\Services\Marketplaces\MercadoLivreService($account);
+            $pending = [];
+            $form    = [];
+
+            // Coletar ml_item_ids unicos dos itens do pedido
+            $checkedItems = [];
+            foreach ($order->items as $item) {
+                $mlItemId = $item->meta['ml_item_id'] ?? null;
+                if (! $mlItemId || isset($checkedItems[$mlItemId])) {
+                    continue;
+                }
+                $checkedItems[$mlItemId] = true;
+
+                try {
+                    $fiscal = $service->getItemFiscalData($mlItemId);
+                    $canInvoice = $service->canInvoiceItem($mlItemId);
+
+                    if (empty($fiscal) || empty($fiscal['sku']) || ! ($canInvoice['can_invoice'] ?? false)) {
+                        $product = $item->product;
+                        $pending[] = [
+                            'ml_item_id' => $mlItemId,
+                            'name'       => $item->name,
+                            'sku'        => $item->sku ?? $product?->sku ?? '',
+                            'item_id'    => $item->id,
+                        ];
+                        $form[$mlItemId] = [
+                            'sku'           => $item->sku ?? $product?->sku ?? $mlItemId,
+                            'title'         => $item->name ?? '',
+                            'cost'          => (string) ($product?->cost ?? $item->unit_price ?? '0'),
+                            'ncm'           => $product?->ncm ?? '',
+                            'origin_type'   => 'reseller',
+                            'origin_detail' => '0',
+                        ];
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("checkFiscalData item {$mlItemId}: " . $e->getMessage());
+                    // Considerar como pendente em caso de erro
+                    $product = $item->product;
+                    $pending[] = [
+                        'ml_item_id' => $mlItemId,
+                        'name'       => $item->name,
+                        'sku'        => $item->sku ?? $product?->sku ?? '',
+                        'item_id'    => $item->id,
+                    ];
+                    $form[$mlItemId] = [
+                        'sku'           => $item->sku ?? $product?->sku ?? $mlItemId,
+                        'title'         => $item->name ?? '',
+                        'cost'          => (string) ($product?->cost ?? $item->unit_price ?? '0'),
+                        'ncm'           => $product?->ncm ?? '',
+                        'origin_type'   => 'reseller',
+                        'origin_detail' => '0',
+                    ];
+                }
+            }
+
+            $this->nfeFiscalPending = $pending;
+            $this->nfeFiscalForm    = $form;
+        } catch (\Throwable $e) {
+            Log::error("checkFiscalData order #{$order->id}: " . $e->getMessage());
+        } finally {
+            $this->nfeFiscalChecking = false;
+        }
+    }
+
+    /**
+     * Salva dados fiscais pendentes via API do ML e re-verifica.
+     * Chamado pelo formulário de dados fiscais no modal de NF-e.
+     */
+    public function saveFiscalData(): void
+    {
+        if (! $this->nfeOrderId || empty($this->nfeFiscalPending)) {
+            return;
+        }
+
+        $this->nfeLoading = true;
+        $order   = $this->scopedOrder($this->nfeOrderId);
+        $account = $order->marketplaceAccount;
+
+        if (! $account) {
+            $this->nfeLoading = false;
+            return;
+        }
+
+        $service = new \App\Services\Marketplaces\MercadoLivreService($account);
+        $errors  = [];
+
+        foreach ($this->nfeFiscalPending as $item) {
+            $mlItemId = $item['ml_item_id'];
+            $formData = $this->nfeFiscalForm[$mlItemId] ?? null;
+
+            if (! $formData) {
+                continue;
+            }
+
+            // Validar campos obrigatorios
+            if (empty($formData['ncm']) || strlen($formData['ncm']) !== 8) {
+                $errors[] = "{$item['name']}: NCM deve ter 8 digitos.";
+                continue;
+            }
+            if (empty($formData['cost']) || (float) $formData['cost'] <= 0) {
+                $errors[] = "{$item['name']}: Custo deve ser maior que zero.";
+                continue;
+            }
+
+            $payload = [
+                'sku'              => $formData['sku'],
+                'title'            => $formData['title'],
+                'type'             => 'single',
+                'cost'             => (float) $formData['cost'],
+                'measurement_unit' => 'UN',
+                'tax_information'  => [
+                    'ncm'           => $formData['ncm'],
+                    'origin_type'   => $formData['origin_type'] ?? 'reseller',
+                    'origin_detail' => $formData['origin_detail'] ?? '0',
+                ],
+            ];
+
+            try {
+                $service->createFiscalData($payload);
+                $service->linkFiscalDataToItem($formData['sku'], $mlItemId);
+            } catch (\Throwable $e) {
+                // Se ja existe, tentar atualizar
+                if (str_contains($e->getMessage(), '400') || str_contains($e->getMessage(), 'already')) {
+                    try {
+                        $service->updateFiscalData($formData['sku'], $payload);
+                    } catch (\Throwable $e2) {
+                        $errors[] = "{$item['name']}: " . $e2->getMessage();
+                    }
+                } else {
+                    $errors[] = "{$item['name']}: " . $e->getMessage();
+                }
+            }
+        }
+
+        if (! empty($errors)) {
+            $this->addError('nfe', implode("\n", $errors));
+            $this->nfeLoading = false;
+            return;
+        }
+
+        // Re-verificar dados fiscais
+        $this->checkFiscalData($order, $account);
+        $this->nfeLoading = false;
+
+        if (empty($this->nfeFiscalPending)) {
+            session()->flash('success', 'Dados fiscais salvos com sucesso. Agora voce pode emitir a NF-e.');
+        }
     }
 
     public function emitNfe(string $action = 'emit'): void
     {
         if (! $this->nfeOrderId) {
+            return;
+        }
+
+        // Se tem dados fiscais pendentes na emissao nativa, bloquear
+        if ($this->nfeMethod === 'native' && ! empty($this->nfeFiscalPending)) {
+            $this->addError('nfe', 'Preencha os dados fiscais pendentes antes de emitir a NF-e.');
             return;
         }
 
@@ -793,6 +969,9 @@ class ExpeditionBoard extends Component
         $this->nfeAccountMethod    = 'webmaniabr';
         $this->nfeHasWebmania      = false;
         $this->nfeIsMarketplaceNative = false;
+        $this->nfeFiscalPending    = [];
+        $this->nfeFiscalForm       = [];
+        $this->nfeFiscalChecking   = false;
         $this->nfeLoading          = false;
         $this->resetErrorBag();
     }
