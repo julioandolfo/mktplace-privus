@@ -12,6 +12,7 @@ use App\Models\Order;
 use App\Models\OrderTimeline;
 use App\Models\Romaneio;
 use App\Models\ShipmentLabel;
+use App\Services\ExpeditionBonusService;
 use App\Services\MelhorEnviosService;
 use App\Services\WebmaniaService;
 use Illuminate\Support\Carbon;
@@ -392,7 +393,14 @@ class ExpeditionBoard extends Component
             'operator_name' => $opName,
         ]);
 
-        session()->flash('success', "Pedido {$order->order_number} marcado como enviado.");
+        // Atribuir pontos de despacho
+        $bonusPoints = 0;
+        if ($this->selectedOperatorId) {
+            $bonusPoints = app(ExpeditionBonusService::class)->awardShippingPoints($order, $this->selectedOperatorId);
+        }
+
+        $bonusMsg = $bonusPoints > 0 ? " (+{$bonusPoints} pts)" : '';
+        session()->flash('success', "Pedido {$order->order_number} marcado como enviado.{$bonusMsg}");
     }
 
     /**
@@ -538,6 +546,12 @@ class ExpeditionBoard extends Component
 
         $order->update(['pipeline_status' => PipelineStatus::Packed]);
 
+        // Atribuir pontos de embalagem
+        $bonusPoints = 0;
+        if ($this->selectedOperatorId) {
+            $bonusPoints = app(ExpeditionBonusService::class)->awardPackingPoints($order, $this->selectedOperatorId);
+        }
+
         $this->showPackingModal = false;
         $this->packingOrderId  = null;
         $this->packingChecks   = [];
@@ -545,7 +559,8 @@ class ExpeditionBoard extends Component
         $this->packingNotes    = '';
         $this->resetErrorBag();
 
-        session()->flash('success', "Pedido {$order->order_number} embalado. {$title}");
+        $bonusMsg = $bonusPoints > 0 ? " (+{$bonusPoints} pts)" : '';
+        session()->flash('success', "Pedido {$order->order_number} embalado. {$title}{$bonusMsg}");
     }
 
     public function closePackingModal(): void
@@ -1041,6 +1056,13 @@ class ExpeditionBoard extends Component
 
         $expeditionOperators = ExpeditionOperator::forCompany(Auth::user()?->company_id);
 
+        // Dados de metas e bonificação
+        $bonusService = app(ExpeditionBonusService::class);
+        $companyId = Auth::user()?->company_id;
+        $dailyGoal     = $companyId ? $bonusService->calculateDailyGoal($companyId) : null;
+        $operatorRanking = $companyId ? $bonusService->operatorRanking($companyId) : [];
+        $monthProgress  = $companyId ? $bonusService->monthProgress($companyId) : null;
+
         return view('livewire.orders.expedition-board', [
             'orders'              => $orders,
             'accounts'            => $accountQuery->get(),
@@ -1050,6 +1072,9 @@ class ExpeditionBoard extends Component
             'packingHistoryMap'   => $packingHistoryMap,
             'labelsMap'           => $labelsMap,
             'expeditionOperators' => $expeditionOperators,
+            'dailyGoal'           => $dailyGoal,
+            'operatorRanking'     => $operatorRanking,
+            'monthProgress'       => $monthProgress,
         ]);
     }
 }

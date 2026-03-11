@@ -66,6 +66,11 @@
                     <x-heroicon-o-user-group class="w-5 h-5" />
                     Operadores Expedição
                 </a>
+                <a href="{{ route('settings.bonus.index') }}"
+                   class="{{ $navBtn }} {{ request()->routeIs('settings.bonus.*') ? $navActive : $navInactive }}">
+                    <x-heroicon-o-trophy class="w-5 h-5" />
+                    Bonificação Expedição
+                </a>
             </nav>
         </div>
 

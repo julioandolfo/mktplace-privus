@@ -1,6 +1,11 @@
 <div x-data="{ showFilters: false }">
 
     {{-- ============================================================
+         Widget de Metas & Bonificação
+    ============================================================ --}}
+    @include('livewire.orders._goals-widget')
+
+    {{-- ============================================================
          HEADER — Contadores por Tab
     ============================================================ --}}
     <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-4">
