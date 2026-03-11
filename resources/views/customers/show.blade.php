@@ -193,15 +193,26 @@
                                         @php
                                             $custDeadline = $order->meta['ml_shipping_deadline'] ?? null;
                                             $custPrazo = $custDeadline ? \Carbon\Carbon::parse($custDeadline) : null;
-                                            $custLate = $custPrazo && $custPrazo->isPast();
+                                            $custIsToday = $custPrazo?->isToday();
+                                            $custLate = $custPrazo && $custPrazo->isPast() && !$custIsToday;
                                         @endphp
                                         <span class="inline-flex flex-col items-start gap-0.5">
-                                            <span class="inline-flex items-center gap-1 text-xs font-medium
-                                                {{ $custLate ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20' : 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20' }}
-                                                px-2 py-0.5 rounded-full">
+                                            @if($custLate)
+                                            <span class="inline-flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full">
                                                 <x-heroicon-o-clock class="w-3 h-3" />
-                                                {{ $custLate ? 'ATRASADO' : 'A ENVIAR' }}
+                                                ATRASADO
                                             </span>
+                                            @elseif($custIsToday)
+                                            <span class="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                                                <x-heroicon-o-clock class="w-3 h-3" />
+                                                HOJE
+                                            </span>
+                                            @else
+                                            <span class="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                                                <x-heroicon-o-clock class="w-3 h-3" />
+                                                A ENVIAR
+                                            </span>
+                                            @endif
                                             @if($custPrazo)
                                                 <span class="text-[10px] {{ $custLate ? 'text-red-400 font-medium' : 'text-gray-400 dark:text-zinc-500' }} pl-1">
                                                     Até: {{ $custPrazo->format('d/m/Y') }}

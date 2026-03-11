@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AiProviderSetting;
 use App\Models\SystemSetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class SettingsController extends Controller
 {
@@ -23,6 +24,8 @@ class SettingsController extends Controller
 
         if ($section === 'general') {
             $this->updateGeneralSettings($request);
+        } elseif ($section === 'logo') {
+            $this->updateLogo($request);
         } elseif ($section === 'ai') {
             $this->updateAiSettings($request);
         } elseif ($section === 'marketplaces') {
@@ -31,6 +34,37 @@ class SettingsController extends Controller
 
         return redirect()->route('settings.index')
             ->with('success', 'Configuracoes atualizadas com sucesso.');
+    }
+
+    private function updateLogo(Request $request): void
+    {
+        $request->validate([
+            'logo' => 'required|image|mimes:png,jpg,jpeg,svg,webp|max:2048',
+        ]);
+
+        // Remove old logo if exists
+        $oldLogo = SystemSetting::get('general', 'logo_path');
+        if ($oldLogo && Storage::disk('public')->exists($oldLogo)) {
+            Storage::disk('public')->delete($oldLogo);
+        }
+
+        $path = $request->file('logo')->store('logos', 'public');
+        SystemSetting::set('general', 'logo_path', $path);
+        SystemSetting::set('general', 'logo_url', Storage::url($path));
+    }
+
+    public function removeLogo()
+    {
+        $path = SystemSetting::get('general', 'logo_path');
+        if ($path && Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
+
+        SystemSetting::set('general', 'logo_path', null);
+        SystemSetting::set('general', 'logo_url', null);
+
+        return redirect()->route('settings.index')
+            ->with('success', 'Logomarca removida com sucesso.');
     }
 
     private function updateGeneralSettings(Request $request): void
