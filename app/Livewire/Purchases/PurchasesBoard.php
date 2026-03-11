@@ -202,8 +202,7 @@ class PurchasesBoard extends Component
 
         $suppliers = Supplier::forCompany($companyId);
 
-        $products = Product::where('company_id', $companyId ?? 0)
-            ->orderBy('name')
+        $products = Product::orderBy('name')
             ->select('id', 'name', 'sku', 'cost_price')
             ->limit(500)
             ->get();
