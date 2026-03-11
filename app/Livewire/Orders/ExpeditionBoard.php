@@ -67,6 +67,7 @@ class ExpeditionBoard extends Component
     public bool   $nfeFiscalChecking = false;
     public string $nfeFiscalMessage  = '';
     public bool   $nfeFiscalSuccess  = false;
+    public bool   $nfeFiscalProcessing = false; // dados enviados, aguardando ML processar
     public array  $nfeTaxRules      = []; // regras tributarias do vendedor [{id, description}]
     public string $nfeNatureOp      = 'Venda';
     public string $nfeInfoFisco     = '';
@@ -632,6 +633,7 @@ class ExpeditionBoard extends Component
         $this->nfeIsMarketplaceNative = $supportsNative;
         $this->nfeFiscalMessage    = '';
         $this->nfeFiscalSuccess    = false;
+        $this->nfeFiscalProcessing = false;
         $this->nfeFiscalPending    = [];
         $this->nfeFiscalForm       = [];
         $this->nfeFiscalChecking   = false;
@@ -889,25 +891,48 @@ PROMPT;
             return;
         }
 
-        // Re-verificar dados fiscais (com pequeno delay para API do ML processar)
-        $savedForm = $this->nfeFiscalForm; // preservar dados preenchidos pelo usuario
-        usleep(500_000); // 500ms
-        $this->checkFiscalData($order, $account);
+        // Marcar como "enviado, aguardando processamento"
+        $this->nfeFiscalProcessing = true;
+        $this->nfeFiscalSuccess = true;
+        $this->nfeFiscalMessage = 'Dados fiscais enviados ao Mercado Livre. Aguardando processamento...';
         $this->nfeLoading = false;
+    }
+
+    /**
+     * Re-verifica se a API do ML ja processou os dados fiscais enviados.
+     */
+    public function recheckFiscalData(): void
+    {
+        if (! $this->nfeOrderId) {
+            return;
+        }
+
+        $this->nfeFiscalChecking = true;
+        $order = Order::with('marketplaceAccount')->find($this->nfeOrderId);
+        $account = $order?->marketplaceAccount;
+
+        if (! $order || ! $account) {
+            $this->nfeFiscalChecking = false;
+            return;
+        }
+
+        $savedForm = $this->nfeFiscalForm;
+        $this->checkFiscalData($order, $account);
 
         if (empty($this->nfeFiscalPending)) {
+            $this->nfeFiscalProcessing = false;
             $this->nfeFiscalSuccess = true;
-            $this->nfeFiscalMessage = 'Dados fiscais salvos com sucesso! Agora voce pode emitir a NF-e.';
-            session()->flash('success', 'Dados fiscais salvos com sucesso. Agora voce pode emitir a NF-e.');
+            $this->nfeFiscalMessage = 'Dados fiscais confirmados! Agora voce pode emitir a NF-e.';
+            session()->flash('success', 'Dados fiscais confirmados. Agora voce pode emitir a NF-e.');
         } else {
-            // Restaurar dados preenchidos pelo usuario para nao perder o que digitou
+            // Restaurar dados preenchidos pelo usuario
             foreach ($savedForm as $mlId => $data) {
                 if (isset($this->nfeFiscalForm[$mlId])) {
                     $this->nfeFiscalForm[$mlId] = $data;
                 }
             }
-            $this->nfeFiscalSuccess = true;
-            $this->nfeFiscalMessage = 'Dados fiscais enviados ao Mercado Livre. A API pode demorar alguns segundos para processar. Tente emitir a NF-e ou clique em "Salvar" novamente.';
+            $this->nfeFiscalSuccess = false;
+            $this->nfeFiscalMessage = 'A API do Mercado Livre ainda nao confirmou os dados. Tente novamente em alguns segundos ou verifique os campos.';
         }
     }
 
@@ -1075,6 +1100,9 @@ PROMPT;
         $this->nfeFiscalPending    = [];
         $this->nfeFiscalForm       = [];
         $this->nfeFiscalChecking   = false;
+        $this->nfeFiscalProcessing = false;
+        $this->nfeFiscalMessage    = '';
+        $this->nfeFiscalSuccess    = false;
         $this->nfeTaxRules         = [];
         $this->nfeLoading          = false;
         $this->resetErrorBag();
