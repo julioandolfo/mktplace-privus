@@ -150,7 +150,11 @@ class ExpeditionBoard extends Component
 
         $companyId = Auth::user()?->company_id;
         if ($companyId) {
-            $query->where('company_id', $companyId);
+            $accountIds = MarketplaceAccount::pluck('id');
+            $query->where(function ($q) use ($companyId, $accountIds) {
+                $q->where('company_id', $companyId)
+                  ->orWhereIn('marketplace_account_id', $accountIds);
+            });
         }
 
         return $query->when($this->filterAccount, fn ($q) => $q->where('marketplace_account_id', $this->filterAccount));
