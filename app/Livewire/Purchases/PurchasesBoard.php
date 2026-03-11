@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Purchases;
 
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
@@ -23,6 +24,7 @@ class PurchasesBoard extends Component
     public bool   $showNewForm       = false;
     public string $newTitle          = '';
     public string $newNotes          = '';
+    public ?int   $newOrderId        = null;
     public array  $newItems          = [];
 
     // Modal: marcar como comprado
@@ -48,9 +50,10 @@ class PurchasesBoard extends Component
 
     public function openNewForm(): void
     {
-        $this->newTitle = '';
-        $this->newNotes = '';
-        $this->newItems = [
+        $this->newTitle   = '';
+        $this->newNotes   = '';
+        $this->newOrderId = null;
+        $this->newItems   = [
             ['product_id' => '', 'description' => '', 'quantity' => 1, 'unit_cost' => '', 'link' => ''],
         ];
         $this->showNewForm = true;
@@ -96,6 +99,7 @@ class PurchasesBoard extends Component
 
         $pr = PurchaseRequest::create([
             'company_id' => $companyId,
+            'order_id'   => $this->newOrderId ?: null,
             'status'     => 'pending',
             'title'      => $this->newTitle,
             'notes'      => $this->newNotes ?: null,
@@ -213,11 +217,19 @@ class PurchasesBoard extends Component
                 ->find($this->detailId)
             : null;
 
+        // Pedidos recentes para vincular na solicitação manual
+        $recentOrders = Order::where('company_id', $companyId)
+            ->orderByDesc('created_at')
+            ->select('id', 'order_number', 'customer_name')
+            ->limit(200)
+            ->get();
+
         return view('livewire.purchases.purchases-board', [
             'requests'      => $requests,
             'counts'        => $counts,
             'suppliers'     => $suppliers,
             'products'      => $products,
+            'recentOrders'  => $recentOrders,
             'detailRequest' => $detailRequest,
         ]);
     }
