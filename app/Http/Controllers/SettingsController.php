@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\AiProviderSetting;
 use App\Models\SystemSetting;
+use App\Services\AiService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
 class SettingsController extends Controller
@@ -96,6 +98,71 @@ class SettingsController extends Controller
                 'is_active' => true,
             ]
         );
+    }
+
+    public function testAiConnection(Request $request)
+    {
+        $provider = AiProviderSetting::where('is_active', true)->first();
+
+        if (! $provider || empty($provider->api_key)) {
+            return response()->json(['success' => false, 'message' => 'Nenhuma configuracao de IA ativa encontrada. Salve as configuracoes primeiro.']);
+        }
+
+        try {
+            $ai = app(AiService::class);
+            $response = $ai->generateText(
+                'Responda apenas com "OK" sem nada mais.',
+                'Teste de conexao.',
+                10
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Conexao bem-sucedida! Provedor: ' . $provider->provider . ' | Modelo: ' . ($provider->default_model ?? 'padrao'),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Falha na conexao: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    public function aiModels(Request $request)
+    {
+        $provider = AiProviderSetting::where('is_active', true)->first();
+
+        if (! $provider || empty($provider->api_key)) {
+            return response()->json([]);
+        }
+
+        try {
+            if ($provider->provider === 'openrouter') {
+                $response = Http::withToken($provider->api_key)
+                    ->timeout(15)
+                    ->get('https://openrouter.ai/api/v1/models');
+
+                if ($response->failed()) {
+                    return response()->json([]);
+                }
+
+                $models = collect($response->json('data') ?? [])
+                    ->map(fn ($m) => [
+                        'id' => $m['id'],
+                        'name' => $m['name'] ?? $m['id'],
+                        'free' => ($m['pricing']['prompt'] ?? '0') === '0' && ($m['pricing']['completion'] ?? '0') === '0',
+                        'context' => $m['context_length'] ?? null,
+                    ])
+                    ->sortBy('name')
+                    ->values();
+
+                return response()->json($models);
+            }
+
+            return response()->json([]);
+        } catch (\Throwable $e) {
+            return response()->json([]);
+        }
     }
 
     private function updateMarketplaceSettings(Request $request): void

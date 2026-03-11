@@ -199,6 +199,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
     Route::delete('/settings/logo', [SettingsController::class, 'removeLogo'])->name('settings.logo.remove');
+    Route::post('/settings/ai/test', [SettingsController::class, 'testAiConnection'])->name('settings.ai.test');
+    Route::get('/settings/ai/models', [SettingsController::class, 'aiModels'])->name('settings.ai.models');
 
     // Configurações — Melhor Envios
     Route::resource('settings/melhor-envios', \App\Http\Controllers\MelhorEnviosAccountController::class)
