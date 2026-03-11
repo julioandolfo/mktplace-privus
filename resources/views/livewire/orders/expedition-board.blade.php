@@ -1380,6 +1380,20 @@
                                     </select>
                                 </div>
                             </div>
+
+                            {{-- Regra Tributaria (Regime Normal) --}}
+                            @if(!empty($nfeTaxRules))
+                            <div>
+                                <label class="text-[10px] text-gray-500 dark:text-zinc-400">Regra Tributaria</label>
+                                <select wire:model="nfeFiscalForm.{{ $mlId }}.tax_rule_id"
+                                        class="form-input text-xs py-1.5">
+                                    <option value="">Nenhuma (Simples Nacional)</option>
+                                    @foreach($nfeTaxRules as $rule)
+                                    <option value="{{ $rule['id'] }}">{{ $rule['description'] }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            @endif
                         </div>
                         @endforeach
                     </div>
