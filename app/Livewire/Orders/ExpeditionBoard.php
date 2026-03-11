@@ -688,35 +688,44 @@ class ExpeditionBoard extends Component
             $pending = [];
             $form    = [];
 
-            // Coletar ml_item_ids unicos dos itens do pedido
+            // Coletar ml_item_ids unicos dos itens do pedido (considerando variacoes)
             $checkedItems = [];
             foreach ($order->items as $item) {
-                $mlItemId = $item->meta['ml_item_id'] ?? null;
-                if (! $mlItemId || isset($checkedItems[$mlItemId])) {
+                $mlItemId     = $item->meta['ml_item_id'] ?? null;
+                $variationId  = $item->meta['ml_variation_id'] ?? null;
+                $uniqueKey    = $mlItemId . '|' . ($variationId ?? '');
+
+                if (! $mlItemId || isset($checkedItems[$uniqueKey])) {
                     continue;
                 }
-                $checkedItems[$mlItemId] = true;
+                $checkedItems[$uniqueKey] = true;
 
                 try {
                     $fiscal = $service->getItemFiscalData($mlItemId);
                     $canInvoice = $service->canInvoiceItem($mlItemId);
 
-                    Log::info("checkFiscalData item {$mlItemId}", [
-                        'fiscal_empty' => empty($fiscal),
-                        'fiscal_sku'   => $fiscal['sku'] ?? null,
-                        'can_invoice'  => $canInvoice['can_invoice'] ?? null,
+                    Log::info("checkFiscalData item {$mlItemId} variation {$variationId}", [
+                        'fiscal_empty'    => empty($fiscal),
+                        'fiscal_sku'      => $fiscal['sku'] ?? null,
+                        'can_invoice'     => $canInvoice['can_invoice'] ?? ($canInvoice['status'] ?? null),
+                        'has_variations'  => $canInvoice['has_variations'] ?? false,
                         'can_invoice_full' => $canInvoice,
                     ]);
 
-                    if (empty($fiscal) || empty($fiscal['sku']) || ! ($canInvoice['can_invoice'] ?? false)) {
+                    // ML usa 'status' ao inves de 'can_invoice' em algumas respostas
+                    $canInvoiceOk = ($canInvoice['can_invoice'] ?? null) === true
+                                 || ($canInvoice['status'] ?? null) === true;
+
+                    if (empty($fiscal) || empty($fiscal['sku']) || ! $canInvoiceOk) {
                         $product = $item->product;
                         // Pré-preencher com dados existentes do fiscal (parcial) se houver
                         $existingTaxInfo = $fiscal['tax_information'] ?? [];
                         $pending[] = [
-                            'ml_item_id' => $mlItemId,
-                            'name'       => $item->name,
-                            'sku'        => $item->sku ?? $product?->sku ?? '',
-                            'item_id'    => $item->id,
+                            'ml_item_id'      => $mlItemId,
+                            'ml_variation_id' => $variationId,
+                            'name'            => $item->name,
+                            'sku'             => $item->sku ?? $product?->sku ?? '',
+                            'item_id'         => $item->id,
                         ];
                         $form[$mlItemId] = [
                             'sku'           => $fiscal['sku'] ?? $item->sku ?? $product?->sku ?? $mlItemId,
@@ -732,10 +741,11 @@ class ExpeditionBoard extends Component
                     Log::warning("checkFiscalData item {$mlItemId}: " . $e->getMessage());
                     $product = $item->product;
                     $pending[] = [
-                        'ml_item_id' => $mlItemId,
-                        'name'       => $item->name,
-                        'sku'        => $item->sku ?? $product?->sku ?? '',
-                        'item_id'    => $item->id,
+                        'ml_item_id'      => $mlItemId,
+                        'ml_variation_id' => $variationId,
+                        'name'            => $item->name,
+                        'sku'             => $item->sku ?? $product?->sku ?? '',
+                        'item_id'         => $item->id,
                     ];
                     $form[$mlItemId] = [
                         'sku'           => $item->sku ?? $product?->sku ?? $mlItemId,
@@ -871,19 +881,51 @@ PROMPT;
             ];
 
             try {
-                $service->createFiscalData($payload);
-                $service->linkFiscalDataToItem($formData['sku'], $mlItemId);
-            } catch (\Throwable $e) {
-                // Se ja existe, tentar atualizar
-                if (str_contains($e->getMessage(), '400') || str_contains($e->getMessage(), 'already')) {
-                    try {
+                // 1) Criar ou atualizar dados fiscais (por SKU)
+                try {
+                    $service->createFiscalData($payload);
+                } catch (\Throwable $e) {
+                    // Se ja existe, tentar atualizar
+                    if (str_contains($e->getMessage(), '400') || str_contains($e->getMessage(), 'already')) {
                         $service->updateFiscalData($formData['sku'], $payload);
-                    } catch (\Throwable $e2) {
-                        $errors[] = "{$item['name']}: " . $e2->getMessage();
+                    } else {
+                        throw $e;
                     }
-                } else {
-                    $errors[] = "{$item['name']}: " . $e->getMessage();
                 }
+
+                // 2) Linkar fiscal data ao item — se tem variacoes, linkar a cada variacao
+                $variationId = $item['ml_variation_id'] ?? null;
+
+                if ($variationId) {
+                    // Variacao conhecida do pedido — linkar diretamente
+                    $service->linkFiscalDataToItem($formData['sku'], $mlItemId, (string) $variationId);
+                } else {
+                    // Verificar se o anuncio tem variacoes via API
+                    try {
+                        $mlItem = $service->getItemWithVariations($mlItemId);
+                        $variations = $mlItem['variations'] ?? [];
+
+                        if (! empty($variations)) {
+                            foreach ($variations as $variation) {
+                                $varId = $variation['id'] ?? null;
+                                if ($varId) {
+                                    try {
+                                        $service->linkFiscalDataToItem($formData['sku'], $mlItemId, (string) $varId);
+                                    } catch (\Throwable $linkErr) {
+                                        Log::info("linkFiscalData variation {$varId}: " . $linkErr->getMessage());
+                                    }
+                                }
+                            }
+                        } else {
+                            $service->linkFiscalDataToItem($formData['sku'], $mlItemId);
+                        }
+                    } catch (\Throwable $e) {
+                        // Fallback: linkar sem variacao
+                        $service->linkFiscalDataToItem($formData['sku'], $mlItemId);
+                    }
+                }
+            } catch (\Throwable $e) {
+                $errors[] = "{$item['name']}: " . $e->getMessage();
             }
         }
 
@@ -940,11 +982,16 @@ PROMPT;
                 $fiscal = $service->getItemFiscalData($mlItemId);
                 $canInvoice = $service->canInvoiceItem($mlItemId);
 
+                // ML usa 'status' em vez de 'can_invoice' em algumas respostas
+                $canInvoiceOk = ($canInvoice['can_invoice'] ?? null) === true
+                             || ($canInvoice['status'] ?? null) === true;
+
                 $itemDebug = [
-                    'ml_item_id'   => $mlItemId,
-                    'has_fiscal'   => ! empty($fiscal),
-                    'fiscal_sku'   => $fiscal['sku'] ?? null,
-                    'can_invoice'  => $canInvoice['can_invoice'] ?? false,
+                    'ml_item_id'           => $mlItemId,
+                    'ml_variation_id'      => $item->meta['ml_variation_id'] ?? null,
+                    'has_fiscal'           => ! empty($fiscal),
+                    'fiscal_sku'           => $fiscal['sku'] ?? null,
+                    'can_invoice'          => $canInvoiceOk,
                     'can_invoice_response' => $canInvoice,
                 ];
 
@@ -956,7 +1003,7 @@ PROMPT;
 
                 $debug[] = $itemDebug;
 
-                if (empty($fiscal) || empty($fiscal['sku']) || ! ($canInvoice['can_invoice'] ?? false)) {
+                if (empty($fiscal) || empty($fiscal['sku']) || ! $canInvoiceOk) {
                     $allOk = false;
                 }
             } catch (\Throwable $e) {
