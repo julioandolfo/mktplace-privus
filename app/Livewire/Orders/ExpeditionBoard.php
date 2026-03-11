@@ -1390,7 +1390,7 @@ class ExpeditionBoard extends Component
                 ->keyBy('order_id');
         }
 
-        $accountQuery = MarketplaceAccount::active()->orderBy('account_name');
+        $accountQuery = MarketplaceAccount::orderBy('account_name');
         if ($cid = Auth::user()?->company_id) {
             $accountQuery->where('company_id', $cid);
         }
