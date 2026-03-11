@@ -841,6 +841,7 @@ PROMPT;
 
         $service = new \App\Services\Marketplaces\MercadoLivreService($account);
         $errors  = [];
+        $saveDebug = []; // Log detalhado do que aconteceu em cada passo
 
         foreach ($this->nfeFiscalPending as $item) {
             $mlItemId = $item['ml_item_id'];
@@ -880,14 +881,19 @@ PROMPT;
                 'tax_information'  => $taxInfo,
             ];
 
+            $itemLog = ['ml_item_id' => $mlItemId, 'sku' => $formData['sku'], 'payload' => $payload];
+
             try {
                 // 1) Criar ou atualizar dados fiscais (por SKU)
                 try {
-                    $service->createFiscalData($payload);
+                    $createResult = $service->createFiscalData($payload);
+                    $itemLog['create'] = ['ok' => true, 'response' => $createResult];
                 } catch (\Throwable $e) {
+                    $itemLog['create'] = ['ok' => false, 'error' => $e->getMessage()];
                     // Se ja existe, tentar atualizar
                     if (str_contains($e->getMessage(), '400') || str_contains($e->getMessage(), 'already')) {
-                        $service->updateFiscalData($formData['sku'], $payload);
+                        $updateResult = $service->updateFiscalData($formData['sku'], $payload);
+                        $itemLog['update'] = ['ok' => true, 'response' => $updateResult];
                     } else {
                         throw $e;
                     }
@@ -895,38 +901,45 @@ PROMPT;
 
                 // 2) Linkar fiscal data ao item — se tem variacoes, linkar a cada variacao
                 $variationId = $item['ml_variation_id'] ?? null;
+                $itemLog['variation_id_from_order'] = $variationId;
 
                 if ($variationId) {
-                    // Variacao conhecida do pedido — linkar diretamente
-                    $service->linkFiscalDataToItem($formData['sku'], $mlItemId, (string) $variationId);
+                    $linkResult = $service->linkFiscalDataToItem($formData['sku'], $mlItemId, (string) $variationId);
+                    $itemLog['link'] = ['ok' => true, 'variation' => $variationId, 'response' => $linkResult];
                 } else {
-                    // Verificar se o anuncio tem variacoes via API
                     try {
                         $mlItem = $service->getItemWithVariations($mlItemId);
                         $variations = $mlItem['variations'] ?? [];
+                        $itemLog['ml_variations_count'] = count($variations);
 
                         if (! empty($variations)) {
+                            $itemLog['link_variations'] = [];
                             foreach ($variations as $variation) {
                                 $varId = $variation['id'] ?? null;
                                 if ($varId) {
                                     try {
-                                        $service->linkFiscalDataToItem($formData['sku'], $mlItemId, (string) $varId);
+                                        $linkResult = $service->linkFiscalDataToItem($formData['sku'], $mlItemId, (string) $varId);
+                                        $itemLog['link_variations'][] = ['ok' => true, 'variation' => $varId, 'response' => $linkResult];
                                     } catch (\Throwable $linkErr) {
-                                        Log::info("linkFiscalData variation {$varId}: " . $linkErr->getMessage());
+                                        $itemLog['link_variations'][] = ['ok' => false, 'variation' => $varId, 'error' => $linkErr->getMessage()];
                                     }
                                 }
                             }
                         } else {
-                            $service->linkFiscalDataToItem($formData['sku'], $mlItemId);
+                            $linkResult = $service->linkFiscalDataToItem($formData['sku'], $mlItemId);
+                            $itemLog['link'] = ['ok' => true, 'response' => $linkResult];
                         }
                     } catch (\Throwable $e) {
-                        // Fallback: linkar sem variacao
-                        $service->linkFiscalDataToItem($formData['sku'], $mlItemId);
+                        $linkResult = $service->linkFiscalDataToItem($formData['sku'], $mlItemId);
+                        $itemLog['link_fallback'] = ['ok' => true, 'response' => $linkResult];
                     }
                 }
             } catch (\Throwable $e) {
+                $itemLog['fatal_error'] = $e->getMessage();
                 $errors[] = "{$item['name']}: " . $e->getMessage();
             }
+
+            $saveDebug[] = $itemLog;
         }
 
         if (! empty($errors)) {
@@ -940,7 +953,7 @@ PROMPT;
         // Marcar como "enviado, aguardando processamento"
         $this->nfeFiscalProcessing = true;
         $this->nfeFiscalRetries = 0;
-        $this->nfeFiscalDebug = [];
+        $this->nfeFiscalDebug = $saveDebug; // mostrar resultado do save no debug
         $this->nfeFiscalSuccess = true;
         $this->nfeFiscalMessage = 'Dados fiscais enviados ao Mercado Livre. Aguardando processamento...';
         $this->nfeLoading = false;
