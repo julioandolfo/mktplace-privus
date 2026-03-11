@@ -65,6 +65,8 @@ class ExpeditionBoard extends Component
     public array  $nfeFiscalPending = []; // itens do pedido sem dados fiscais [{item_id, ml_item_id, name, sku}]
     public array  $nfeFiscalForm    = []; // form data por ml_item_id => {ncm, origin_type, origin_detail, cost, sku, title, tax_rule_id}
     public bool   $nfeFiscalChecking = false;
+    public string $nfeFiscalMessage  = '';
+    public bool   $nfeFiscalSuccess  = false;
     public array  $nfeTaxRules      = []; // regras tributarias do vendedor [{id, description}]
     public string $nfeNatureOp      = 'Venda';
     public string $nfeInfoFisco     = '';
@@ -628,6 +630,8 @@ class ExpeditionBoard extends Component
         $this->nfeAccountMethod    = $accountMethod;
         $this->nfeHasWebmania      = $hasWebmania;
         $this->nfeIsMarketplaceNative = $supportsNative;
+        $this->nfeFiscalMessage    = '';
+        $this->nfeFiscalSuccess    = false;
         $this->nfeFiscalPending    = [];
         $this->nfeFiscalForm       = [];
         $this->nfeFiscalChecking   = false;
@@ -871,6 +875,8 @@ PROMPT;
         }
 
         if (! empty($errors)) {
+            $this->nfeFiscalSuccess = false;
+            $this->nfeFiscalMessage = implode(' | ', $errors);
             $this->addError('nfe', implode("\n", $errors));
             $this->nfeLoading = false;
             return;
@@ -881,7 +887,12 @@ PROMPT;
         $this->nfeLoading = false;
 
         if (empty($this->nfeFiscalPending)) {
+            $this->nfeFiscalSuccess = true;
+            $this->nfeFiscalMessage = 'Dados fiscais salvos com sucesso! Agora voce pode emitir a NF-e.';
             session()->flash('success', 'Dados fiscais salvos com sucesso. Agora voce pode emitir a NF-e.');
+        } else {
+            $this->nfeFiscalSuccess = false;
+            $this->nfeFiscalMessage = 'Alguns itens ainda precisam de dados fiscais. Verifique e tente novamente.';
         }
     }
 

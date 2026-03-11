@@ -1440,6 +1440,20 @@
                         </span>
                     </button>
 
+                    {{-- Feedback de salvamento fiscal --}}
+                    @if($nfeFiscalMessage)
+                    <div class="mt-2 p-3 rounded-lg text-sm {{ $nfeFiscalSuccess
+                        ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+                        : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300' }}">
+                        @if($nfeFiscalSuccess)
+                            <x-heroicon-o-check-circle class="w-4 h-4 inline mr-1" />
+                        @else
+                            <x-heroicon-o-exclamation-triangle class="w-4 h-4 inline mr-1" />
+                        @endif
+                        {{ $nfeFiscalMessage }}
+                    </div>
+                    @endif
+
                     {{-- Dados fiscais OK --}}
                     @else
                     <div class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">

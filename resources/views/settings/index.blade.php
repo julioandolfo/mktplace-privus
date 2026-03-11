@@ -418,7 +418,49 @@
             </div>
 
             {{-- AI settings --}}
-            <div x-show="tab === 'ai'" x-transition>
+            <div x-show="tab === 'ai'" x-transition
+                 x-data="{
+                     aiModels: [],
+                     aiModelsLoading: false,
+                     aiModelSearch: '',
+                     aiTestLoading: false,
+                     aiTestResult: null,
+                     aiTestSuccess: false,
+                     currentModel: '{{ $aiProviders->firstWhere('is_active', true)?->default_model ?? '' }}',
+                     async loadModels() {
+                         this.aiModelsLoading = true;
+                         try {
+                             const res = await fetch('{{ route('settings.ai.models') }}');
+                             this.aiModels = await res.json();
+                         } catch (e) {
+                             this.aiModels = [];
+                         }
+                         this.aiModelsLoading = false;
+                     },
+                     get filteredModels() {
+                         if (!this.aiModelSearch) return this.aiModels.slice(0, 50);
+                         const s = this.aiModelSearch.toLowerCase();
+                         return this.aiModels.filter(m => m.name.toLowerCase().includes(s) || m.id.toLowerCase().includes(s)).slice(0, 50);
+                     },
+                     async testConnection() {
+                         this.aiTestLoading = true;
+                         this.aiTestResult = null;
+                         try {
+                             const res = await fetch('{{ route('settings.ai.test') }}', {
+                                 method: 'POST',
+                                 headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                             });
+                             const data = await res.json();
+                             this.aiTestSuccess = data.success;
+                             this.aiTestResult = data.message;
+                         } catch (e) {
+                             this.aiTestSuccess = false;
+                             this.aiTestResult = 'Erro de rede: ' + e.message;
+                         }
+                         this.aiTestLoading = false;
+                     }
+                 }"
+                 x-init="loadModels()">
                 <form method="POST" action="{{ route('settings.update') }}">
                     @csrf
                     <input type="hidden" name="section" value="ai">
@@ -426,10 +468,11 @@
                         <div class="space-y-4 max-w-lg">
                             <div>
                                 <label for="ai_provider" class="form-label">Provedor de IA</label>
-                                <select id="ai_provider" name="provider" class="form-input">
-                                    <option value="openrouter">OpenRouter (Recomendado)</option>
-                                    <option value="openai">OpenAI</option>
-                                    <option value="anthropic">Anthropic</option>
+                                <select id="ai_provider" name="provider" class="form-input"
+                                        @change="$nextTick(() => loadModels())">
+                                    <option value="openrouter" {{ ($aiProviders->firstWhere('is_active', true)?->provider ?? 'openrouter') === 'openrouter' ? 'selected' : '' }}>OpenRouter (Recomendado)</option>
+                                    <option value="openai" {{ ($aiProviders->firstWhere('is_active', true)?->provider) === 'openai' ? 'selected' : '' }}>OpenAI</option>
+                                    <option value="anthropic" {{ ($aiProviders->firstWhere('is_active', true)?->provider) === 'anthropic' ? 'selected' : '' }}>Anthropic</option>
                                 </select>
                                 <p class="mt-1 text-xs text-gray-500 dark:text-zinc-400">OpenRouter permite acesso a Claude, GPT e outros modelos com uma unica API key.</p>
                             </div>
@@ -441,13 +484,98 @@
 
                             <div>
                                 <label for="ai_model" class="form-label">Modelo Padrao</label>
-                                <input type="text" id="ai_model" name="default_model" value="{{ $aiProviders->firstWhere('is_active', true)?->default_model ?? 'anthropic/claude-sonnet-4-20250514' }}" class="form-input" placeholder="anthropic/claude-sonnet-4-20250514">
+                                <div class="relative" x-data="{ open: false }">
+                                    <input type="text"
+                                           name="default_model"
+                                           x-model="currentModel"
+                                           @focus="open = true"
+                                           @click="open = true"
+                                           @input="aiModelSearch = $event.target.value; open = true"
+                                           @click.away="open = false"
+                                           class="form-input font-mono text-sm"
+                                           placeholder="Buscar modelo..."
+                                           autocomplete="off">
+
+                                    {{-- Dropdown de modelos --}}
+                                    <div x-show="open && aiModels.length > 0"
+                                         x-transition
+                                         class="absolute z-50 w-full mt-1 max-h-64 overflow-y-auto rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg">
+
+                                        <template x-if="aiModelsLoading">
+                                            <div class="p-3 text-center text-sm text-gray-500 dark:text-zinc-400">
+                                                Carregando modelos...
+                                            </div>
+                                        </template>
+
+                                        <template x-for="model in filteredModels" :key="model.id">
+                                            <button type="button"
+                                                    @click="currentModel = model.id; aiModelSearch = ''; open = false"
+                                                    class="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors border-b border-gray-100 dark:border-zinc-700/50 last:border-0">
+                                                <div class="flex items-center justify-between gap-2">
+                                                    <span class="text-sm text-gray-900 dark:text-white truncate" x-text="model.name"></span>
+                                                    <span x-show="model.free"
+                                                          class="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                                        GRATIS
+                                                    </span>
+                                                    <span x-show="!model.free"
+                                                          class="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                                                        PAGO
+                                                    </span>
+                                                </div>
+                                                <p class="text-[10px] font-mono text-gray-400 dark:text-zinc-500 truncate" x-text="model.id"></p>
+                                            </button>
+                                        </template>
+
+                                        <template x-if="!aiModelsLoading && filteredModels.length === 0">
+                                            <div class="p-3 text-center text-sm text-gray-500 dark:text-zinc-400">
+                                                Nenhum modelo encontrado.
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-zinc-400">
+                                    <template x-if="aiModels.length > 0">
+                                        <span x-text="aiModels.length + ' modelos disponiveis'"></span>
+                                    </template>
+                                    <template x-if="aiModelsLoading">
+                                        <span>Carregando lista de modelos...</span>
+                                    </template>
+                                </p>
                             </div>
 
                             <div>
                                 <label for="ai_budget" class="form-label">Limite Mensal (USD)</label>
                                 <input type="number" step="0.01" id="ai_budget" name="monthly_budget_limit" value="{{ $aiProviders->firstWhere('is_active', true)?->monthly_budget_limit ?? '' }}" class="form-input" placeholder="50.00">
                                 <p class="mt-1 text-xs text-gray-500 dark:text-zinc-400">O sistema pausara chamadas de IA ao atingir este limite.</p>
+                            </div>
+
+                            {{-- Testar Conexao --}}
+                            <div class="pt-2 border-t border-gray-200 dark:border-zinc-700">
+                                <button type="button"
+                                        @click="testConnection()"
+                                        :disabled="aiTestLoading"
+                                        class="btn-secondary w-full justify-center">
+                                    <template x-if="!aiTestLoading">
+                                        <span class="flex items-center gap-2">
+                                            <x-heroicon-o-signal class="w-4 h-4" />
+                                            Testar Conexao
+                                        </span>
+                                    </template>
+                                    <template x-if="aiTestLoading">
+                                        <span class="flex items-center gap-2">
+                                            <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/>
+                                                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/>
+                                            </svg>
+                                            Testando...
+                                        </span>
+                                    </template>
+                                </button>
+
+                                <div x-show="aiTestResult" x-transition class="mt-2 p-3 rounded-lg text-sm"
+                                     :class="aiTestSuccess ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'">
+                                    <span x-text="aiTestResult"></span>
+                                </div>
                             </div>
                         </div>
 
