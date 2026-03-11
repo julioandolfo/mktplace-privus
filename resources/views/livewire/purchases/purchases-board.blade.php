@@ -133,10 +133,21 @@
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Nova Solicitação de Compra</h3>
 
             <div class="space-y-4">
-                <div>
-                    <label class="form-label">Título *</label>
-                    <input type="text" wire:model="newTitle" class="form-input" placeholder="Ex: Compra de insumos, Tecido para pedido X...">
-                    @error('newTitle') <p class="form-error">{{ $message }}</p> @enderror
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label">Título *</label>
+                        <input type="text" wire:model="newTitle" class="form-input" placeholder="Ex: Compra de insumos, Tecido para pedido X...">
+                        @error('newTitle') <p class="form-error">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="form-label">Pedido <span class="text-gray-400 font-normal">(opcional)</span></label>
+                        <select wire:model="newOrderId" class="form-input">
+                            <option value="">— Sem pedido vinculado —</option>
+                            @foreach($recentOrders as $o)
+                                <option value="{{ $o->id }}">#{{ $o->order_number }} — {{ $o->customer_name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
 
                 <div>
