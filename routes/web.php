@@ -214,9 +214,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/settings/webmania/{account}', [\App\Http\Controllers\WebmaniaAccountController::class, 'update'])->name('settings.webmania.update');
     Route::delete('/settings/webmania/{account}', [\App\Http\Controllers\WebmaniaAccountController::class, 'destroy'])->name('settings.webmania.destroy');
 
-    // Configurações — Marketplace Accounts (vincular Webmania, ME, etc.)
-    Route::get('/settings/accounts', [\App\Http\Controllers\MarketplaceAccountSettingsController::class, 'index'])->name('settings.accounts.index');
-    Route::put('/settings/accounts/{account}', [\App\Http\Controllers\MarketplaceAccountSettingsController::class, 'update'])->name('settings.accounts.update');
+    // Redirect old settings/accounts to marketplaces (config moved to marketplace edit page)
+    Route::get('/settings/accounts', fn () => redirect()->route('marketplaces.index'))->name('settings.accounts.index');
 
     // Configurações — Usuarios do Sistema
     Route::prefix('settings/users')->middleware('role:admin')->group(function () {
