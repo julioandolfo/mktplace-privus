@@ -12,6 +12,7 @@ use App\Models\Order;
 use App\Models\OrderTimeline;
 use App\Models\Romaneio;
 use App\Models\ShipmentLabel;
+use App\Services\AiService;
 use App\Services\ExpeditionBonusService;
 use App\Services\MelhorEnviosService;
 use App\Services\WebmaniaService;
@@ -746,6 +747,58 @@ class ExpeditionBoard extends Component
             Log::error("checkFiscalData order #{$order->id}: " . $e->getMessage());
         } finally {
             $this->nfeFiscalChecking = false;
+        }
+    }
+
+    /**
+     * Busca o NCM de um item usando IA, baseado no nome/descrição do produto.
+     */
+    public function searchNcmWithAi(string $mlItemId): void
+    {
+        $formData = $this->nfeFiscalForm[$mlItemId] ?? null;
+        if (! $formData) {
+            return;
+        }
+
+        $productName = $formData['title'] ?? '';
+        if (empty($productName)) {
+            session()->flash('error', 'Preencha a descrição do produto para buscar o NCM.');
+            return;
+        }
+
+        try {
+            $ai = app(AiService::class);
+
+            $systemPrompt = <<<'PROMPT'
+Você é um especialista em classificação fiscal brasileira (NCM - Nomenclatura Comum do Mercosul).
+Dado o nome/descrição de um produto, retorne APENAS o código NCM de 8 dígitos mais adequado.
+
+Regras:
+- Retorne SOMENTE o código NCM com 8 dígitos numéricos, sem pontos ou traços
+- Não inclua explicações, texto adicional ou formatação
+- Se não conseguir determinar com certeza, retorne o NCM mais provável
+- Considere que são produtos vendidos no Mercado Livre Brasil
+PROMPT;
+
+            $userPrompt = "Qual o NCM para o seguinte produto?\n\nProduto: {$productName}";
+
+            $ncm = trim($ai->generateText($systemPrompt, $userPrompt, 20));
+
+            // Limpar resposta - extrair apenas os 8 dígitos
+            $ncm = preg_replace('/[^0-9]/', '', $ncm);
+            if (strlen($ncm) >= 8) {
+                $ncm = substr($ncm, 0, 8);
+            }
+
+            if (strlen($ncm) === 8) {
+                $this->nfeFiscalForm[$mlItemId]['ncm'] = $ncm;
+                session()->flash('success', "NCM {$ncm} sugerido pela IA para \"{$productName}\".");
+            } else {
+                session()->flash('error', 'A IA não conseguiu determinar um NCM válido. Preencha manualmente.');
+            }
+        } catch (\Throwable $e) {
+            Log::warning("searchNcmWithAi error: " . $e->getMessage());
+            session()->flash('error', 'Erro ao buscar NCM: ' . $e->getMessage());
         }
     }
 
