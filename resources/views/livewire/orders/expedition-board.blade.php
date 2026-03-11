@@ -1295,27 +1295,24 @@
                 </div>
                 @endif
 
-                {{-- ═══ FORMULARIO: Emissao Nativa ═══ --}}
+                {{-- ═══ FORMULARIO: Emissao Nativa (Faturador ML) ═══ --}}
                 @if($nfeMethod === 'native')
                 <div class="space-y-4">
-                    <div class="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                        <p class="text-xs text-blue-700 dark:text-blue-300">
-                            <x-heroicon-o-information-circle class="w-4 h-4 inline mr-1" />
-                            Informe a chave de acesso da NF-e (44 digitos) para submeter diretamente ao marketplace.
-                            A NF-e deve ter sido emitida previamente pelo Faturador do marketplace ou outro sistema.
+                    <div class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                        <p class="text-sm text-green-700 dark:text-green-300">
+                            <x-heroicon-o-check-circle class="w-4 h-4 inline mr-1" />
+                            A NF-e sera emitida diretamente na <strong>SEFAZ</strong> pelo Faturador integrado do Mercado Livre.
                         </p>
                     </div>
 
-                    <div>
-                        <label class="form-label">Chave de Acesso da NF-e <span class="text-red-500">*</span></label>
-                        <input type="text" wire:model="nfeNativeAccessKey"
-                               class="form-input font-mono text-sm tracking-wider"
-                               placeholder="0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000"
-                               maxlength="60">
-                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">
-                            44 digitos. A chave sera submetida via API ao
-                            {{ $nfeIsMarketplaceNative ? 'marketplace' : 'sistema' }}.
-                        </p>
+                    <div class="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800/50 border border-gray-200 dark:border-zinc-700 space-y-2">
+                        <p class="text-xs font-medium text-gray-600 dark:text-zinc-400">Pre-requisitos (configurados no ML):</p>
+                        <ul class="text-xs text-gray-500 dark:text-zinc-500 space-y-1 list-disc list-inside">
+                            <li>Empresa cadastrada como Pessoa Juridica</li>
+                            <li>Inscricao Estadual atualizada</li>
+                            <li>Certificado Digital A1 configurado</li>
+                            <li>Dados fiscais dos produtos preenchidos</li>
+                        </ul>
                     </div>
 
                     @include('livewire.orders._operator-select')
@@ -1376,10 +1373,10 @@
                             @if($nfeLoading) disabled @endif>
                         <span wire:loading.remove wire:target="emitNfe">
                             <x-heroicon-o-document-check class="w-4 h-4 inline" />
-                            {{ $nfeMethod === 'native' ? 'Submeter NF-e' : 'Emitir NF-e' }}
+                            Emitir NF-e
                         </span>
                         <span wire:loading wire:target="emitNfe" class="text-sm">
-                            {{ $nfeMethod === 'native' ? 'Submetendo...' : 'Emitindo...' }}
+                            Emitindo...
                         </span>
                     </button>
                 </div>

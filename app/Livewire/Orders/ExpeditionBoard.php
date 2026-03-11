@@ -61,7 +61,6 @@ class ExpeditionBoard extends Component
     public string $nfeAccountMethod = 'webmaniabr'; // metodo configurado na conta
     public bool   $nfeHasWebmania   = false;
     public bool   $nfeIsMarketplaceNative = false; // conta suporta emissao nativa
-    public string $nfeNativeAccessKey = ''; // chave de acesso para submissao nativa
     public string $nfeNatureOp      = 'Venda';
     public string $nfeInfoFisco     = '';
     public string $nfeInfoConsumer  = '';
@@ -629,7 +628,6 @@ class ExpeditionBoard extends Component
         $this->nfeAccountMethod    = $accountMethod;
         $this->nfeHasWebmania      = $hasWebmania;
         $this->nfeIsMarketplaceNative = $supportsNative;
-        $this->nfeNativeAccessKey  = '';
         $this->nfeNatureOp         = 'Venda';
         $this->nfeInfoFisco        = '';
         $this->nfeInfoConsumer     = '';
@@ -657,8 +655,10 @@ class ExpeditionBoard extends Component
     }
 
     /**
-     * Emissao nativa via API do marketplace (ML, Shopee, etc.)
-     * Submete a chave de acesso diretamente ao marketplace.
+     * Emissao nativa via Faturador integrado do Mercado Livre.
+     * A API do ML emite a NF-e diretamente na SEFAZ — não precisa de chave de acesso.
+     *
+     * @see https://developers.mercadolivre.com.br/pt_br/api-fiscal-faturamento-de-venda
      */
     protected function emitNfeNative(): void
     {
@@ -667,68 +667,66 @@ class ExpeditionBoard extends Component
         $order   = $this->scopedOrder($this->nfeOrderId);
         $account = $order->marketplaceAccount;
 
-        $accessKey = preg_replace('/\D/', '', $this->nfeNativeAccessKey);
-
-        if (strlen($accessKey) !== 44) {
-            $this->addError('nfe', 'A chave de acesso deve conter exatamente 44 digitos.');
-            $this->nfeLoading = false;
-            return;
-        }
-
         try {
             $isMl     = $account->marketplace_type === \App\Enums\MarketplaceType::MercadoLivre;
             $isShopee = $account->marketplace_type === \App\Enums\MarketplaceType::Shopee;
 
             if ($isMl) {
                 $mlOrderId = $order->external_id ?? ($order->meta['ml_order_id'] ?? null);
-                $packId    = $order->meta['pack_id'] ?? null;
 
                 if (! $mlOrderId) {
-                    $this->addError('nfe', 'Pedido sem ID externo do Mercado Livre. Nao e possivel submeter NF-e.');
+                    $this->addError('nfe', 'Pedido sem ID externo do Mercado Livre. Nao e possivel emitir NF-e.');
                     $this->nfeLoading = false;
                     return;
                 }
 
                 $service = new \App\Services\Marketplaces\MercadoLivreService($account);
-                $result  = $service->submitFiscalDocument((string) $mlOrderId, $accessKey, $packId);
+                $result  = $service->emitInvoice([$mlOrderId]);
+
+                // Extrair dados da resposta do Faturador ML
+                $invoiceId   = $result['id'] ?? null;
+                $accessKey   = $result['access_key'] ?? null;
+                $invoiceNum  = $result['invoice_number'] ?? null;
+                $status      = $result['status'] ?? 'processing';
 
                 // Salvar invoice no banco
                 \App\Models\Invoice::updateOrCreate(
-                    ['order_id' => $order->id, 'access_key' => $accessKey],
+                    ['order_id' => $order->id, 'external_id' => $invoiceId ?? $mlOrderId],
                     [
-                        'company_id'       => $order->company_id,
-                        'status'           => 'approved',
-                        'type'             => 'nfe',
-                        'customer_name'    => $order->customer_name ?? '',
+                        'company_id'        => $order->company_id,
+                        'status'            => $status === 'authorized' ? 'approved' : 'processing',
+                        'type'              => 'nfe',
+                        'number'            => $invoiceNum,
+                        'access_key'        => $accessKey,
+                        'customer_name'     => $order->customer_name ?? '',
                         'customer_document' => $order->customer_document,
-                        'total'            => $order->total ?? 0,
-                        'total_products'   => $order->subtotal ?? 0,
-                        'total_shipping'   => $order->shipping_cost ?? 0,
-                        'total_discount'   => $order->discount ?? 0,
-                        'total_tax'        => 0,
-                        'nature_operation' => 'Venda',
-                        'meta'             => ['ml_fiscal' => $result, 'emission_method' => 'native_ml'],
+                        'total'             => $order->total ?? 0,
+                        'total_products'    => $order->subtotal ?? 0,
+                        'total_shipping'    => $order->shipping_cost ?? 0,
+                        'total_discount'    => $order->discount ?? 0,
+                        'total_tax'         => 0,
+                        'nature_operation'  => 'Venda',
+                        'meta'              => ['ml_invoice' => $result, 'emission_method' => 'native_ml'],
                     ]
                 );
 
                 $this->showNfeModal = false;
                 $this->nfeOrderId   = null;
                 $this->nfeLoading   = false;
-                session()->flash('success', "NF-e submetida ao Mercado Livre com sucesso (chave: ...{$this->formatAccessKeySuffix($accessKey)}).");
+
+                $msg = $invoiceNum
+                    ? "NF-e nº {$invoiceNum} emitida com sucesso via Faturador Mercado Livre."
+                    : "NF-e enviada para emissao via Faturador Mercado Livre (status: {$status}).";
+                session()->flash('success', $msg);
             } else {
                 $this->addError('nfe', 'Emissao nativa ainda nao implementada para este marketplace.');
                 $this->nfeLoading = false;
             }
         } catch (\Throwable $e) {
             Log::error("emitNfeNative order #{$order->id}: " . $e->getMessage());
-            $this->addError('nfe', 'Erro na submissao nativa: ' . $e->getMessage());
+            $this->addError('nfe', 'Erro na emissao nativa: ' . $e->getMessage());
             $this->nfeLoading = false;
         }
-    }
-
-    protected function formatAccessKeySuffix(string $key): string
-    {
-        return substr($key, -8);
     }
 
     /**
@@ -795,7 +793,6 @@ class ExpeditionBoard extends Component
         $this->nfeAccountMethod    = 'webmaniabr';
         $this->nfeHasWebmania      = false;
         $this->nfeIsMarketplaceNative = false;
-        $this->nfeNativeAccessKey  = '';
         $this->nfeLoading          = false;
         $this->resetErrorBag();
     }
