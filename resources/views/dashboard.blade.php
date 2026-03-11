@@ -2,6 +2,11 @@
     <x-slot name="header">Dashboard</x-slot>
     <x-slot name="subtitle">Visao geral do seu negocio</x-slot>
 
+    {{-- Saldo Melhor Envios --}}
+    <div class="mb-4">
+        <livewire:melhor-envios.balance-widget mode="compact" />
+    </div>
+
     {{-- Stats row --}}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <x-ui.stat-card title="Vendas Hoje" value="R$ 0,00" change="+0%" changeType="up">
