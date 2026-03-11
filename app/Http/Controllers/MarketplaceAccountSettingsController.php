@@ -40,6 +40,7 @@ class MarketplaceAccountSettingsController extends Controller
         abort_unless($account->company_id === Auth::user()->company_id, 403);
 
         $validated = $request->validate([
+            'nfe_method'               => 'nullable|in:native,webmaniabr,both,none',
             'webmania_account_id'      => 'nullable|integer|exists:webmania_accounts,id',
             'melhor_envios_account_id' => 'nullable|integer|exists:melhor_envios_accounts,id',
             'woo_ready_to_ship_status' => 'nullable|string|max:60',
@@ -50,6 +51,7 @@ class MarketplaceAccountSettingsController extends Controller
 
         // Vínculo direto na tabela
         $account->update([
+            'nfe_method'               => $validated['nfe_method'] ?? 'webmaniabr',
             'webmania_account_id'      => $validated['webmania_account_id'] ?? null,
             'melhor_envios_account_id' => $validated['melhor_envios_account_id'] ?? null,
         ]);

@@ -57,6 +57,11 @@ class ExpeditionBoard extends Component
     // ── Modal de Emissão NF-e ────────────────────────────────────────────────
     public bool   $showNfeModal     = false;
     public ?int   $nfeOrderId       = null;
+    public string $nfeMethod        = 'webmaniabr'; // 'native' | 'webmaniabr'
+    public string $nfeAccountMethod = 'webmaniabr'; // metodo configurado na conta
+    public bool   $nfeHasWebmania   = false;
+    public bool   $nfeIsMarketplaceNative = false; // conta suporta emissao nativa
+    public string $nfeNativeAccessKey = ''; // chave de acesso para submissao nativa
     public string $nfeNatureOp      = 'Venda';
     public string $nfeInfoFisco     = '';
     public string $nfeInfoConsumer  = '';
@@ -589,18 +594,48 @@ class ExpeditionBoard extends Component
             return;
         }
 
-        if (! $account->webmania_account_id) {
+        $accountMethod = $account->nfe_method ?? 'webmaniabr';
+        $hasWebmania   = (bool) $account->webmania_account_id;
+        $isMl          = $account->marketplace_type === \App\Enums\MarketplaceType::MercadoLivre;
+        $isShopee      = $account->marketplace_type === \App\Enums\MarketplaceType::Shopee;
+        $supportsNative = $isMl || $isShopee;
+
+        // Se metodo e 'none', nao faz nada
+        if ($accountMethod === 'none') {
+            session()->flash('info', 'Emissao de NF-e desabilitada para a conta "' . ($account->account_name ?? 'sem nome') . '".');
+            return;
+        }
+
+        // Se metodo e webmaniabr exclusivo e nao tem webmania vinculada
+        if ($accountMethod === 'webmaniabr' && ! $hasWebmania) {
             session()->flash('error', 'Nenhuma conta Webmaniabr vinculada a conta "' . ($account->account_name ?? 'sem nome') . '". Vincule em Configuracoes > Contas & Expedicao.');
             return;
         }
 
-        $this->nfeOrderId      = $orderId;
-        $this->nfeNatureOp     = 'Venda';
-        $this->nfeInfoFisco    = '';
-        $this->nfeInfoConsumer = '';
-        $this->nfeHomologation = false;
-        $this->nfeLoading      = false;
-        $this->showNfeModal    = true;
+        // Se metodo e nativo mas marketplace nao suporta
+        if ($accountMethod === 'native' && ! $supportsNative) {
+            session()->flash('error', 'Emissao nativa nao disponivel para este tipo de marketplace. Configure Webmaniabr em Configuracoes > Contas & Expedicao.');
+            return;
+        }
+
+        // Determina qual metodo mostrar como padrao
+        $defaultMethod = $accountMethod;
+        if ($accountMethod === 'both') {
+            $defaultMethod = $supportsNative ? 'native' : 'webmaniabr';
+        }
+
+        $this->nfeOrderId          = $orderId;
+        $this->nfeMethod           = $defaultMethod;
+        $this->nfeAccountMethod    = $accountMethod;
+        $this->nfeHasWebmania      = $hasWebmania;
+        $this->nfeIsMarketplaceNative = $supportsNative;
+        $this->nfeNativeAccessKey  = '';
+        $this->nfeNatureOp         = 'Venda';
+        $this->nfeInfoFisco        = '';
+        $this->nfeInfoConsumer     = '';
+        $this->nfeHomologation     = false;
+        $this->nfeLoading          = false;
+        $this->showNfeModal        = true;
         $this->preselectOperator();
         $this->resetErrorBag();
     }
@@ -611,13 +646,103 @@ class ExpeditionBoard extends Component
             return;
         }
 
+        // Se metodo nativo, delegar para emissao nativa do marketplace
+        if ($this->nfeMethod === 'native') {
+            $this->emitNfeNative();
+            return;
+        }
+
+        // Metodo Webmaniabr
+        $this->emitNfeWebmaniabr($action);
+    }
+
+    /**
+     * Emissao nativa via API do marketplace (ML, Shopee, etc.)
+     * Submete a chave de acesso diretamente ao marketplace.
+     */
+    protected function emitNfeNative(): void
+    {
+        $this->nfeLoading = true;
+
+        $order   = $this->scopedOrder($this->nfeOrderId);
+        $account = $order->marketplaceAccount;
+
+        $accessKey = preg_replace('/\D/', '', $this->nfeNativeAccessKey);
+
+        if (strlen($accessKey) !== 44) {
+            $this->addError('nfe', 'A chave de acesso deve conter exatamente 44 digitos.');
+            $this->nfeLoading = false;
+            return;
+        }
+
+        try {
+            $isMl     = $account->marketplace_type === \App\Enums\MarketplaceType::MercadoLivre;
+            $isShopee = $account->marketplace_type === \App\Enums\MarketplaceType::Shopee;
+
+            if ($isMl) {
+                $mlOrderId = $order->external_id ?? ($order->meta['ml_order_id'] ?? null);
+                $packId    = $order->meta['pack_id'] ?? null;
+
+                if (! $mlOrderId) {
+                    $this->addError('nfe', 'Pedido sem ID externo do Mercado Livre. Nao e possivel submeter NF-e.');
+                    $this->nfeLoading = false;
+                    return;
+                }
+
+                $service = new \App\Services\Marketplaces\MercadoLivreService($account);
+                $result  = $service->submitFiscalDocument((string) $mlOrderId, $accessKey, $packId);
+
+                // Salvar invoice no banco
+                \App\Models\Invoice::updateOrCreate(
+                    ['order_id' => $order->id, 'access_key' => $accessKey],
+                    [
+                        'company_id'       => $order->company_id,
+                        'status'           => 'approved',
+                        'type'             => 'nfe',
+                        'customer_name'    => $order->customer_name ?? '',
+                        'customer_document' => $order->customer_document,
+                        'total'            => $order->total ?? 0,
+                        'total_products'   => $order->subtotal ?? 0,
+                        'total_shipping'   => $order->shipping_cost ?? 0,
+                        'total_discount'   => $order->discount ?? 0,
+                        'total_tax'        => 0,
+                        'nature_operation' => 'Venda',
+                        'meta'             => ['ml_fiscal' => $result, 'emission_method' => 'native_ml'],
+                    ]
+                );
+
+                $this->showNfeModal = false;
+                $this->nfeOrderId   = null;
+                $this->nfeLoading   = false;
+                session()->flash('success', "NF-e submetida ao Mercado Livre com sucesso (chave: ...{$this->formatAccessKeySuffix($accessKey)}).");
+            } else {
+                $this->addError('nfe', 'Emissao nativa ainda nao implementada para este marketplace.');
+                $this->nfeLoading = false;
+            }
+        } catch (\Throwable $e) {
+            Log::error("emitNfeNative order #{$order->id}: " . $e->getMessage());
+            $this->addError('nfe', 'Erro na submissao nativa: ' . $e->getMessage());
+            $this->nfeLoading = false;
+        }
+    }
+
+    protected function formatAccessKeySuffix(string $key): string
+    {
+        return substr($key, -8);
+    }
+
+    /**
+     * Emissao via Webmaniabr (fluxo existente).
+     */
+    protected function emitNfeWebmaniabr(string $action = 'emit'): void
+    {
         $this->nfeLoading = true;
 
         $order = $this->scopedOrder($this->nfeOrderId);
         $account = $order->marketplaceAccount;
 
         if (! $account?->webmania_account_id) {
-            $this->addError('nfe', 'Conta Webmaniabr nao vinculada.');
+            $this->addError('nfe', 'Conta Webmaniabr nao vinculada a esta conta de marketplace.');
             $this->nfeLoading = false;
             return;
         }
@@ -664,9 +789,14 @@ class ExpeditionBoard extends Component
 
     public function closeNfeModal(): void
     {
-        $this->showNfeModal = false;
-        $this->nfeOrderId   = null;
-        $this->nfeLoading   = false;
+        $this->showNfeModal        = false;
+        $this->nfeOrderId          = null;
+        $this->nfeMethod           = 'webmaniabr';
+        $this->nfeAccountMethod    = 'webmaniabr';
+        $this->nfeHasWebmania      = false;
+        $this->nfeIsMarketplaceNative = false;
+        $this->nfeNativeAccessKey  = '';
+        $this->nfeLoading          = false;
         $this->resetErrorBag();
     }
 

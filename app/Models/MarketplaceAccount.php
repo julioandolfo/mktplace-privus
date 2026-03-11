@@ -31,6 +31,7 @@ class MarketplaceAccount extends Model
         'meta',
         'webmania_account_id',
         'melhor_envios_account_id',
+        'nfe_method',
     ];
 
     protected function casts(): array
