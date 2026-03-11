@@ -70,6 +70,11 @@
             <span x-show="sidebarOpen" x-transition.opacity>Expedicao</span>
         </a>
 
+        <a href="{{ route('purchases.index') }}" class="sidebar-link {{ request()->routeIs('purchases.*') ? 'active' : '' }}">
+            <x-heroicon-o-shopping-cart class="icon" />
+            <span x-show="sidebarOpen" x-transition.opacity>Compras</span>
+        </a>
+
         <a href="{{ route('customers.index') }}" class="sidebar-link {{ request()->routeIs('customers.*') ? 'active' : '' }}">
             <x-heroicon-o-users class="icon" />
             <span x-show="sidebarOpen" x-transition.opacity>Clientes</span>
@@ -174,6 +179,10 @@
         <a href="{{ route('expedition.index') }}" class="sidebar-link {{ request()->routeIs('expedition.*') ? 'active' : '' }}">
             <x-heroicon-o-truck class="icon" />
             <span>Expedicao</span>
+        </a>
+        <a href="{{ route('purchases.index') }}" class="sidebar-link {{ request()->routeIs('purchases.*') ? 'active' : '' }}">
+            <x-heroicon-o-shopping-cart class="icon" />
+            <span>Compras</span>
         </a>
         <a href="{{ route('customers.index') }}" class="sidebar-link {{ request()->routeIs('customers.*') ? 'active' : '' }}">
             <x-heroicon-o-users class="icon" />

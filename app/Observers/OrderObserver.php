@@ -9,6 +9,7 @@ use App\Jobs\AssignOrderToDesigner;
 use App\Jobs\AutoEmitInvoice;
 use App\Models\Order;
 use App\Models\OrderTimeline;
+use App\Services\PurchaseService;
 
 class OrderObserver
 {
@@ -22,6 +23,13 @@ class OrderObserver
             ['status' => $order->status?->value, 'total' => $order->total],
             null,
         );
+
+        // Gera solicitação de compra automática se algum item exige compra
+        try {
+            app(PurchaseService::class)->generateFromOrder($order);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Erro ao gerar compra para pedido #{$order->order_number}: {$e->getMessage()}");
+        }
     }
 
     public function updated(Order $order): void

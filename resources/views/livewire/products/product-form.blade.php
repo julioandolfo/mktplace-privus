@@ -131,6 +131,33 @@
                     </div>
                 </x-ui.card>
 
+                {{-- Processo --}}
+                <x-ui.card title="Processo">
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" wire:model="requires_production" id="requires_production"
+                                   class="rounded border-gray-300 dark:border-zinc-600 text-primary-600 focus:ring-primary-500">
+                            <label for="requires_production" class="text-sm text-gray-700 dark:text-zinc-300">
+                                Exige produção <span class="text-gray-400">(entra na fila de produção)</span>
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" wire:model="requires_artwork" id="requires_artwork"
+                                   class="rounded border-gray-300 dark:border-zinc-600 text-primary-600 focus:ring-primary-500">
+                            <label for="requires_artwork" class="text-sm text-gray-700 dark:text-zinc-300">
+                                Exige arte/design <span class="text-gray-400">(entra na fila de designer)</span>
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" wire:model="requires_purchase" id="requires_purchase"
+                                   class="rounded border-gray-300 dark:border-zinc-600 text-primary-600 focus:ring-primary-500">
+                            <label for="requires_purchase" class="text-sm text-gray-700 dark:text-zinc-300">
+                                Exige compra <span class="text-gray-400">(gera solicitação de compra automática)</span>
+                            </label>
+                        </div>
+                    </div>
+                </x-ui.card>
+
                 {{-- Fiscal --}}
                 <x-ui.card title="Dados Fiscais">
                     <div class="grid grid-cols-3 gap-4">

@@ -772,6 +772,45 @@
         <x-order-timeline :order="$order" />
     </x-ui.card>
 
+    {{-- Compras vinculadas ao pedido --}}
+    @php
+        $purchaseRequests = \App\Models\PurchaseRequest::where('order_id', $order->id)->with('supplier', 'items')->get();
+    @endphp
+    @if($purchaseRequests->isNotEmpty())
+    <x-ui.card title="Compras" class="mt-4">
+        <div class="space-y-3">
+            @foreach($purchaseRequests as $pr)
+            <div class="flex items-center justify-between bg-gray-50 dark:bg-zinc-700/50 rounded-lg px-4 py-3">
+                <div>
+                    <p class="text-sm font-medium text-gray-900 dark:text-white">{{ $pr->title }}</p>
+                    <div class="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-zinc-400">
+                        <span>{{ $pr->items->count() }} item(ns)</span>
+                        <span>{{ $pr->total_cost_formatted }}</span>
+                        @if($pr->supplier)
+                            <span>{{ $pr->supplier->name }}</span>
+                        @endif
+                    </div>
+                </div>
+                <div>
+                    @if($pr->status === 'pending')
+                        <span class="inline-flex items-center text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">Pendente</span>
+                    @elseif($pr->status === 'purchased')
+                        <span class="inline-flex items-center text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">Comprado</span>
+                    @elseif($pr->status === 'cancelled')
+                        <span class="inline-flex items-center text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400">Cancelado</span>
+                    @endif
+                </div>
+            </div>
+            @endforeach
+        </div>
+        <div class="mt-3">
+            <a href="{{ route('purchases.index') }}" class="text-xs text-primary-600 dark:text-primary-400 hover:underline">
+                Ver todas as compras →
+            </a>
+        </div>
+    </x-ui.card>
+    @endif
+
     {{-- Design Assignment (quando houver) --}}
     @if($order->designAssignment)
     <x-ui.card title="Design — Mockup e Arquivos" class="mt-4">

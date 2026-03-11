@@ -78,24 +78,27 @@ class OrderTimeline extends Model
     public function icon(): string
     {
         return match ($this->event_type) {
-            'order_created'        => 'heroicon-o-shopping-bag',
-            'payment_confirmed'    => 'heroicon-o-credit-card',
-            'design_assigned'      => 'heroicon-o-user-circle',
-            'design_started'       => 'heroicon-o-pencil-square',
-            'design_completed'     => 'heroicon-o-check-badge',
-            'ai_mockup_generated'  => 'heroicon-o-sparkles',
-            'production_started'   => 'heroicon-o-cog-8-tooth',
-            'production_completed' => 'heroicon-o-check-circle',
-            'ready_to_ship'        => 'heroicon-o-truck',
-            'packing_started'      => 'heroicon-o-archive-box',
-            'packing_checked'      => 'heroicon-o-clipboard-document-check',
-            'packing_completed'    => 'heroicon-o-archive-box-arrow-down',
-            'invoice_emitted'      => 'heroicon-o-document-text',
-            'shipped'              => 'heroicon-o-rocket-launch',
-            'delivered'            => 'heroicon-s-check-circle',
-            'note_added'           => 'heroicon-o-chat-bubble-left',
-            'status_changed'       => 'heroicon-o-arrow-path',
-            default                => 'heroicon-o-information-circle',
+            'order_created'         => 'heroicon-o-shopping-bag',
+            'payment_confirmed'     => 'heroicon-o-credit-card',
+            'purchase_requested'    => 'heroicon-o-shopping-cart',
+            'purchase_completed'    => 'heroicon-o-check-badge',
+            'design_assigned'       => 'heroicon-o-user-circle',
+            'design_started'        => 'heroicon-o-pencil-square',
+            'design_completed'      => 'heroicon-o-check-badge',
+            'ai_mockup_generated'   => 'heroicon-o-sparkles',
+            'sent_to_production'    => 'heroicon-o-paper-airplane',
+            'production_started'    => 'heroicon-o-cog-8-tooth',
+            'production_completed'  => 'heroicon-o-check-circle',
+            'ready_to_ship'         => 'heroicon-o-truck',
+            'packing_started'       => 'heroicon-o-archive-box',
+            'packing_checked'       => 'heroicon-o-clipboard-document-check',
+            'packing_completed'     => 'heroicon-o-archive-box-arrow-down',
+            'invoice_emitted'       => 'heroicon-o-document-text',
+            'shipped'               => 'heroicon-o-rocket-launch',
+            'delivered'             => 'heroicon-s-check-circle',
+            'note_added'            => 'heroicon-o-chat-bubble-left',
+            'status_changed'        => 'heroicon-o-arrow-path',
+            default                 => 'heroicon-o-information-circle',
         };
     }
 
@@ -103,7 +106,9 @@ class OrderTimeline extends Model
     {
         if (in_array($this->event_type, ['design_assigned', 'design_started'])) return 'purple';
         if (in_array($this->event_type, ['design_completed', 'ai_mockup_generated'])) return 'violet';
-        if (in_array($this->event_type, ['production_started', 'production_completed'])) return 'orange';
+        if (in_array($this->event_type, ['production_started', 'production_completed', 'sent_to_production'])) return 'orange';
+        if (in_array($this->event_type, ['purchase_requested'])) return 'amber';
+        if (in_array($this->event_type, ['purchase_completed'])) return 'teal';
         if ($this->event_type === 'packing_checked') {
             return ($this->data['status'] ?? '') === 'complete' ? 'green' : 'amber';
         }
