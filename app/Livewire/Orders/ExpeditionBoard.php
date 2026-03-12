@@ -171,11 +171,6 @@ class ExpeditionBoard extends Component
     {
         $query = Order::query();
 
-        // Filtro de segurança por company_id
-        if ($companyId = \Illuminate\Support\Facades\Auth::user()?->company_id) {
-            $query->where('company_id', $companyId);
-        }
-
         $query->when($this->filterAccount, fn ($q) => $q->where('marketplace_account_id', $this->filterAccount));
 
         // Filtro fulfillment (Full)
