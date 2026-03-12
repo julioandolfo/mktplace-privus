@@ -259,8 +259,10 @@ class SyncSingleOrder implements ShouldQueue
                         'ml_buyer_id'           => $mlUserId,
                         'pack_id'              => $packId,
                         'ml_tags'              => $tags,
+                        'ml_logistic_type'     => $shipment['logistic']['type'] ?? null,
                         'ml_feedback'          => $buyerFeedback,
-                        'is_fulfillment'       => in_array('fulfillment', $tags),
+                        'is_fulfillment'       => ($shipment['logistic']['type'] ?? null) === 'fulfillment'
+                                               || in_array('fulfillment', $tags),
                     ],
                 ]
             );

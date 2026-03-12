@@ -239,7 +239,13 @@ class SyncMarketplaceOrders extends Command
         $packId            = $ml['pack_id'] ?? null;
         $tags              = $ml['tags'] ?? [];
         $buyerFeedback     = $ml['feedback']['buyer'] ?? null;
-        $isFulfillment     = in_array('fulfillment', $tags);
+        $logisticType      = $shipment['logistic']['type'] ?? null;
+
+        // Fulfillment: detectar via logistic.type do shipment (mais confiável)
+        // ou via tags do pedido, ou via mode do shipment
+        $isFulfillment     = $logisticType === 'fulfillment'
+                          || in_array('fulfillment', $tags)
+                          || ($shippingMode === 'me2' && $logisticType === 'fulfillment');
 
         DB::transaction(function () use (
             $account, $ml, $buyer, $orderStatus, $paymentStatus, $payment,
@@ -302,6 +308,7 @@ class SyncMarketplaceOrders extends Command
                         'ml_buyer_id'           => $mlUserId,
                         'pack_id'               => $packId,
                         'ml_tags'               => $tags,
+                        'ml_logistic_type'      => $logisticType,
                         'ml_feedback'           => $buyerFeedback,
                         'is_fulfillment'        => $isFulfillment,
                     ],
