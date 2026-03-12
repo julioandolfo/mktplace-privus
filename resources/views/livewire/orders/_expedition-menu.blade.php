@@ -7,12 +7,14 @@
       $isMl          — bool
       $mlShippingId  — string|null
       $isShipped     — bool
+      $isFull        — bool (pedido fulfillment — enviado pelo ML Full)
       $hasWebmania   — bool|null  (conta Webmaniabr vinculada)
       $hasNfeMethod  — bool|null  (conta tem metodo NF-e configurado)
       $hasME         — bool|null  (conta Melhor Envios vinculada)
 --}}
 @php
     $isShipped    ??= false;
+    $isFull       ??= false;
     $mlStep       ??= null;
     $genStep      ??= null;
     $hasWebmania  ??= false;
@@ -51,7 +53,8 @@
              :style="`position:fixed;top:${top}px;left:${left}px;z-index:9999;`"
              class="w-56 bg-white dark:bg-zinc-800 rounded-lg shadow-2xl border border-gray-100 dark:border-zinc-700 py-1 text-left">
 
-            {{-- ── Etiqueta de Volume (sempre disponível) ── --}}
+            @if(!$isFull)
+            {{-- ── Etiqueta de Volume ── --}}
             <a href="{{ route('romaneios.etiquetas-avulso', ['orders' => $order->id]) }}"
                target="_blank"
                @click="open = false"
@@ -101,7 +104,7 @@
             </button>
             @endif
 
-            {{-- ── Marcar Enviado (disponível quando embalado, mesmo sem NF-e para genéricos) ── --}}
+            {{-- ── Marcar Enviado ── --}}
             @if(!$isShipped)
             <button wire:click="markShipped({{ $order->id }})"
                     wire:confirm="Marcar {{ $order->order_number }} como enviado?"
@@ -135,7 +138,7 @@
             </button>
             @endif
 
-            {{-- ── Cancelar Envio (disponível para pedidos em processo ou já enviados) ── --}}
+            {{-- ── Cancelar Envio ── --}}
             <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
             <button wire:click="cancelShipment({{ $order->id }})"
                     wire:confirm="Cancelar envio do pedido {{ $order->order_number }}? O status voltará para Pronto para Envio."
@@ -144,6 +147,7 @@
                 <x-heroicon-o-x-circle class="w-4 h-4" />
                 Cancelar Envio
             </button>
+            @endif {{-- end !$isFull --}}
 
             {{-- ── Divisor + Ver Pedido (sempre) ── --}}
             <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>

@@ -33,6 +33,7 @@ class ExpeditionBoard extends Component
     public string $filterAccount = '';
     public string $filterType   = '';
     public string $filterStep   = '';
+    public string $filterFulfillment = ''; // '' = todos, 'full' = só Full, 'no_full' = sem Full
 
     public array $selectedOrders = [];
     public bool  $selectAll      = false;
@@ -99,12 +100,27 @@ class ExpeditionBoard extends Component
         'search'        => ['except' => ''],
         'filterAccount' => ['except' => ''],
         'filterStep'    => ['except' => ''],
+        'filterFulfillment' => ['except' => ''],
     ];
+
+    public function mount(): void
+    {
+        // Restaura filtro de fulfillment do cookie se não vier na query string
+        if ($this->filterFulfillment === '' && request()->hasCookie('expedition_filter_fulfillment')) {
+            $this->filterFulfillment = request()->cookie('expedition_filter_fulfillment') ?? '';
+        }
+    }
 
     public function updatingSearch(): void    { $this->resetPage(); }
     public function updatingActiveTab(): void { $this->resetPage(); $this->selectedOrders = []; $this->selectAll = false; }
     public function updatingFilterAccount(): void { $this->resetPage(); }
     public function updatingFilterStep(): void { $this->resetPage(); }
+    public function updatingFilterFulfillment($value): void
+    {
+        $this->resetPage();
+        // Salva no cookie por 1 ano
+        cookie()->queue('expedition_filter_fulfillment', $value, 525600);
+    }
 
     // ----------------------------------------------------------------
     //  DB-agnostic helpers: suporta SQLite e PostgreSQL
@@ -155,7 +171,30 @@ class ExpeditionBoard extends Component
     {
         $query = Order::query();
 
-        return $query->when($this->filterAccount, fn ($q) => $q->where('marketplace_account_id', $this->filterAccount));
+        $query->when($this->filterAccount, fn ($q) => $q->where('marketplace_account_id', $this->filterAccount));
+
+        // Filtro fulfillment (Full)
+        if ($this->filterFulfillment === 'full') {
+            if ($this->isPostgres()) {
+                $query->whereRaw("(meta->>'is_fulfillment')::boolean = true");
+            } else {
+                $query->whereRaw("json_extract(meta, '$.is_fulfillment') = true");
+            }
+        } elseif ($this->filterFulfillment === 'no_full') {
+            if ($this->isPostgres()) {
+                $query->where(fn ($q) => $q
+                    ->whereRaw("meta->>'is_fulfillment' IS NULL")
+                    ->orWhereRaw("(meta->>'is_fulfillment')::boolean = false")
+                );
+            } else {
+                $query->where(fn ($q) => $q
+                    ->whereRaw("json_extract(meta, '$.is_fulfillment') IS NULL")
+                    ->orWhereRaw("json_extract(meta, '$.is_fulfillment') = false")
+                );
+            }
+        }
+
+        return $query;
     }
 
     // ----------------------------------------------------------------
