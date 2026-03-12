@@ -268,6 +268,7 @@
                         // Marketplace
                         $mktType  = $account?->marketplace_type;
                         $isMl     = $mktType === \App\Enums\MarketplaceType::MercadoLivre;
+                        $isFull   = ! empty($order->meta['is_fulfillment']);
 
                         // Integrações vinculadas
                         $hasWebmania  = (bool) ($account?->webmania_account_id ?? false);
@@ -340,6 +341,11 @@
                                     @if($hasArtwork)
                                     <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">
                                         <x-heroicon-s-paint-brush class="w-2.5 h-2.5" /> PERSONALIZADO
+                                    </span>
+                                    @endif
+                                    @if($isFull)
+                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 font-bold">
+                                        <x-heroicon-s-building-storefront class="w-2.5 h-2.5" /> FULL
                                     </span>
                                     @endif
                                     @if($isPartial)
@@ -518,6 +524,24 @@
                                         'isMl'    => $isMl,
                                         'mlShippingId' => $mlShippingId,
                                         'isShipped' => true,
+                                        'hasWebmania'  => $hasWebmania ?? false,
+                                        'hasNfeMethod' => $hasNfeMethod ?? false,
+                                        'hasME'        => $hasME ?? false,
+                                    ])
+
+                                @elseif($isFull)
+                                    {{-- ──── FULFILLMENT (Full): apenas informativo ──── --}}
+                                    <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 px-2.5 py-1 rounded-full">
+                                        <x-heroicon-s-building-storefront class="w-3.5 h-3.5" />
+                                        Enviado pelo ML Full
+                                    </span>
+                                    @include('livewire.orders._expedition-menu', [
+                                        'order'   => $order,
+                                        'mlStep'  => null,
+                                        'genStep' => null,
+                                        'isMl'    => $isMl,
+                                        'isFull'  => true,
+                                        'mlShippingId' => $mlShippingId,
                                         'hasWebmania'  => $hasWebmania ?? false,
                                         'hasNfeMethod' => $hasNfeMethod ?? false,
                                         'hasME'        => $hasME ?? false,
@@ -857,6 +881,23 @@
                                     @endforeach
                                     </div>
 
+                                    {{-- ── Fulfillment (Full): card informativo ── --}}
+                                    @if($isFull)
+                                    <div class="mt-4 rounded-xl border border-yellow-200 dark:border-yellow-800/60 overflow-hidden">
+                                        <div class="flex items-center gap-3 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20">
+                                            <x-heroicon-s-building-storefront class="w-5 h-5 text-yellow-500 flex-shrink-0" />
+                                            <div>
+                                                <p class="text-xs font-semibold text-yellow-700 dark:text-yellow-300">
+                                                    Pedido Fulfillment (Full)
+                                                </p>
+                                                <p class="text-[11px] text-yellow-600 dark:text-yellow-400 mt-0.5">
+                                                    Embalagem, NF-e e envio sao feitos pelo Mercado Livre. Nenhuma acao necessaria.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    @else
+
                                     {{-- ── Histórico de Conferência ── --}}
                                     @if(isset($packingHistoryMap[$order->id]))
                                     @php $lastConf = $packingHistoryMap[$order->id]; @endphp
@@ -944,6 +985,7 @@
                                     </div>
                                     @endif
                                     @endif
+                                    @endif {{-- end isFull else --}}
 
                                     {{-- ── Etiqueta Melhor Envios ── --}}
                                     @php $expandedMeLabel = $labelsMap[$order->id] ?? null; @endphp
