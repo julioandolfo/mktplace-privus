@@ -155,10 +155,6 @@ class ExpeditionBoard extends Component
     {
         $query = Order::query();
 
-        if ($cid = Auth::user()?->company_id) {
-            $query->where('company_id', $cid);
-        }
-
         return $query->when($this->filterAccount, fn ($q) => $q->where('marketplace_account_id', $this->filterAccount));
     }
 
@@ -354,12 +350,7 @@ class ExpeditionBoard extends Component
 
     protected function scopedOrder(int $orderId): Order
     {
-        $q = Order::query();
-        if ($cid = Auth::user()?->company_id) {
-            $q->where('company_id', $cid);
-        }
-
-        return $q->findOrFail($orderId);
+        return Order::findOrFail($orderId);
     }
 
     public function markPacked(int $orderId): void
