@@ -244,15 +244,23 @@ class SyncMarketplaceOrders extends Command
         // Fulfillment: detectar via logistic.type do shipment (mais confiável)
         // ou via tags do pedido, ou via mode do shipment
         $isFulfillment     = $logisticType === 'fulfillment'
-                          || in_array('fulfillment', $tags)
-                          || ($shippingMode === 'me2' && $logisticType === 'fulfillment');
+                          || in_array('fulfillment', $tags);
+
+        // Log para debug de detecção Full
+        Log::info("SyncOrders ML#{$ml['id']} fulfillment check", [
+            'logistic_type'   => $logisticType,
+            'logistic_raw'    => $shipment['logistic'] ?? null,
+            'shipping_mode'   => $shippingMode,
+            'tags'            => $tags,
+            'is_fulfillment'  => $isFulfillment,
+        ]);
 
         DB::transaction(function () use (
             $account, $ml, $buyer, $orderStatus, $paymentStatus, $payment,
             $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal,
             $customerName, $customerEmail, $customerPhone, $mlUserId, $receiver,
             $shippingMethod, $shippingMode, $estimatedDelivery, $shippingDeadline, $dateDelivered,
-            $packId, $tags, $buyerFeedback, $isFulfillment, $shipment, $dateShipped
+            $packId, $tags, $buyerFeedback, $isFulfillment, $logisticType, $shipment, $dateShipped
         ) {
             $customer = $this->upsertCustomer(
                 $account, $customerName, $customerEmail, $mlUserId, $buyer, $receiver
