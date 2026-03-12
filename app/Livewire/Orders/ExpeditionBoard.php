@@ -350,25 +350,7 @@ class ExpeditionBoard extends Component
 
     protected function scopedOrder(int $orderId): Order
     {
-        $q = Order::query();
-        if ($cid = Auth::user()?->company_id) {
-            $q->where('company_id', $cid);
-        }
-
-        $order = $q->find($orderId);
-
-        if (! $order) {
-            // Debug: verificar se o pedido existe sem filtro de company
-            $exists = Order::find($orderId);
-            Log::warning("scopedOrder #{$orderId} not found", [
-                'user_company_id'  => Auth::user()?->company_id,
-                'order_exists'     => (bool) $exists,
-                'order_company_id' => $exists?->company_id,
-            ]);
-            abort(404, "Pedido #{$orderId} nao encontrado no escopo da empresa.");
-        }
-
-        return $order;
+        return Order::findOrFail($orderId);
     }
 
     public function markPacked(int $orderId): void
