@@ -57,17 +57,31 @@ class RomaneioController extends Controller
      */
     public function pdfEtiquetasAvulso(Request $request)
     {
-        $company  = Auth::user()->company;
-        $orderIds = array_filter(explode(',', $request->query('orders', '')));
+        $company   = Auth::user()->company;
+        $companyId = Auth::user()->company_id;
+        $rawOrders = $request->query('orders', '');
+        $orderIds  = array_filter(explode(',', $rawOrders));
+
+        \Illuminate\Support\Facades\Log::info('pdfEtiquetasAvulso debug', [
+            'raw_orders'  => $rawOrders,
+            'order_ids'   => $orderIds,
+            'company_id'  => $companyId,
+            'url'         => $request->fullUrl(),
+        ]);
 
         if (empty($orderIds)) {
             abort(400, 'Nenhum pedido informado.');
         }
 
-        $orders = Order::where('company_id', Auth::user()->company_id)
+        $orders = Order::where('company_id', $companyId)
             ->whereIn('id', $orderIds)
             ->with(['marketplaceAccount'])
             ->get();
+
+        \Illuminate\Support\Facades\Log::info('pdfEtiquetasAvulso orders found', [
+            'count'     => $orders->count(),
+            'order_ids' => $orders->pluck('id')->toArray(),
+        ]);
 
         $labels = $this->buildLabelsFromOrders($orders, $company);
 
