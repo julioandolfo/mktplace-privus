@@ -718,7 +718,7 @@ class ExpeditionBoard extends Component
                     $canInvoiceOk = ($canInvoice['can_invoice'] ?? null) === true
                                  || ($canInvoice['status'] ?? null) === true;
 
-                    if (empty($fiscal) || empty($fiscal['sku']) || ! $canInvoiceOk) {
+                    if (! $canInvoiceOk) {
                         $product = $item->product;
                         // Pré-preencher com dados existentes do fiscal (parcial) se houver
                         $existingTaxInfo = $fiscal['tax_information'] ?? [];
