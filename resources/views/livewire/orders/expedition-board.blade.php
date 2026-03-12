@@ -179,9 +179,13 @@
             </button>
 
             <button wire:click="openRomaneioModal(1)"
+                    wire:loading.attr="disabled"
+                    wire:target="openRomaneioModal"
                     class="btn-primary btn-sm">
-                <x-heroicon-o-clipboard-document-list class="w-4 h-4" />
-                Criar Romaneio
+                <x-heroicon-o-clipboard-document-list class="w-4 h-4" wire:loading.remove wire:target="openRomaneioModal" />
+                <svg wire:loading wire:target="openRomaneioModal" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/></svg>
+                <span wire:loading.remove wire:target="openRomaneioModal">Criar Romaneio</span>
+                <span wire:loading wire:target="openRomaneioModal">Criando...</span>
             </button>
         </div>
         @else
@@ -534,9 +538,14 @@
 
                                     {{-- ──── CTA PRINCIPAL ──── --}}
                                     @if($mlStep === 1)
-                                        <button wire:click="openPackingModal({{ $order->id }})" @click.stop class="btn-secondary btn-xs">
-                                            <x-heroicon-o-clipboard-document-check class="w-3.5 h-3.5" />
-                                            Conferir
+                                        <button wire:click="openPackingModal({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="openPackingModal({{ $order->id }})"
+                                                @click.stop class="btn-secondary btn-xs">
+                                            <x-heroicon-o-clipboard-document-check class="w-3.5 h-3.5" wire:loading.remove wire:target="openPackingModal({{ $order->id }})" />
+                                            <svg wire:loading wire:target="openPackingModal({{ $order->id }})" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/></svg>
+                                            <span wire:loading.remove wire:target="openPackingModal({{ $order->id }})">Conferir</span>
+                                            <span wire:loading wire:target="openPackingModal({{ $order->id }})">Abrindo...</span>
                                         </button>
                                     @elseif($mlStep === 2)
                                         <button wire:click="openNfeModal({{ $order->id }})"
@@ -602,9 +611,14 @@
 
                                     {{-- ──── CTA PRINCIPAL ──── --}}
                                     @if($genStep === 1)
-                                        <button wire:click="openPackingModal({{ $order->id }})" @click.stop class="btn-secondary btn-xs">
-                                            <x-heroicon-o-clipboard-document-check class="w-3.5 h-3.5" />
-                                            Conferir
+                                        <button wire:click="openPackingModal({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="openPackingModal({{ $order->id }})"
+                                                @click.stop class="btn-secondary btn-xs">
+                                            <x-heroicon-o-clipboard-document-check class="w-3.5 h-3.5" wire:loading.remove wire:target="openPackingModal({{ $order->id }})" />
+                                            <svg wire:loading wire:target="openPackingModal({{ $order->id }})" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/></svg>
+                                            <span wire:loading.remove wire:target="openPackingModal({{ $order->id }})">Conferir</span>
+                                            <span wire:loading wire:target="openPackingModal({{ $order->id }})">Abrindo...</span>
                                         </button>
                                     @elseif($hasNfeMethod && !$hasNfe && !$pendingNfe)
                                         <button wire:click="openNfeModal({{ $order->id }})"
@@ -622,9 +636,14 @@
                                             NF-e processando
                                         </span>
                                     @elseif($hasME && !$meLabel)
-                                        <button wire:click="openShippingModal({{ $order->id }})" @click.stop class="btn-primary btn-xs">
-                                            <x-heroicon-o-truck class="w-3.5 h-3.5" />
-                                            Cotar Frete
+                                        <button wire:click="openShippingModal({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="openShippingModal({{ $order->id }})"
+                                                @click.stop class="btn-primary btn-xs">
+                                            <x-heroicon-o-truck class="w-3.5 h-3.5" wire:loading.remove wire:target="openShippingModal({{ $order->id }})" />
+                                            <svg wire:loading wire:target="openShippingModal({{ $order->id }})" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/></svg>
+                                            <span wire:loading.remove wire:target="openShippingModal({{ $order->id }})">Cotar Frete</span>
+                                            <span wire:loading wire:target="openShippingModal({{ $order->id }})">Abrindo...</span>
                                         </button>
                                     @elseif($genStep >= $genTotalSteps)
                                         <button wire:click="markShipped({{ $order->id }})" @click.stop
@@ -864,8 +883,14 @@
                                                     @if($lastConf->performer) · {{ $lastConf->performer->name }} @endif
                                                 </span>
                                                 <button wire:click="openPackingModal({{ $order->id }})"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="openPackingModal({{ $order->id }})"
                                                         class="text-[11px] text-primary-600 dark:text-primary-400 hover:underline font-medium">
-                                                    Reconferir
+                                                    <span wire:loading.remove wire:target="openPackingModal({{ $order->id }})">Reconferir</span>
+                                                    <span wire:loading wire:target="openPackingModal({{ $order->id }})" class="inline-flex items-center gap-1">
+                                                        <svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/></svg>
+                                                        Abrindo...
+                                                    </span>
                                                 </button>
                                             </div>
                                         </div>
@@ -907,8 +932,14 @@
                                         <x-heroicon-o-clipboard-document class="w-4 h-4" />
                                         <span>Nenhuma conferência realizada ainda.</span>
                                         <button wire:click="openPackingModal({{ $order->id }})"
+                                                wire:loading.attr="disabled"
+                                                wire:target="openPackingModal({{ $order->id }})"
                                                 class="text-primary-600 dark:text-primary-400 hover:underline font-medium">
-                                            Conferir agora
+                                            <span wire:loading.remove wire:target="openPackingModal({{ $order->id }})">Conferir agora</span>
+                                            <span wire:loading wire:target="openPackingModal({{ $order->id }})" class="inline-flex items-center gap-1">
+                                                <svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/></svg>
+                                                Abrindo...
+                                            </span>
                                         </button>
                                     </div>
                                     @endif
