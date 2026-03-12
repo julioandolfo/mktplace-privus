@@ -877,15 +877,24 @@ class MercadoLivreService
     }
 
     /**
-     * Verifica se um anúncio pode ser faturado (tem dados fiscais completos).
+     * Verifica se um anúncio (ou variação) pode ser faturado.
+     *
+     * Para itens com variações, deve-se usar:
+     *   GET /can_invoice/items/{itemId}/variations/{variationId}
      */
-    public function canInvoiceItem(string $itemId): array
+    public function canInvoiceItem(string $itemId, ?string $variationId = null): array
     {
         try {
-            return $this->get("/can_invoice/items/{$itemId}");
+            $url = "/can_invoice/items/{$itemId}";
+            if ($variationId) {
+                $url .= "/variations/{$variationId}";
+            }
+
+            return $this->get($url);
         } catch (\Throwable $e) {
-            Log::warning("ML canInvoiceItem({$itemId}): " . $e->getMessage());
-            return ['can_invoice' => false, 'error' => $e->getMessage()];
+            Log::warning("ML canInvoiceItem({$itemId}, var:{$variationId}): " . $e->getMessage());
+
+            return ['can_invoice' => false, 'status' => false, 'error' => $e->getMessage()];
         }
     }
 
