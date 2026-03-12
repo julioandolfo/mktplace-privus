@@ -139,6 +139,13 @@
                 <option value="to_ship">Pronto p/ despacho</option>
             </select>
 
+            {{-- Filtro Full (fulfillment) --}}
+            <select wire:model.live="filterFulfillment" class="form-input w-full sm:w-40">
+                <option value="">Full + Normal</option>
+                <option value="full">Apenas Full</option>
+                <option value="no_full">Apenas sem Full</option>
+            </select>
+
             {{-- Operador ativo --}}
             @if($expeditionOperators->isNotEmpty())
             <select wire:model="selectedOperatorId" class="form-input w-full sm:w-44">
@@ -506,6 +513,7 @@
                                         'mlStep'  => $isMl ? ($mlStep ?? 1) : null,
                                         'genStep' => !$isMl ? ($genStep ?? 1) : null,
                                         'isMl'    => $isMl,
+                                        'isFull'  => $isFull,
                                         'mlShippingId' => $mlShippingId,
                                         'hasWebmania'  => $hasWebmania ?? false,
                                         'hasNfeMethod' => $hasNfeMethod ?? false,
@@ -523,6 +531,7 @@
                                         'mlStep'  => null,
                                         'genStep' => null,
                                         'isMl'    => $isMl,
+                                        'isFull'  => $isFull,
                                         'mlShippingId' => $mlShippingId,
                                         'isShipped' => true,
                                         'hasWebmania'  => $hasWebmania ?? false,
@@ -608,6 +617,7 @@
                                         'mlStep'       => $mlStep,
                                         'genStep'      => null,
                                         'isMl'         => true,
+                                        'isFull'       => $isFull,
                                         'mlShippingId' => $mlShippingId,
                                         'isShipped'    => false,
                                         'hasWebmania'  => $hasWebmania ?? false,
@@ -684,6 +694,7 @@
                                         'mlStep'       => null,
                                         'genStep'      => $genStep,
                                         'isMl'         => false,
+                                        'isFull'       => false,
                                         'mlShippingId' => null,
                                         'isShipped'    => false,
                                         'hasWebmania'  => $hasWebmania ?? false,
