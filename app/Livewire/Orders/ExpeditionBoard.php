@@ -155,6 +155,10 @@ class ExpeditionBoard extends Component
     {
         $query = Order::query();
 
+        if ($cid = Auth::user()?->company_id) {
+            $query->where('company_id', $cid);
+        }
+
         return $query->when($this->filterAccount, fn ($q) => $q->where('marketplace_account_id', $this->filterAccount));
     }
 
@@ -355,20 +359,7 @@ class ExpeditionBoard extends Component
             $q->where('company_id', $cid);
         }
 
-        $order = $q->find($orderId);
-
-        if (! $order) {
-            // Debug: verificar se o pedido existe sem filtro de company
-            $exists = Order::find($orderId);
-            Log::warning("scopedOrder #{$orderId} not found", [
-                'user_company_id'  => Auth::user()?->company_id,
-                'order_exists'     => (bool) $exists,
-                'order_company_id' => $exists?->company_id,
-            ]);
-            abort(404, "Pedido #{$orderId} nao encontrado no escopo da empresa.");
-        }
-
-        return $order;
+        return $q->findOrFail($orderId);
     }
 
     public function markPacked(int $orderId): void
