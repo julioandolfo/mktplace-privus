@@ -268,7 +268,8 @@
                         // Marketplace
                         $mktType  = $account?->marketplace_type;
                         $isMl     = $mktType === \App\Enums\MarketplaceType::MercadoLivre;
-                        $isFull   = ! empty($order->meta['is_fulfillment']);
+                        $isFull   = ! empty($order->meta['is_fulfillment'])
+                                   || ($order->meta['ml_logistic_type'] ?? null) === 'fulfillment';
 
                         // Integrações vinculadas
                         $hasWebmania  = (bool) ($account?->webmania_account_id ?? false);
