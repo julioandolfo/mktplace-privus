@@ -1317,10 +1317,14 @@
                     <p class="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Problemas detectados</p>
                     @foreach($peProblems as $prob)
                     @php
-                        $probColor  = $prob['color'] ?? '#9ca3af';
-                        $probL2     = $prob['level_two']['title']['text']  ?? ($prob['level_two']['title']['text']  ?? '');
-                        $probL3     = $prob['level_three']['title']['text'] ?? ($prob['level_three']['title']['text'] ?? '');
-                        $probRemedy = $prob['level_three']['remedy']['text'] ?? ($prob['level_three']['remedy']['text'] ?? '');
+                        $rawColor   = $prob['color'] ?? '#9ca3af';
+                        $probColor  = is_string($rawColor) ? $rawColor : '#9ca3af';
+                        $l2Title    = $prob['level_two']['title'] ?? '';
+                        $probL2     = is_array($l2Title) ? ($l2Title['text'] ?? json_encode($l2Title)) : (string) $l2Title;
+                        $l3Title    = $prob['level_three']['title'] ?? '';
+                        $probL3     = is_array($l3Title) ? ($l3Title['text'] ?? json_encode($l3Title)) : (string) $l3Title;
+                        $l3Remedy   = $prob['level_three']['remedy'] ?? '';
+                        $probRemedy = is_array($l3Remedy) ? ($l3Remedy['text'] ?? json_encode($l3Remedy)) : (string) $l3Remedy;
                         $cancellations = $prob['cancellations'] ?? 0;
                         $claims        = $prob['claims']        ?? 0;
                     @endphp
@@ -1330,7 +1334,7 @@
                                 <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: {{ $probColor }}"></span>
                                 <span class="text-xs font-semibold text-gray-800 dark:text-white">{{ $probL2 }}</span>
                                 @if(!empty($prob['tag']))
-                                <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-bold uppercase">{{ $prob['tag'] }}</span>
+                                <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-bold uppercase">{{ is_string($prob['tag']) ? $prob['tag'] : json_encode($prob['tag']) }}</span>
                                 @endif
                             </div>
                             <div class="flex items-center gap-2 text-[10px] text-gray-500 dark:text-zinc-500">
