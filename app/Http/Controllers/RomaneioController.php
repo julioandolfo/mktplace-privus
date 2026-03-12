@@ -53,60 +53,54 @@ class RomaneioController extends Controller
     }
 
     /**
-     * PDF das Etiquetas de Volume/Caixa com QR code por caixa.
-     * Pode receber um romaneio existente ou uma lista de order_ids via query string.
+     * PDF das Etiquetas de Volume avulsas (sem romaneio): ?orders=1,2,3
      */
-    public function pdfEtiquetas(Request $request, ?Romaneio $romaneio = null)
+    public function pdfEtiquetasAvulso(Request $request)
     {
+        $company  = Auth::user()->company;
+        $orderIds = array_filter(explode(',', $request->query('orders', '')));
+
+        if (empty($orderIds)) {
+            abort(400, 'Nenhum pedido informado.');
+        }
+
+        $orders = Order::where('company_id', Auth::user()->company_id)
+            ->whereIn('id', $orderIds)
+            ->with(['marketplaceAccount'])
+            ->get();
+
+        $labels = $this->buildLabelsFromOrders($orders, $company);
+
+        if (empty($labels)) {
+            abort(404, 'Nenhuma etiqueta para gerar.');
+        }
+
+        return $this->renderEtiquetasPdf($labels);
+    }
+
+    /**
+     * PDF das Etiquetas de Volume/Caixa com QR code por caixa (a partir de romaneio).
+     */
+    public function pdfEtiquetas(Request $request, Romaneio $romaneio)
+    {
+        abort_unless($romaneio->company_id === Auth::user()->company_id, 403);
+
         $company = Auth::user()->company;
-        $labels  = [];
+        $romaneio->load(['items.order.marketplaceAccount']);
 
-        if ($romaneio && $romaneio->exists) {
-            // Vem de um romaneio já criado
-            abort_unless($romaneio->company_id === Auth::user()->company_id, 403);
-            $romaneio->load(['items.order.marketplaceAccount']);
-
-            foreach ($romaneio->items as $item) {
-                $mktAccount = $item->order->marketplaceAccount;
-                for ($v = 1; $v <= $item->volumes; $v++) {
-                    $labels[] = [
-                        'order'            => $item->order,
-                        'volume'           => $v,
-                        'total_volumes'    => $item->volumes,
-                        'company'          => $company,
-                        'account_name'     => $mktAccount?->account_name ?? '',
-                        'marketplace_type' => $mktAccount?->marketplace_type,
-                        'deadline'         => $item->order->meta['ml_shipping_deadline'] ?? null,
-                    ];
-                }
-            }
-        } else {
-            // Vem do board de expedição: ?orders=1,2,3
-            $orderIds = array_filter(explode(',', $request->query('orders', '')));
-
-            if (empty($orderIds)) {
-                abort(400, 'Nenhum pedido informado.');
-            }
-
-            $orders = Order::where('company_id', Auth::user()->company_id)
-                ->whereIn('id', $orderIds)
-                ->with(['marketplaceAccount'])
-                ->get();
-
-            foreach ($orders as $order) {
-                $mktAccount = $order->marketplaceAccount;
-                $totalVols  = (int) ($order->meta['expedition_volumes'] ?? 1);
-                for ($v = 1; $v <= $totalVols; $v++) {
-                    $labels[] = [
-                        'order'            => $order,
-                        'volume'           => $v,
-                        'total_volumes'    => $totalVols,
-                        'company'          => $company,
-                        'account_name'     => $mktAccount?->account_name ?? '',
-                        'marketplace_type' => $mktAccount?->marketplace_type,
-                        'deadline'         => $order->meta['ml_shipping_deadline'] ?? null,
-                    ];
-                }
+        $labels = [];
+        foreach ($romaneio->items as $item) {
+            $mktAccount = $item->order->marketplaceAccount;
+            for ($v = 1; $v <= $item->volumes; $v++) {
+                $labels[] = [
+                    'order'            => $item->order,
+                    'volume'           => $v,
+                    'total_volumes'    => $item->volumes,
+                    'company'          => $company,
+                    'account_name'     => $mktAccount?->account_name ?? '',
+                    'marketplace_type' => $mktAccount?->marketplace_type,
+                    'deadline'         => $item->order->meta['ml_shipping_deadline'] ?? null,
+                ];
             }
         }
 
@@ -114,6 +108,32 @@ class RomaneioController extends Controller
             abort(404, 'Nenhuma etiqueta para gerar.');
         }
 
+        return $this->renderEtiquetasPdf($labels);
+    }
+
+    private function buildLabelsFromOrders($orders, $company): array
+    {
+        $labels = [];
+        foreach ($orders as $order) {
+            $mktAccount = $order->marketplaceAccount;
+            $totalVols  = (int) ($order->meta['expedition_volumes'] ?? 1);
+            for ($v = 1; $v <= $totalVols; $v++) {
+                $labels[] = [
+                    'order'            => $order,
+                    'volume'           => $v,
+                    'total_volumes'    => $totalVols,
+                    'company'          => $company,
+                    'account_name'     => $mktAccount?->account_name ?? '',
+                    'marketplace_type' => $mktAccount?->marketplace_type,
+                    'deadline'         => $order->meta['ml_shipping_deadline'] ?? null,
+                ];
+            }
+        }
+        return $labels;
+    }
+
+    private function renderEtiquetasPdf(array $labels)
+    {
         $pdf = Pdf::loadView('pdfs.etiqueta-volume', compact('labels'))
             ->setPaper([0, 0, 283.465, 425.197], 'portrait')
             ->setOption('isRemoteEnabled', true);
