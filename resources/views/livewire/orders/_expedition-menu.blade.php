@@ -135,6 +135,16 @@
             </button>
             @endif
 
+            {{-- ── Cancelar Envio (disponível para pedidos em processo ou já enviados) ── --}}
+            <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
+            <button wire:click="cancelShipment({{ $order->id }})"
+                    wire:confirm="Cancelar envio do pedido {{ $order->order_number }}? O status voltará para Pronto para Envio."
+                    @click="open = false"
+                    class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                <x-heroicon-o-x-circle class="w-4 h-4" />
+                Cancelar Envio
+            </button>
+
             {{-- ── Divisor + Ver Pedido (sempre) ── --}}
             <div class="my-1 border-t border-gray-100 dark:border-zinc-700"></div>
             <a href="{{ route('orders.show', $order) }}"
