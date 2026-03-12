@@ -1511,6 +1511,24 @@ PROMPT;
         session()->flash('success', "Pedido {$order->order_number} reaberto para re-envio.");
     }
 
+    /**
+     * Cancela envio — reverte pedido para "Pronto para Envio" limpando dados de despacho
+     */
+    public function cancelShipment(int $orderId): void
+    {
+        $order = $this->scopedOrder($orderId);
+
+        $order->update([
+            'status'          => OrderStatus::Confirmed,
+            'pipeline_status' => PipelineStatus::ReadyToShip,
+            'shipped_at'      => null,
+        ]);
+
+        OrderTimeline::log($order, 'status_changed', "Envio cancelado — pedido voltou para Pronto para Envio");
+
+        session()->flash('success', "Envio do pedido {$order->order_number} cancelado.");
+    }
+
     // ----------------------------------------------------------------
     //  Actions — Etiquetas internas (PDF volumes)
     // ----------------------------------------------------------------
