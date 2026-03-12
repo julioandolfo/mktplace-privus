@@ -239,20 +239,28 @@ class SyncMarketplaceOrders extends Command
         $packId            = $ml['pack_id'] ?? null;
         $tags              = $ml['tags'] ?? [];
         $buyerFeedback     = $ml['feedback']['buyer'] ?? null;
-        $logisticType      = $shipment['logistic']['type'] ?? null;
+        // logistic.type (formato novo com x-format-new) ou logistic_type (campo direto)
+        $logisticType      = $shipment['logistic']['type']
+                          ?? $shipment['logistic_type']
+                          ?? null;
 
         // Fulfillment: detectar via logistic.type do shipment (mais confiável)
-        // ou via tags do pedido, ou via mode do shipment
+        // ou via tags do pedido/shipment, ou via mode do shipment
+        $shipmentTags      = $shipment['tags'] ?? [];
         $isFulfillment     = $logisticType === 'fulfillment'
-                          || in_array('fulfillment', $tags);
+                          || in_array('fulfillment', $tags)
+                          || in_array('fulfillment', $shipmentTags);
 
         // Log para debug de detecção Full
         Log::info("SyncOrders ML#{$ml['id']} fulfillment check", [
-            'logistic_type'   => $logisticType,
-            'logistic_raw'    => $shipment['logistic'] ?? null,
-            'shipping_mode'   => $shippingMode,
-            'tags'            => $tags,
-            'is_fulfillment'  => $isFulfillment,
+            'logistic_type'    => $logisticType,
+            'logistic_raw'     => $shipment['logistic'] ?? null,
+            'logistic_type_direct' => $shipment['logistic_type'] ?? null,
+            'shipping_mode'    => $shippingMode,
+            'shipment_tags'    => $shipmentTags,
+            'order_tags'       => $tags,
+            'shipment_keys'    => array_keys($shipment),
+            'is_fulfillment'   => $isFulfillment,
         ]);
 
         DB::transaction(function () use (

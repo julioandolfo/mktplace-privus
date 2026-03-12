@@ -176,12 +176,21 @@ class SyncSingleOrder implements ShouldQueue
         // Feedback
         $buyerFeedback = $ml['feedback']['buyer'] ?? null;
 
+        // logistic.type (formato novo com x-format-new) ou logistic_type (campo direto)
+        $logisticType      = $shipment['logistic']['type']
+                          ?? $shipment['logistic_type']
+                          ?? null;
+        $shipmentTags      = $shipment['tags'] ?? [];
+        $isFulfillment     = $logisticType === 'fulfillment'
+                          || in_array('fulfillment', $tags)
+                          || in_array('fulfillment', $shipmentTags);
+
         DB::transaction(function () use (
             $account, $ml, $buyer, $orderStatus, $paymentStatus, $payment,
             $trackingCode, $shippingCost, $shippingAddress, $total, $subtotal,
             $customerName, $customerEmail, $customerPhone, $mlUserId, $receiver,
             $shippingMethod, $shippingMode, $estimatedDelivery, $shippingDeadline, $dateDelivered,
-            $packId, $tags, $buyerFeedback, $shipment, $dateShipped
+            $packId, $tags, $buyerFeedback, $shipment, $dateShipped, $logisticType, $isFulfillment
         ) {
             $customer = $this->upsertCustomer(
                 $account, $customerName, $customerEmail, $mlUserId, $buyer, $receiver
@@ -259,10 +268,9 @@ class SyncSingleOrder implements ShouldQueue
                         'ml_buyer_id'           => $mlUserId,
                         'pack_id'              => $packId,
                         'ml_tags'              => $tags,
-                        'ml_logistic_type'     => $shipment['logistic']['type'] ?? null,
+                        'ml_logistic_type'     => $logisticType,
                         'ml_feedback'          => $buyerFeedback,
-                        'is_fulfillment'       => ($shipment['logistic']['type'] ?? null) === 'fulfillment'
-                                               || in_array('fulfillment', $tags),
+                        'is_fulfillment'       => $isFulfillment,
                     ],
                 ]
             );
