@@ -1459,11 +1459,21 @@
                             Tentativa {{ $nfeFiscalRetries }}/12 &mdash; Verificando automaticamente a cada 5 segundos.
                         </p>
 
-                        {{-- Debug: mostrar resposta da API a cada verificacao --}}
-                        @if(!empty($nfeFiscalDebug))
+                        {{-- Debug: resultado do save --}}
+                        @if(!empty($nfeFiscalSaveDebug))
                         <details class="text-xs">
                             <summary class="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline">
-                                Ver resposta da API (debug)
+                                Resultado do envio (create/link)
+                            </summary>
+                            <pre class="mt-1 p-2 bg-gray-900 text-gray-200 rounded text-[10px] overflow-x-auto max-h-48 overflow-y-auto">{{ json_encode($nfeFiscalSaveDebug, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+                        </details>
+                        @endif
+
+                        {{-- Debug: resultado do recheck --}}
+                        @if(!empty($nfeFiscalDebug) && $nfeFiscalRetries > 0)
+                        <details class="text-xs">
+                            <summary class="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline">
+                                Verificacao #{{ $nfeFiscalRetries }} (can_invoice)
                             </summary>
                             <pre class="mt-1 p-2 bg-gray-900 text-gray-200 rounded text-[10px] overflow-x-auto max-h-48 overflow-y-auto">{{ json_encode($nfeFiscalDebug, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
                         </details>

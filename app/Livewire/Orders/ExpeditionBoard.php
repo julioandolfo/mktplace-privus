@@ -69,7 +69,8 @@ class ExpeditionBoard extends Component
     public bool   $nfeFiscalSuccess  = false;
     public bool   $nfeFiscalProcessing = false; // dados enviados, aguardando ML processar
     public int    $nfeFiscalRetries = 0;       // contagem de tentativas de recheck
-    public array  $nfeFiscalDebug = [];        // info de debug da API do ML
+    public array  $nfeFiscalDebug = [];        // info de debug da API do ML (recheck)
+    public array  $nfeFiscalSaveDebug = [];   // info de debug do saveFiscalData
     public array  $nfeTaxRules      = []; // regras tributarias do vendedor [{id, description}]
     public string $nfeNatureOp      = 'Venda';
     public string $nfeInfoFisco     = '';
@@ -638,6 +639,7 @@ class ExpeditionBoard extends Component
         $this->nfeFiscalProcessing = false;
         $this->nfeFiscalRetries    = 0;
         $this->nfeFiscalDebug      = [];
+        $this->nfeFiscalSaveDebug  = [];
         $this->nfeFiscalPending    = [];
         $this->nfeFiscalForm       = [];
         $this->nfeFiscalChecking   = false;
@@ -702,7 +704,7 @@ class ExpeditionBoard extends Component
 
                 try {
                     $fiscal = $service->getItemFiscalData($mlItemId);
-                    $canInvoice = $service->canInvoiceItem($mlItemId);
+                    $canInvoice = $service->canInvoiceItem($mlItemId, $variationId ? (string) $variationId : null);
 
                     Log::info("checkFiscalData item {$mlItemId} variation {$variationId}", [
                         'fiscal_empty'    => empty($fiscal),
@@ -953,7 +955,8 @@ PROMPT;
         // Marcar como "enviado, aguardando processamento"
         $this->nfeFiscalProcessing = true;
         $this->nfeFiscalRetries = 0;
-        $this->nfeFiscalDebug = $saveDebug; // mostrar resultado do save no debug
+        $this->nfeFiscalSaveDebug = $saveDebug; // preserva resultado do save
+        $this->nfeFiscalDebug = $saveDebug;
         $this->nfeFiscalSuccess = true;
         $this->nfeFiscalMessage = 'Dados fiscais enviados ao Mercado Livre. Aguardando processamento...';
         $this->nfeLoading = false;
@@ -985,15 +988,18 @@ PROMPT;
 
         $checkedItems = [];
         foreach ($order->items as $item) {
-            $mlItemId = $item->meta['ml_item_id'] ?? null;
-            if (! $mlItemId || isset($checkedItems[$mlItemId])) {
+            $mlItemId    = $item->meta['ml_item_id'] ?? null;
+            $variationId = $item->meta['ml_variation_id'] ?? null;
+            $uniqueKey   = $mlItemId . '|' . ($variationId ?? '');
+
+            if (! $mlItemId || isset($checkedItems[$uniqueKey])) {
                 continue;
             }
-            $checkedItems[$mlItemId] = true;
+            $checkedItems[$uniqueKey] = true;
 
             try {
                 $fiscal = $service->getItemFiscalData($mlItemId);
-                $canInvoice = $service->canInvoiceItem($mlItemId);
+                $canInvoice = $service->canInvoiceItem($mlItemId, $variationId ? (string) $variationId : null);
 
                 // ML usa 'status' em vez de 'can_invoice' em algumas respostas
                 $canInvoiceOk = ($canInvoice['can_invoice'] ?? null) === true
@@ -1217,6 +1223,7 @@ PROMPT;
         $this->nfeFiscalSuccess    = false;
         $this->nfeFiscalRetries    = 0;
         $this->nfeFiscalDebug      = [];
+        $this->nfeFiscalSaveDebug  = [];
         $this->nfeTaxRules         = [];
         $this->nfeLoading          = false;
         $this->resetErrorBag();
