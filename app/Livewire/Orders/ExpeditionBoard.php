@@ -354,7 +354,21 @@ class ExpeditionBoard extends Component
         if ($cid = Auth::user()?->company_id) {
             $q->where('company_id', $cid);
         }
-        return $q->findOrFail($orderId);
+
+        $order = $q->find($orderId);
+
+        if (! $order) {
+            // Debug: verificar se o pedido existe sem filtro de company
+            $exists = Order::find($orderId);
+            Log::warning("scopedOrder #{$orderId} not found", [
+                'user_company_id'  => Auth::user()?->company_id,
+                'order_exists'     => (bool) $exists,
+                'order_company_id' => $exists?->company_id,
+            ]);
+            abort(404, "Pedido #{$orderId} nao encontrado no escopo da empresa.");
+        }
+
+        return $order;
     }
 
     public function markPacked(int $orderId): void
@@ -452,12 +466,7 @@ class ExpeditionBoard extends Component
         // Fecha outros modais que possam estar abertos
         $this->closeAllModals();
 
-        try {
-            $order = $this->scopedOrder($orderId);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            $this->addError('packing', "Pedido #{$orderId} nao encontrado.");
-            return;
-        }
+        $order = $this->scopedOrder($orderId);
 
         $order->load(['items.product.primaryImage', 'items.product.images']);
 
