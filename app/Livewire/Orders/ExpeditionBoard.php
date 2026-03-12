@@ -452,7 +452,13 @@ class ExpeditionBoard extends Component
         // Fecha outros modais que possam estar abertos
         $this->closeAllModals();
 
-        $order = $this->scopedOrder($orderId);
+        try {
+            $order = $this->scopedOrder($orderId);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            $this->addError('packing', "Pedido #{$orderId} nao encontrado.");
+            return;
+        }
+
         $order->load(['items.product.primaryImage', 'items.product.images']);
 
         // Carrega última conferência para pré-preencher quantidades
