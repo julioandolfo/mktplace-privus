@@ -37,6 +37,7 @@ class MercadoLivreService
     private function get(string $path, array $params = []): array
     {
         $response = Http::withToken($this->token())
+            ->withHeaders(['x-format-new' => 'true'])
             ->timeout(30)
             ->get(self::BASE_URL . $path, $params);
 
