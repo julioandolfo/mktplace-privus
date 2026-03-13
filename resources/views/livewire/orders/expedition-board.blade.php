@@ -324,11 +324,21 @@
                             {{-- Pedido + marketplace + hint de itens --}}
                             <td @click="expanded = !expanded">
                                 <div class="flex items-center gap-2">
-                                    @if($account)
-                                        <div class="w-6 h-6 flex-shrink-0" title="{{ $account->account_name }}">
-                                            {!! $account->marketplace_type->logoSvg() !!}
+                                    @php $company = $account?->company; @endphp
+                                    <div class="relative flex-shrink-0" title="{{ $account?->account_name }}">
+                                        <div class="w-8 h-8 rounded-full border-2 border-gray-200 dark:border-zinc-600 overflow-hidden bg-gray-100 dark:bg-zinc-700 flex items-center justify-center">
+                                            @if($company?->logo_path)
+                                                <img src="{{ asset('storage/' . $company->logo_path) }}" alt="{{ $company->name }}" class="w-full h-full object-cover">
+                                            @else
+                                                <span class="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase">{{ Str::substr($company?->name ?? $account?->account_name ?? '?', 0, 2) }}</span>
+                                            @endif
                                         </div>
-                                    @endif
+                                        @if($account)
+                                        <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-white dark:bg-zinc-800 flex items-center justify-center shadow-sm border border-gray-200 dark:border-zinc-600">
+                                            <div class="w-3 h-3">{!! $account->marketplace_type->logoSvg() !!}</div>
+                                        </div>
+                                        @endif
+                                    </div>
                                     <div>
                                         <a href="{{ route('orders.show', $order) }}"
                                            class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline text-sm"

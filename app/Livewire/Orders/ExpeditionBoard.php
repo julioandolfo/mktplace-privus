@@ -273,7 +273,7 @@ class ExpeditionBoard extends Component
         $notnull = $this->deadlineNotNullSql();
 
         $query = $this->baseQuery()
-            ->with(['items.product.primaryImage', 'items.product.images', 'items.variant', 'marketplaceAccount', 'invoices', 'shipmentLabels'])
+            ->with(['items.product.primaryImage', 'items.product.images', 'items.variant', 'marketplaceAccount.company', 'invoices', 'shipmentLabels'])
             ->when($this->search, function ($q) {
                 $term = $this->search;
                 $like = $this->isPostgres() ? 'ilike' : 'like';
