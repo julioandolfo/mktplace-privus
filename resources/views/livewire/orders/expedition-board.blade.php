@@ -326,71 +326,73 @@
                                 <div class="flex items-center gap-2">
                                     @php $company = $account?->company; @endphp
                                     <div class="relative flex-shrink-0" title="{{ $account?->account_name }}">
-                                        <div class="w-8 h-8 rounded-full border-2 border-gray-200 dark:border-zinc-600 overflow-hidden bg-gray-100 dark:bg-zinc-700 flex items-center justify-center">
+                                        <div class="w-7 h-7 rounded-full border border-gray-200 dark:border-zinc-600 overflow-hidden bg-gray-100 dark:bg-zinc-700 flex items-center justify-center">
                                             @if($company?->logo_path)
                                                 <img src="{{ asset('storage/' . $company->logo_path) }}" alt="{{ $company->name }}" class="w-full h-full object-cover">
                                             @else
-                                                <span class="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase">{{ Str::substr($company?->name ?? $account?->account_name ?? '?', 0, 2) }}</span>
+                                                <span class="text-[9px] font-bold text-gray-400 dark:text-zinc-500 uppercase">{{ Str::substr($company?->name ?? $account?->account_name ?? '?', 0, 2) }}</span>
                                             @endif
                                         </div>
                                         @if($account)
-                                        <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-white dark:bg-zinc-800 flex items-center justify-center shadow-sm border border-gray-200 dark:border-zinc-600">
-                                            <div class="w-3 h-3">{!! $account->marketplace_type->logoSvg() !!}</div>
+                                        <div class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white dark:bg-zinc-800 flex items-center justify-center shadow-sm border border-gray-200 dark:border-zinc-600">
+                                            <div class="w-2.5 h-2.5">{!! $account->marketplace_type->logoSvg() !!}</div>
                                         </div>
                                         @endif
                                     </div>
-                                    <div>
-                                        <a href="{{ route('orders.show', $order) }}"
-                                           class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline text-sm"
-                                           @click.stop>
-                                            {{ $order->order_number }}
-                                        </a>
-                                        @if($account)
-                                        <p class="text-xs text-gray-400 dark:text-zinc-500">{{ $account->account_name }}</p>
-                                        @endif
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                            <a href="{{ route('orders.show', $order) }}"
+                                               class="font-mono font-semibold text-primary-600 dark:text-primary-400 hover:underline text-sm"
+                                               @click.stop>
+                                                {{ $order->order_number }}
+                                            </a>
+                                            @if($account)
+                                            <span class="text-[10px] text-gray-400 dark:text-zinc-500 truncate">{{ $account->account_name }}</span>
+                                            @endif
+                                        </div>
+                                        {{-- Badges inline --}}
+                                        <div class="flex flex-wrap items-center gap-1 mt-0.5">
+                                            <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0 rounded-full bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400">
+                                                <x-heroicon-o-cube class="w-2.5 h-2.5" />
+                                                {{ $itemCount }} {{ Str::plural('item', $itemCount) }}
+                                            </span>
+                                            @if($hasArtwork)
+                                            <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">
+                                                <x-heroicon-s-paint-brush class="w-2.5 h-2.5" /> PERS.
+                                            </span>
+                                            @endif
+                                            @if($isFull)
+                                            <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 font-bold">
+                                                <x-heroicon-s-building-storefront class="w-2.5 h-2.5" /> FULL
+                                            </span>
+                                            @endif
+                                            @if($isPartial)
+                                            <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-medium">
+                                                PARCIAL
+                                            </span>
+                                            @endif
+                                            @if($order->tracking_code)
+                                            <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium" title="Rastreio: {{ $order->tracking_code }}">
+                                                <x-heroicon-o-truck class="w-2.5 h-2.5" /> {{ $order->tracking_code }}
+                                            </span>
+                                            @endif
+                                            @if($approvedNfe)
+                                            <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium">
+                                                <x-heroicon-o-document-check class="w-2.5 h-2.5" /> NF-e
+                                            </span>
+                                            @elseif($pendingNfe)
+                                            <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium">
+                                                <x-heroicon-o-arrow-path class="w-2.5 h-2.5 animate-spin" /> NF-e
+                                            </span>
+                                            @endif
+                                            @php $orderMeLabel = $labelsMap[$order->id] ?? null; @endphp
+                                            @if($orderMeLabel)
+                                            <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0 rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-medium" title="{{ $orderMeLabel->carrier }} - {{ $orderMeLabel->service }}">
+                                                <x-heroicon-o-tag class="w-2.5 h-2.5" /> ME
+                                            </span>
+                                            @endif
+                                        </div>
                                     </div>
-                                </div>
-                                {{-- Badges de itens visíveis na linha colapsada --}}
-                                <div class="flex flex-wrap gap-1 mt-1">
-                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400">
-                                        <x-heroicon-o-cube class="w-2.5 h-2.5" />
-                                        {{ $itemCount }} {{ Str::plural('item', $itemCount) }}
-                                    </span>
-                                    @if($hasArtwork)
-                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">
-                                        <x-heroicon-s-paint-brush class="w-2.5 h-2.5" /> PERSONALIZADO
-                                    </span>
-                                    @endif
-                                    @if($isFull)
-                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 font-bold">
-                                        <x-heroicon-s-building-storefront class="w-2.5 h-2.5" /> FULL
-                                    </span>
-                                    @endif
-                                    @if($isPartial)
-                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-medium">
-                                        PARCIAL
-                                    </span>
-                                    @endif
-                                    @if($order->tracking_code)
-                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium" title="Rastreio: {{ $order->tracking_code }}">
-                                        <x-heroicon-o-truck class="w-2.5 h-2.5" /> {{ $order->tracking_code }}
-                                    </span>
-                                    @endif
-                                    @if($approvedNfe)
-                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium">
-                                        <x-heroicon-o-document-check class="w-2.5 h-2.5" /> NF-e
-                                    </span>
-                                    @elseif($pendingNfe)
-                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium">
-                                        <x-heroicon-o-arrow-path class="w-2.5 h-2.5 animate-spin" /> NF-e
-                                    </span>
-                                    @endif
-                                    @php $orderMeLabel = $labelsMap[$order->id] ?? null; @endphp
-                                    @if($orderMeLabel)
-                                    <span class="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-medium" title="{{ $orderMeLabel->carrier }} - {{ $orderMeLabel->service }}">
-                                        <x-heroicon-o-tag class="w-2.5 h-2.5" /> ME
-                                    </span>
-                                    @endif
                                 </div>
                             </td>
 
