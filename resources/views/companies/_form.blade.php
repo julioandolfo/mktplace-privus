@@ -109,7 +109,7 @@
     <x-ui.card title="Dados da Empresa">
         <div class="space-y-4">
 
-            {{-- Logo (base64 upload to avoid proxy file-size limits) --}}
+            {{-- Logo (base64 upload — resized client-side to avoid large payloads) --}}
             <div
                 class="flex items-center gap-4 pb-4 border-b border-gray-100 dark:border-zinc-700"
                 x-data="{
@@ -120,17 +120,33 @@
                     pickFile(event) {
                         const file = event.target.files[0];
                         if (!file) return;
-                        if (file.size > 2 * 1024 * 1024) {
-                            this.logoError = 'Arquivo muito grande. Máximo 2 MB.';
+                        if (file.size > 5 * 1024 * 1024) {
+                            this.logoError = 'Arquivo muito grande. Máximo 5 MB.';
                             event.target.value = '';
                             return;
                         }
                         this.logoError = '';
                         this.logoName = file.name;
                         this.preview = URL.createObjectURL(file);
-                        const reader = new FileReader();
-                        reader.onload = (e) => { this.logoBase64 = e.target.result; };
-                        reader.readAsDataURL(file);
+                        this.resizeAndEncode(file);
+                    },
+                    resizeAndEncode(file) {
+                        const img = new Image();
+                        img.onload = () => {
+                            const MAX = 400;
+                            let w = img.width, h = img.height;
+                            if (w > MAX || h > MAX) {
+                                if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                                else        { w = Math.round(w * MAX / h); h = MAX; }
+                            }
+                            const canvas = document.createElement('canvas');
+                            canvas.width = w;
+                            canvas.height = h;
+                            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                            this.logoBase64 = canvas.toDataURL('image/png', 0.9);
+                            URL.revokeObjectURL(img.src);
+                        };
+                        img.src = URL.createObjectURL(file);
                     }
                 }"
             >
@@ -298,10 +314,20 @@
     </x-ui.card>
 </div>
 
-<div class="flex items-center justify-end gap-3 mt-6">
-    <a href="{{ route('companies.index') }}" class="btn-secondary">Cancelar</a>
-    <button type="submit" class="btn-primary">
-        <x-heroicon-s-check class="w-4 h-4" />
-        {{ $company ? 'Salvar Alteracoes' : 'Cadastrar Empresa' }}
+<div class="flex items-center justify-end gap-3 mt-6" x-data="{ submitting: false }">
+    <a href="{{ route('companies.index') }}" class="btn-secondary" x-bind:class="{ 'pointer-events-none opacity-50': submitting }">Cancelar</a>
+    <button
+        type="submit"
+        class="btn-primary inline-flex items-center gap-2"
+        :disabled="submitting"
+        :class="{ 'opacity-75 cursor-not-allowed': submitting }"
+        @click="submitting = true; $nextTick(() => $el.closest('form').submit())"
+    >
+        <svg x-show="submitting" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+        </svg>
+        <x-heroicon-s-check x-show="!submitting" class="w-4 h-4" />
+        <span x-text="submitting ? 'Salvando...' : '{{ $company ? 'Salvar Alteracoes' : 'Cadastrar Empresa' }}'"></span>
     </button>
 </div>
