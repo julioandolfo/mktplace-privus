@@ -35,44 +35,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Companies
     Route::resource('companies', CompanyController::class);
 
-    // DEBUG: temporary upload test — remove after fixing
-    Route::get('/debug-upload', function () {
-        return response('<html><body style="font-family:sans-serif;padding:40px">
-            <h2>Teste de Upload</h2>
-            <form method="POST" action="/debug-upload" enctype="multipart/form-data">
-                ' . csrf_field() . '
-                <input type="file" name="logo" accept="image/*"><br><br>
-                <button type="submit" style="padding:10px 20px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer">Enviar</button>
-            </form>
-        </body></html>');
-    });
-    Route::post('/debug-upload', function (\Illuminate\Http\Request $request) {
-        $info = [
-            'has_file' => $request->hasFile('logo'),
-            'content_type' => $request->header('Content-Type'),
-            'content_length' => $request->header('Content-Length'),
-            'php_upload_max' => ini_get('upload_max_filesize'),
-            'php_post_max' => ini_get('post_max_size'),
-            'all_files' => array_keys($request->allFiles()),
-            'storage_writable' => is_writable(storage_path('app/public')),
-        ];
-        if ($request->hasFile('logo')) {
-            $file = $request->file('logo');
-            $info['file_name'] = $file->getClientOriginalName();
-            $info['file_size'] = $file->getSize();
-            $info['file_mime'] = $file->getMimeType();
-            $info['file_valid'] = $file->isValid();
-            try {
-                $path = $file->store('logos/debug', 'public');
-                $info['stored_path'] = $path;
-                $info['result'] = 'SUCCESS';
-            } catch (\Throwable $e) {
-                $info['error'] = $e->getMessage();
-                $info['result'] = 'FAILED';
-            }
-        }
-        return response()->json($info, 200, [], JSON_PRETTY_PRINT);
-    });
+    // DEBUG: temporary — remove after fixing
+    Route::get('/debug-upload', [CompanyController::class, 'debugUploadForm']);
+    Route::post('/debug-upload', [CompanyController::class, 'debugUploadPost']);
+    Route::get('/debug-log', [CompanyController::class, 'debugLog']);
 
     // Products
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');

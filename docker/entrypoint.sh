@@ -17,9 +17,14 @@ else
     php artisan key:generate --no-interaction --force --show > /dev/null 2>&1 || true
 fi
 
+# Clear stale caches before rebuilding
+php artisan config:clear 2>/dev/null || true
+php artisan route:clear 2>/dev/null || true
+php artisan view:clear 2>/dev/null || true
+
 # Cache configs (non-fatal)
 php artisan config:cache 2>/dev/null || echo "[warn] config:cache failed, continuing..."
-php artisan route:cache 2>/dev/null || echo "[warn] route:cache failed, continuing..."
+php artisan route:cache 2>/dev/null || echo "[warn] route:cache failed, skipping route cache..."
 php artisan view:cache 2>/dev/null || echo "[warn] view:cache failed, continuing..."
 
 # Run migrations (non-fatal)
