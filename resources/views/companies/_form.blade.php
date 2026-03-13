@@ -277,9 +277,19 @@
 </div>
 
 <div class="flex items-center justify-end gap-3 mt-6">
-    <a href="{{ route('companies.index') }}" class="btn-secondary">Cancelar</a>
-    <button type="submit" class="btn-primary">
-        <x-heroicon-s-check class="w-4 h-4" />
-        {{ $company ? 'Salvar Alteracoes' : 'Cadastrar Empresa' }}
+    <a href="{{ route('companies.index') }}" class="btn-secondary" x-bind:class="{ 'pointer-events-none opacity-50': submitting }">Cancelar</a>
+    <button type="submit" class="btn-primary" :disabled="submitting">
+        <template x-if="!submitting">
+            <span class="inline-flex items-center gap-2">
+                <x-heroicon-s-check class="w-4 h-4" />
+                {{ $company ? 'Salvar Alteracoes' : 'Cadastrar Empresa' }}
+            </span>
+        </template>
+        <template x-if="submitting">
+            <span class="inline-flex items-center gap-2">
+                <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                Salvando...
+            </span>
+        </template>
     </button>
 </div>
