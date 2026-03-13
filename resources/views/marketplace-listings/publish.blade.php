@@ -12,7 +12,7 @@
     </x-slot>
 
 
-    <form method="POST" action="{{ route('listings.publish') }}"
+    <form method="POST" action="{{ route('listings.publish') }}" enctype="multipart/form-data"
           x-data="publishForm()"
           class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         @csrf
@@ -204,22 +204,118 @@
 
             {{-- Imagens --}}
             <x-ui.card title="Imagens">
-                <div class="space-y-2" id="pictures-container">
-                    <div class="flex gap-2">
-                        <input type="url" name="pictures[]"
-                            placeholder="URL da imagem (https://...)"
-                            class="form-input flex-1 text-sm">
-                        <button type="button" onclick="addPictureField()"
-                            class="btn-secondary btn-sm flex-shrink-0">
-                            <x-heroicon-o-plus class="w-4 h-4" />
-                        </button>
+                <div class="space-y-4">
+                    {{-- Upload de arquivos --}}
+                    <div>
+                        <label class="form-label">Upload de Imagens</label>
+                        <input type="file" name="picture_files[]" multiple accept="image/jpeg,image/png"
+                               class="form-input text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 dark:file:bg-primary-900/20 dark:file:text-primary-400 hover:file:bg-primary-100">
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">JPG/PNG, max 10MB cada. Min. 500x500px. Recomendado: 1200x1200px.</p>
+                    </div>
+
+                    {{-- URLs de imagens --}}
+                    <div>
+                        <label class="form-label">Ou adicione por URL</label>
+                        <div class="space-y-2" id="pictures-container">
+                            <div class="flex gap-2">
+                                <input type="url" name="pictures[]"
+                                    placeholder="URL da imagem (https://...)"
+                                    class="form-input flex-1 text-sm">
+                                <button type="button" onclick="addPictureField()"
+                                    class="btn-secondary btn-sm flex-shrink-0">
+                                    <x-heroicon-o-plus class="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <p class="text-xs text-gray-400 dark:text-zinc-500 mt-2">
-                    Adicione URLs das imagens do produto. JPG/PNG, mín. 500×500px. Recomendado: 1200×1200px.
-                    A primeira imagem será a principal.
+                    A primeira imagem (upload ou URL) será a principal do anúncio.
                 </p>
             </x-ui.card>
+
+            {{-- Variações --}}
+            <div x-show="variationAttributes.length > 0">
+            <x-ui.card title="Variacoes">
+                <div class="space-y-4">
+                    <div class="flex items-start gap-3 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3">
+                        <x-heroicon-o-information-circle class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <p class="text-amber-700 dark:text-amber-300">
+                            Se o produto tem variações (cor, tamanho, etc.), adicione-as abaixo.
+                            Cada variação terá seu próprio estoque e preço.
+                        </p>
+                    </div>
+
+                    <template x-for="(variation, vi) in variations" :key="vi">
+                        <div class="border border-gray-200 dark:border-zinc-700 rounded-lg p-4 space-y-3 relative">
+                            <button type="button" @click="variations.splice(vi, 1)"
+                                    class="absolute top-2 right-2 text-red-400 hover:text-red-600 dark:hover:text-red-300">
+                                <x-heroicon-o-x-mark class="w-4 h-4" />
+                            </button>
+                            <div class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
+                                Variação <span x-text="vi + 1"></span>
+                            </div>
+                            {{-- Variation attribute combos --}}
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <template x-for="vAttr in variationAttributes" :key="vAttr.id">
+                                    <div>
+                                        <label class="text-xs text-gray-600 dark:text-zinc-400" x-text="vAttr.name"></label>
+                                        <template x-if="vAttr.allowed_values?.length > 0">
+                                            <select :name="'variations[' + vi + '][attributes][' + vAttr.id + ']'"
+                                                    x-model="variation.attributes[vAttr.id]"
+                                                    class="form-input text-sm py-1.5">
+                                                <option value="">Selecione...</option>
+                                                <template x-for="val in vAttr.allowed_values" :key="val.id">
+                                                    <option :value="val.name" x-text="val.name"></option>
+                                                </template>
+                                            </select>
+                                        </template>
+                                        <template x-if="!vAttr.allowed_values?.length">
+                                            <input type="text"
+                                                   :name="'variations[' + vi + '][attributes][' + vAttr.id + ']'"
+                                                   x-model="variation.attributes[vAttr.id]"
+                                                   class="form-input text-sm py-1.5"
+                                                   placeholder="Valor...">
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                            {{-- Price, qty, SKU --}}
+                            <div class="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label class="text-xs text-gray-600 dark:text-zinc-400">Preço (R$)</label>
+                                    <input type="number" step="0.01" min="0"
+                                           :name="'variations[' + vi + '][price]'"
+                                           x-model="variation.price"
+                                           class="form-input text-sm py-1.5"
+                                           placeholder="Mesmo do anúncio">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-600 dark:text-zinc-400">Estoque *</label>
+                                    <input type="number" min="1"
+                                           :name="'variations[' + vi + '][available_quantity]'"
+                                           x-model="variation.available_quantity"
+                                           class="form-input text-sm py-1.5" required>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-600 dark:text-zinc-400">SKU</label>
+                                    <input type="text"
+                                           :name="'variations[' + vi + '][seller_custom_field]'"
+                                           x-model="variation.seller_custom_field"
+                                           class="form-input text-sm py-1.5 font-mono"
+                                           placeholder="Opcional">
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <button type="button" @click="addVariation()" class="btn-secondary btn-sm w-full justify-center">
+                        <x-heroicon-o-plus class="w-4 h-4" />
+                        Adicionar Variação
+                    </button>
+                </div>
+            </x-ui.card>
+            </div>
 
             {{-- Descrição --}}
             <x-ui.card title="Descricao">
@@ -285,6 +381,8 @@
                 categoryId: '{{ old('category_id', '') }}',
                 categoryName: '{{ old('category_id', '') ? 'Categoria selecionada' : '' }}',
                 attributes: [],
+                variationAttributes: [],
+                variations: [],
 
                 searchCategory(query) {
                     if (!query || query.length < 2 || !this.accountId) return;
@@ -318,9 +416,21 @@
                     fetch(`/listings/categories/attributes?category_id=${this.categoryId}&account_id=${this.accountId}`)
                         .then(r => r.json())
                         .then(data => {
-                            this.attributes = Array.isArray(data) ? data.filter(a => !a.tags?.includes('read_only')) : [];
+                            const allAttrs = Array.isArray(data) ? data : [];
+                            this.attributes = allAttrs.filter(a => !a.tags?.includes('read_only') && !a.tags?.includes('allow_variations'));
+                            this.variationAttributes = allAttrs.filter(a => a.tags?.includes('allow_variations'));
+                            this.variations = [];
                         })
-                        .catch(() => { this.attributes = []; });
+                        .catch(() => { this.attributes = []; this.variationAttributes = []; });
+                },
+
+                addVariation() {
+                    this.variations.push({
+                        attributes: {},
+                        price: '',
+                        available_quantity: 1,
+                        seller_custom_field: '',
+                    });
                 }
             };
         }

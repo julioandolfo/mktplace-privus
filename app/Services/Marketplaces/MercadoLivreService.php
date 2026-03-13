@@ -424,6 +424,66 @@ class MercadoLivreService
     }
 
     /**
+     * Get item visits for the last N days.
+     * Returns ['total_visits' => int, 'results' => [...]] or [] on error.
+     */
+    public function getItemVisits(string $itemId, int $lastDays = 30): array
+    {
+        try {
+            $response = Http::withToken($this->token())
+                ->timeout(15)
+                ->get(self::BASE_URL . "/items/{$itemId}/visits/time_window", [
+                    'last' => $lastDays,
+                    'unit' => 'day',
+                ]);
+
+            if ($response->successful()) {
+                return $response->json() ?? [];
+            }
+
+            Log::info("ML getItemVisits({$itemId}): HTTP {$response->status()}");
+            return [];
+        } catch (\Throwable $e) {
+            Log::info("ML getItemVisits({$itemId}) exception: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get visits for multiple items in batch (max 50 per call).
+     * Returns array keyed by item_id => total_visits.
+     */
+    public function getItemVisitsBatch(array $itemIds, int $lastDays = 30): array
+    {
+        $result = [];
+
+        foreach (array_chunk($itemIds, 50) as $chunk) {
+            try {
+                $response = Http::withToken($this->token())
+                    ->timeout(20)
+                    ->get(self::BASE_URL . '/items/visits/time_window', [
+                        'ids'  => implode(',', $chunk),
+                        'last' => $lastDays,
+                        'unit' => 'day',
+                    ]);
+
+                if ($response->successful()) {
+                    foreach ($response->json() ?? [] as $item) {
+                        $id = $item['item_id'] ?? null;
+                        if ($id) {
+                            $result[$id] = (int) ($item['total_visits'] ?? 0);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::info("ML getItemVisitsBatch exception: " . $e->getMessage());
+            }
+        }
+
+        return $result;
+    }
+
+    /**
      * Get category attributes (for building attribute forms).
      */
     public function getCategoryAttributes(string $categoryId): array
