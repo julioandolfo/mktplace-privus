@@ -66,6 +66,14 @@ class CompanyController extends Controller
 
     public function update(Request $request, Company $company)
     {
+        // DEBUG: remove after fixing
+        Log::info('[COMPANY UPDATE] Request received', [
+            'company_id' => $company->id,
+            'has_logo' => $request->hasFile('logo'),
+            'content_type' => $request->header('Content-Type'),
+            'content_length' => $request->header('Content-Length'),
+        ]);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'trade_name' => 'nullable|string|max:255',
