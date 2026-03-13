@@ -35,11 +35,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Companies
     Route::resource('companies', CompanyController::class);
 
-    // DEBUG: temporary — remove after fixing
-    Route::get('/debug-upload', [CompanyController::class, 'debugUploadForm']);
-    Route::post('/debug-upload', [CompanyController::class, 'debugUploadPost']);
-    Route::get('/debug-log', [CompanyController::class, 'debugLog']);
-
     // Products
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');
     Route::get('/products/create', [ProductController::class, 'create'])->name('products.create');
