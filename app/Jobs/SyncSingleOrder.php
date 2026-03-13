@@ -232,6 +232,7 @@ class SyncSingleOrder implements ShouldQueue
                     'external_id'            => (string) $ml['id'],
                 ],
                 [
+                    'order_number'     => (string) $ml['id'],
                     'company_id'       => $account->company_id,
                     'customer_id'      => $customer?->id,
                     'status'           => $orderStatus,
