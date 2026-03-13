@@ -331,7 +331,7 @@
     </button>
 </div>
 
-{{-- Submit via fetch to avoid URL-encoding overhead on base64 data --}}
+{{-- Submit via fetch as JSON to bypass multipart blocking (Coolify/Traefik) --}}
 <script>
 function companyForm() {
     return {
@@ -341,13 +341,35 @@ function companyForm() {
             this.submitting = true;
 
             const form = this.$el;
-            const formData = new FormData(form);
+            const fd = new FormData(form);
+
+            // Build JSON from FormData, handling nested keys like address[street]
+            const data = {};
+            for (const [key, value] of fd.entries()) {
+                if (key === '_token' || key === '_method') continue;
+                const m = key.match(/^(\w+)\[(\w+)\]$/);
+                if (m) {
+                    if (!data[m[1]]) data[m[1]] = {};
+                    data[m[1]][m[2]] = value;
+                } else {
+                    data[key] = value;
+                }
+            }
+
+            // Include _method for PUT/PATCH
+            const method = fd.get('_method');
+            if (method) data._method = method;
 
             try {
                 const response = await fetch(form.action, {
                     method: 'POST',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                    body: formData,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json, text/html',
+                        'X-CSRF-TOKEN': fd.get('_token'),
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify(data),
                     redirect: 'follow',
                 });
 
@@ -368,6 +390,8 @@ function companyForm() {
                 try {
                     const json = JSON.parse(text);
                     if (json.error) msg += '\n\n' + json.error + '\n' + (json.file || '');
+                    if (json.message) msg += '\n\n' + json.message;
+                    if (json.errors) msg += '\n\n' + Object.values(json.errors).flat().join('\n');
                 } catch(e) {}
                 alert(msg);
                 this.submitting = false;
