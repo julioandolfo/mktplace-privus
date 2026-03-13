@@ -38,18 +38,16 @@ class CompanyController extends Controller
             'address.zip_code' => 'nullable|string|max:10',
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
-            'logo' => 'nullable|image|max:10240',
+            'logo_base64' => 'nullable|string',
         ]);
 
         $validated['document'] = preg_replace('/\D/', '', $validated['document']);
-        unset($validated['logo']);
+        unset($validated['logo_base64']);
 
-        if ($request->hasFile('logo')) {
-            try {
-                $validated['logo_path'] = $request->file('logo')->store('logos/companies', 'public');
-            } catch (\Throwable $e) {
-                Log::error('Company logo upload failed: ' . $e->getMessage());
-                return back()->withInput()->with('error', 'Falha ao enviar logo: ' . $e->getMessage());
+        if ($request->filled('logo_base64')) {
+            $validated['logo_path'] = $this->storeBase64Logo($request->input('logo_base64'));
+            if (! $validated['logo_path']) {
+                return back()->withInput()->with('error', 'Falha ao processar logo. Verifique o formato da imagem.');
             }
         }
 
@@ -66,14 +64,6 @@ class CompanyController extends Controller
 
     public function update(Request $request, Company $company)
     {
-        // DEBUG: remove after fixing
-        Log::info('[COMPANY UPDATE] Request received', [
-            'company_id' => $company->id,
-            'has_logo' => $request->hasFile('logo'),
-            'content_type' => $request->header('Content-Type'),
-            'content_length' => $request->header('Content-Length'),
-        ]);
-
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'trade_name' => 'nullable|string|max:255',
@@ -92,26 +82,24 @@ class CompanyController extends Controller
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
             'is_active' => 'boolean',
-            'logo' => 'nullable|image|max:10240',
+            'logo_base64' => 'nullable|string',
         ]);
 
         $validated['document'] = preg_replace('/\D/', '', $validated['document']);
-
-        // Remove file object — only logo_path should be persisted
-        unset($validated['logo']);
+        unset($validated['logo_base64']);
 
         if ($request->boolean('remove_logo') && $company->logo_path) {
             Storage::disk('public')->delete($company->logo_path);
             $validated['logo_path'] = null;
-        } elseif ($request->hasFile('logo')) {
-            try {
+        } elseif ($request->filled('logo_base64')) {
+            $newPath = $this->storeBase64Logo($request->input('logo_base64'));
+            if ($newPath) {
                 if ($company->logo_path) {
                     Storage::disk('public')->delete($company->logo_path);
                 }
-                $validated['logo_path'] = $request->file('logo')->store('logos/companies', 'public');
-            } catch (\Throwable $e) {
-                Log::error('Company logo upload failed: ' . $e->getMessage());
-                return back()->withInput()->with('error', 'Falha ao enviar logo: ' . $e->getMessage());
+                $validated['logo_path'] = $newPath;
+            } else {
+                return back()->withInput()->with('error', 'Falha ao processar logo. Verifique o formato da imagem.');
             }
         }
 
@@ -127,6 +115,37 @@ class CompanyController extends Controller
 
         return redirect()->route('companies.index')
             ->with('success', 'Empresa removida com sucesso.');
+    }
+
+    /**
+     * Decode a data-URI base64 string and store it as a file.
+     * Returns the stored path or null on failure.
+     */
+    private function storeBase64Logo(string $dataUri): ?string
+    {
+        try {
+            // Expected format: data:image/png;base64,iVBOR...
+            if (! preg_match('/^data:image\/(png|jpe?g|webp|svg\+xml);base64,(.+)$/i', $dataUri, $m)) {
+                Log::warning('Logo base64: invalid data-URI format');
+                return null;
+            }
+
+            $ext = str_replace(['jpeg', 'svg+xml'], ['jpg', 'svg'], strtolower($m[1]));
+            $binary = base64_decode($m[2], true);
+
+            if ($binary === false || strlen($binary) > 2 * 1024 * 1024) {
+                Log::warning('Logo base64: decode failed or file too large');
+                return null;
+            }
+
+            $filename = 'logos/companies/' . uniqid('logo_') . '.' . $ext;
+            Storage::disk('public')->put($filename, $binary);
+
+            return $filename;
+        } catch (\Throwable $e) {
+            Log::error('Logo base64 store failed: ' . $e->getMessage());
+            return null;
+        }
     }
 
     // ── DEBUG methods — remove after fixing ─────────────────────
