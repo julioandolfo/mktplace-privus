@@ -73,15 +73,17 @@
                     {{-- Category search --}}
                     <div>
                         <label class="form-label">Categoria do ML *</label>
-                        <div class="relative" x-data="{ open: false, results: [], loading: false }">
+                        <div class="relative">
                             <div class="flex gap-2">
                                 <input type="text"
                                     placeholder="Buscar categoria... (ex: Tênis, Notebook, Câmera)"
-                                    @input.debounce.500ms="searchCategory($el.value)"
-                                    @focus="open = results.length > 0"
+                                    x-model="catQuery"
+                                    @input.debounce.500ms="searchCategory()"
+                                    @focus="catOpen = catResults.length > 0"
+                                    x-show="!categoryId"
                                     class="form-input flex-1"
                                     autocomplete="off">
-                                <span x-show="loading" class="flex items-center px-3">
+                                <span x-show="catLoading" class="flex items-center px-3">
                                     <x-heroicon-o-arrow-path class="w-4 h-4 animate-spin text-gray-400" />
                                 </span>
                             </div>
@@ -89,18 +91,18 @@
                                 class="@error('category_id') border-red-500 @enderror" required>
 
                             {{-- Selected category display --}}
-                            <div x-show="categoryId" class="mt-2 flex items-center gap-2 text-sm">
+                            <div x-show="categoryId" class="flex items-center gap-2 text-sm">
                                 <x-heroicon-o-check-circle class="w-4 h-4 text-emerald-500" />
                                 <span class="text-gray-700 dark:text-zinc-300" x-text="categoryName"></span>
-                                <button type="button" @click="categoryId=''; categoryName=''" class="text-gray-400 hover:text-gray-600">
+                                <button type="button" @click="categoryId=''; categoryName=''; catQuery=''; attributes=[]; variationAttributes=[]; variations=[];" class="text-gray-400 hover:text-gray-600">
                                     <x-heroicon-o-x-mark class="w-3.5 h-3.5" />
                                 </button>
                             </div>
 
                             {{-- Dropdown results --}}
-                            <div x-show="open && results.length > 0" @click.outside="open=false"
+                            <div x-show="catOpen && catResults.length > 0" @click.outside="catOpen=false"
                                  class="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                                <template x-for="cat in results" :key="cat.domain_id">
+                                <template x-for="cat in catResults" :key="cat.domain_id">
                                     <button type="button"
                                         @click="selectCategory(cat)"
                                         class="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-zinc-700/50 border-b border-gray-100 dark:border-zinc-700/50 last:border-0">
@@ -172,7 +174,7 @@
             </x-ui.card>
 
             {{-- Atributos da Categoria --}}
-            <div x-show="attributes.length > 0">
+            <div x-show="attributes.length > 0" x-cloak>
             <x-ui.card title="Atributos da Categoria">
                 <div class="space-y-3">
                     <template x-for="attr in attributes" :key="attr.id">
@@ -235,7 +237,7 @@
             </x-ui.card>
 
             {{-- Variações --}}
-            <div x-show="variationAttributes.length > 0">
+            <div x-show="variationAttributes.length > 0" x-cloak>
             <x-ui.card title="Variacoes">
                 <div class="space-y-4">
                     <div class="flex items-start gap-3 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3">
@@ -384,29 +386,33 @@
                 variationAttributes: [],
                 variations: [],
 
-                searchCategory(query) {
-                    if (!query || query.length < 2 || !this.accountId) return;
-                    this.$root.querySelector('[x-data*="open"]').__x.$data.loading = true;
+                // Category search state (was in nested x-data, broke in Alpine v3)
+                catQuery: '',
+                catResults: [],
+                catOpen: false,
+                catLoading: false,
 
-                    fetch(`/listings/categories/search?q=${encodeURIComponent(query)}&account_id=${this.accountId}`)
+                searchCategory() {
+                    if (!this.catQuery || this.catQuery.length < 2 || !this.accountId) return;
+                    this.catLoading = true;
+
+                    fetch(`/listings/categories/search?q=${encodeURIComponent(this.catQuery)}&account_id=${this.accountId}`)
                         .then(r => r.json())
                         .then(data => {
-                            const ctx = this.$root.querySelector('[x-data*="open"]').__x.$data;
-                            ctx.results  = Array.isArray(data) ? data : (data.domain_categories ?? []);
-                            ctx.open     = ctx.results.length > 0;
-                            ctx.loading  = false;
+                            this.catResults = Array.isArray(data) ? data : (data.domain_categories ?? []);
+                            this.catOpen    = this.catResults.length > 0;
+                            this.catLoading = false;
                         })
                         .catch(() => {
-                            const ctx = this.$root.querySelector('[x-data*="open"]').__x.$data;
-                            ctx.loading = false;
+                            this.catLoading = false;
                         });
                 },
 
                 selectCategory(cat) {
                     this.categoryId   = cat.category_id;
                     this.categoryName = cat.category_name + ' (' + cat.domain_name + ')';
-                    const ctx = this.$root.querySelector('[x-data*="open"]').__x.$data;
-                    ctx.open  = false;
+                    this.catOpen      = false;
+                    this.catQuery     = '';
                     this.loadCategoryAttributes();
                 },
 
