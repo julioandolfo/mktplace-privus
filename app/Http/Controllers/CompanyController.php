@@ -37,9 +37,11 @@ class CompanyController extends Controller
             'address.zip_code' => 'nullable|string|max:10',
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
+            'logo' => 'nullable|image|max:2048',
         ]);
 
         $validated['document'] = preg_replace('/\D/', '', $validated['document']);
+        unset($validated['logo']);
 
         if ($request->hasFile('logo')) {
             $validated['logo_path'] = $request->file('logo')->store('logos/companies', 'public');
@@ -80,6 +82,9 @@ class CompanyController extends Controller
         ]);
 
         $validated['document'] = preg_replace('/\D/', '', $validated['document']);
+
+        // Remove file object — only logo_path should be persisted
+        unset($validated['logo']);
 
         if ($request->boolean('remove_logo') && $company->logo_path) {
             Storage::disk('public')->delete($company->logo_path);
