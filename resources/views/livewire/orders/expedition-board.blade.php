@@ -323,7 +323,7 @@
 
                             {{-- Pedido + marketplace + hint de itens --}}
                             <td @click="expanded = !expanded">
-                                <div class="flex items-center gap-2">
+                                <div class="flex items-center gap-3">
                                     @php $company = $account?->company; @endphp
                                     <div class="relative flex-shrink-0" title="{{ $account?->account_name }}">
                                         <div class="w-7 h-7 rounded-full border border-gray-200 dark:border-zinc-600 overflow-hidden bg-gray-100 dark:bg-zinc-700 flex items-center justify-center">

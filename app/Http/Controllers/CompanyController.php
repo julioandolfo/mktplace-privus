@@ -64,67 +64,49 @@ class CompanyController extends Controller
 
     public function update(Request $request, Company $company)
     {
-        try {
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'trade_name' => 'nullable|string|max:255',
-                'document_type' => 'required|in:cpf,cnpj',
-                'document' => 'required|string|max:20|unique:companies,document,' . $company->id,
-                'state_registration' => 'nullable|string|max:20',
-                'municipal_registration' => 'nullable|string|max:20',
-                'address' => 'nullable|array',
-                'address.street' => 'nullable|string|max:255',
-                'address.number' => 'nullable|string|max:20',
-                'address.complement' => 'nullable|string|max:100',
-                'address.neighborhood' => 'nullable|string|max:100',
-                'address.city' => 'nullable|string|max:100',
-                'address.state' => 'nullable|string|max:2',
-                'address.zip_code' => 'nullable|string|max:10',
-                'phone' => 'nullable|string|max:20',
-                'email' => 'nullable|email|max:255',
-                'is_active' => 'boolean',
-                'logo_base64' => 'nullable|string',
-            ]);
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'trade_name' => 'nullable|string|max:255',
+            'document_type' => 'required|in:cpf,cnpj',
+            'document' => 'required|string|max:20|unique:companies,document,' . $company->id,
+            'state_registration' => 'nullable|string|max:20',
+            'municipal_registration' => 'nullable|string|max:20',
+            'address' => 'nullable|array',
+            'address.street' => 'nullable|string|max:255',
+            'address.number' => 'nullable|string|max:20',
+            'address.complement' => 'nullable|string|max:100',
+            'address.neighborhood' => 'nullable|string|max:100',
+            'address.city' => 'nullable|string|max:100',
+            'address.state' => 'nullable|string|max:2',
+            'address.zip_code' => 'nullable|string|max:10',
+            'phone' => 'nullable|string|max:20',
+            'email' => 'nullable|email|max:255',
+            'is_active' => 'boolean',
+            'logo_base64' => 'nullable|string',
+        ]);
 
-            $validated['document'] = preg_replace('/\D/', '', $validated['document']);
-            unset($validated['logo_base64']);
+        $validated['document'] = preg_replace('/\D/', '', $validated['document']);
+        unset($validated['logo_base64']);
 
-            if ($request->boolean('remove_logo') && $company->logo_path) {
-                Storage::disk('public')->delete($company->logo_path);
-                $validated['logo_path'] = null;
-            } elseif ($request->filled('logo_base64')) {
-                $newPath = $this->storeBase64Logo($request->input('logo_base64'));
-                if ($newPath) {
-                    if ($company->logo_path) {
-                        Storage::disk('public')->delete($company->logo_path);
-                    }
-                    $validated['logo_path'] = $newPath;
-                } else {
-                    return back()->withInput()->with('error', 'Falha ao processar logo. Verifique o formato da imagem.');
+        if ($request->boolean('remove_logo') && $company->logo_path) {
+            Storage::disk('public')->delete($company->logo_path);
+            $validated['logo_path'] = null;
+        } elseif ($request->filled('logo_base64')) {
+            $newPath = $this->storeBase64Logo($request->input('logo_base64'));
+            if ($newPath) {
+                if ($company->logo_path) {
+                    Storage::disk('public')->delete($company->logo_path);
                 }
+                $validated['logo_path'] = $newPath;
+            } else {
+                return back()->withInput()->with('error', 'Falha ao processar logo. Verifique o formato da imagem.');
             }
-
-            $company->update($validated);
-
-            return redirect()->route('companies.index')
-                ->with('success', 'Empresa atualizada com sucesso.');
-        } catch (\Throwable $e) {
-            Log::error('[COMPANY UPDATE ERROR] ' . $e->getMessage(), [
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            // Return JSON for fetch-based submissions so we can diagnose
-            if ($request->wantsJson() || $request->header('X-Requested-With')) {
-                return response()->json([
-                    'error' => $e->getMessage(),
-                    'file' => $e->getFile() . ':' . $e->getLine(),
-                ], 500);
-            }
-
-            return back()->withInput()->with('error', 'Erro interno: ' . $e->getMessage());
         }
+
+        $company->update($validated);
+
+        return redirect()->route('companies.index')
+            ->with('success', 'Empresa atualizada com sucesso.');
     }
 
     public function destroy(Company $company)
@@ -142,7 +124,6 @@ class CompanyController extends Controller
     private function storeBase64Logo(string $dataUri): ?string
     {
         try {
-            // Expected format: data:image/png;base64,iVBOR...
             if (! preg_match('/^data:image\/(png|jpe?g|webp|svg\+xml);base64,(.+)$/i', $dataUri, $m)) {
                 Log::warning('Logo base64: invalid data-URI format');
                 return null;
@@ -164,119 +145,5 @@ class CompanyController extends Controller
             Log::error('Logo base64 store failed: ' . $e->getMessage());
             return null;
         }
-    }
-
-    // ── DEBUG methods — remove after fixing ─────────────────────
-
-    public function debugUploadForm()
-    {
-        $html = '<html><body style="font-family:sans-serif;padding:40px;background:#1a1a2e;color:#eee">'
-            . '<h2>Teste de Upload</h2>'
-            . '<p>PHP upload_max_filesize: ' . ini_get('upload_max_filesize') . '</p>'
-            . '<p>PHP post_max_size: ' . ini_get('post_max_size') . '</p>'
-            . '<p>Storage writable: ' . (is_writable(storage_path('app/public')) ? 'YES' : 'NO') . '</p>'
-            . '<p>Temp dir: ' . sys_get_temp_dir() . ' writable: ' . (is_writable(sys_get_temp_dir()) ? 'YES' : 'NO') . '</p>'
-            . '<hr>'
-            . '<h3>1. POST com arquivo</h3>'
-            . '<form method="POST" action="/debug-upload" enctype="multipart/form-data">'
-            . csrf_field()
-            . '<input type="file" name="logo" accept="image/*"><br><br>'
-            . '<button type="submit" style="padding:10px 20px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer">Enviar com arquivo</button>'
-            . '</form>'
-            . '<hr>'
-            . '<h3>2. POST sem arquivo (teste controle)</h3>'
-            . '<form method="POST" action="/debug-upload" enctype="multipart/form-data">'
-            . csrf_field()
-            . '<input type="hidden" name="test" value="no-file">'
-            . '<button type="submit" style="padding:10px 20px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer">Enviar SEM arquivo</button>'
-            . '</form>'
-            . '</body></html>';
-
-        return response($html);
-    }
-
-    public function debugUploadPost(Request $request)
-    {
-        $info = [
-            'timestamp' => now()->toDateTimeString(),
-            'has_file' => $request->hasFile('logo'),
-            'content_type' => $request->header('Content-Type'),
-            'content_length' => $request->header('Content-Length'),
-            'php_upload_max' => ini_get('upload_max_filesize'),
-            'php_post_max' => ini_get('post_max_size'),
-            'temp_dir' => sys_get_temp_dir(),
-            'temp_writable' => is_writable(sys_get_temp_dir()),
-            'storage_writable' => is_writable(storage_path('app/public')),
-            'all_input_keys' => array_keys($request->all()),
-            'all_files' => array_keys($request->allFiles()),
-        ];
-
-        if ($request->hasFile('logo')) {
-            $file = $request->file('logo');
-            $info['file_name'] = $file->getClientOriginalName();
-            $info['file_size'] = $file->getSize();
-            $info['file_mime'] = $file->getMimeType();
-            $info['file_valid'] = $file->isValid();
-            $info['file_error'] = $file->getError();
-            try {
-                $path = $file->store('logos/debug', 'public');
-                $info['stored_path'] = $path;
-                $info['result'] = 'SUCCESS';
-            } catch (\Throwable $e) {
-                $info['error'] = $e->getMessage();
-                $info['result'] = 'FAILED';
-            }
-        } else {
-            $info['result'] = 'NO FILE - but POST worked!';
-        }
-
-        return response()->json($info, 200, [], JSON_PRETTY_PRINT);
-    }
-
-    public function debugLog()
-    {
-        $sections = [];
-
-        // Laravel log
-        $logFile = storage_path('logs/laravel.log');
-        if (file_exists($logFile)) {
-            $lines = file($logFile);
-            $sections['LARAVEL LOG (last 100 lines)'] = implode('', array_slice($lines, -100));
-        } else {
-            $sections['LARAVEL LOG'] = 'Not found at: ' . $logFile;
-        }
-
-        // PHP error log
-        $phpLog = storage_path('logs/php-errors.log');
-        if (file_exists($phpLog)) {
-            $lines = file($phpLog);
-            $sections['PHP ERROR LOG (last 50 lines)'] = implode('', array_slice($lines, -50));
-        }
-
-        // Nginx error log
-        $nginxLog = '/var/log/nginx/error.log';
-        if (file_exists($nginxLog) && is_readable($nginxLog)) {
-            $lines = @file($nginxLog);
-            if ($lines) {
-                $sections['NGINX ERROR LOG (last 50 lines)'] = implode('', array_slice($lines, -50));
-            }
-        }
-
-        // PHP info
-        $sections['PHP CONFIG'] = "opcache.validate_timestamps=" . ini_get('opcache.validate_timestamps')
-            . "\nopcache.enable=" . ini_get('opcache.enable')
-            . "\npost_max_size=" . ini_get('post_max_size')
-            . "\nupload_max_filesize=" . ini_get('upload_max_filesize')
-            . "\ndisplay_errors=" . ini_get('display_errors')
-            . "\nmemory_limit=" . ini_get('memory_limit');
-
-        $html = '<html><body style="font-family:monospace;padding:20px;background:#111;color:#0f0;font-size:12px;white-space:pre-wrap">';
-        foreach ($sections as $title => $content) {
-            $html .= '<h2 style="color:#ff0;border-bottom:1px solid #333;padding-bottom:4px;margin-top:20px">' . $title . '</h2>';
-            $html .= htmlspecialchars($content) . "\n";
-        }
-        $html .= '</body></html>';
-
-        return response($html);
     }
 }
