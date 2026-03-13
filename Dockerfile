@@ -71,6 +71,11 @@ RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.memory_consumption=128" >> /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
 
+# PHP upload & post limits
+RUN echo "upload_max_filesize=10M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "post_max_size=12M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "max_execution_time=60" >> /usr/local/etc/php/conf.d/uploads.ini
+
 EXPOSE 80
 
 # Copy and set entrypoint

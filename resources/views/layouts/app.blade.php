@@ -12,6 +12,7 @@
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @livewireStyles
     </head>
     <body class="font-sans antialiased" x-data="{ sidebarOpen: true, mobileSidebar: false }">
         <div class="min-h-screen flex">
@@ -120,6 +121,7 @@
             </div>
         </div>
 
+        @livewireScripts
         @stack('scripts')
     </body>
 </html>

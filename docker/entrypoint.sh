@@ -35,6 +35,9 @@ if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
     php artisan db:seed --force --no-interaction 2>/dev/null || echo "[warn] seeder falhou, continuando..."
 fi
 
+# Create storage symlink for public file access
+php artisan storage:link --force 2>/dev/null || echo "[warn] storage:link failed, continuing..."
+
 # Fix storage permissions DEPOIS de todos os comandos artisan (que rodam como root)
 # Garante que www-data possa escrever em storage e bootstrap/cache
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true

@@ -11,7 +11,7 @@
         </li>
     </x-slot>
 
-    <form method="POST" action="{{ route('companies.store') }}" enctype="multipart/form-data" x-data="{ submitting: false }" @submit="submitting = true">
+    <form method="POST" action="{{ route('companies.store') }}" enctype="multipart/form-data">
         @csrf
         @include('companies._form')
     </form>
