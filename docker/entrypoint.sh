@@ -2,6 +2,11 @@
 
 cd /var/www/html
 
+# Fix nginx temp directory permissions (required for large POST bodies)
+mkdir -p /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy /var/lib/nginx/tmp/fastcgi
+chown -R www-data:www-data /var/lib/nginx/tmp
+chmod -R 755 /var/lib/nginx/tmp
+
 # Garante que os diretórios de storage existam antes de qualquer comando
 mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache/data bootstrap/cache
 
@@ -47,5 +52,9 @@ php artisan storage:link --force 2>/dev/null || echo "[warn] storage:link failed
 # Garante que www-data possa escrever em storage e bootstrap/cache
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+
+# Ensure Laravel log file exists and is writable
+touch storage/logs/laravel.log 2>/dev/null || true
+chown www-data:www-data storage/logs/laravel.log 2>/dev/null || true
 
 exec "$@"

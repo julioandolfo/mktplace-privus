@@ -60,8 +60,10 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache
 
-# Copy Nginx config
+# Copy Nginx config and fix temp directory permissions
 COPY docker/nginx.conf /etc/nginx/nginx.conf
+RUN mkdir -p /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy /var/lib/nginx/tmp/fastcgi \
+    && chown -R www-data:www-data /var/lib/nginx/tmp
 
 # Copy Supervisor config
 COPY docker/supervisord.conf /etc/supervisord.conf
