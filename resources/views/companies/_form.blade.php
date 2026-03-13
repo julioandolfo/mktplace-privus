@@ -346,6 +346,7 @@ function companyForm() {
             try {
                 const response = await fetch(form.action, {
                     method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
                     body: formData,
                     redirect: 'follow',
                 });
@@ -363,7 +364,12 @@ function companyForm() {
                 // Error — show details
                 const text = await response.text();
                 console.error('Form submit error:', response.status, text);
-                alert('Erro ao salvar (HTTP ' + response.status + '). Verifique o console (F12) para detalhes.');
+                let msg = 'Erro ao salvar (HTTP ' + response.status + ').';
+                try {
+                    const json = JSON.parse(text);
+                    if (json.error) msg += '\n\n' + json.error + '\n' + (json.file || '');
+                } catch(e) {}
+                alert(msg);
                 this.submitting = false;
             } catch (err) {
                 console.error('Network error:', err);
