@@ -64,49 +64,67 @@ class CompanyController extends Controller
 
     public function update(Request $request, Company $company)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'trade_name' => 'nullable|string|max:255',
-            'document_type' => 'required|in:cpf,cnpj',
-            'document' => 'required|string|max:20|unique:companies,document,' . $company->id,
-            'state_registration' => 'nullable|string|max:20',
-            'municipal_registration' => 'nullable|string|max:20',
-            'address' => 'nullable|array',
-            'address.street' => 'nullable|string|max:255',
-            'address.number' => 'nullable|string|max:20',
-            'address.complement' => 'nullable|string|max:100',
-            'address.neighborhood' => 'nullable|string|max:100',
-            'address.city' => 'nullable|string|max:100',
-            'address.state' => 'nullable|string|max:2',
-            'address.zip_code' => 'nullable|string|max:10',
-            'phone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|max:255',
-            'is_active' => 'boolean',
-            'logo_base64' => 'nullable|string',
-        ]);
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'trade_name' => 'nullable|string|max:255',
+                'document_type' => 'required|in:cpf,cnpj',
+                'document' => 'required|string|max:20|unique:companies,document,' . $company->id,
+                'state_registration' => 'nullable|string|max:20',
+                'municipal_registration' => 'nullable|string|max:20',
+                'address' => 'nullable|array',
+                'address.street' => 'nullable|string|max:255',
+                'address.number' => 'nullable|string|max:20',
+                'address.complement' => 'nullable|string|max:100',
+                'address.neighborhood' => 'nullable|string|max:100',
+                'address.city' => 'nullable|string|max:100',
+                'address.state' => 'nullable|string|max:2',
+                'address.zip_code' => 'nullable|string|max:10',
+                'phone' => 'nullable|string|max:20',
+                'email' => 'nullable|email|max:255',
+                'is_active' => 'boolean',
+                'logo_base64' => 'nullable|string',
+            ]);
 
-        $validated['document'] = preg_replace('/\D/', '', $validated['document']);
-        unset($validated['logo_base64']);
+            $validated['document'] = preg_replace('/\D/', '', $validated['document']);
+            unset($validated['logo_base64']);
 
-        if ($request->boolean('remove_logo') && $company->logo_path) {
-            Storage::disk('public')->delete($company->logo_path);
-            $validated['logo_path'] = null;
-        } elseif ($request->filled('logo_base64')) {
-            $newPath = $this->storeBase64Logo($request->input('logo_base64'));
-            if ($newPath) {
-                if ($company->logo_path) {
-                    Storage::disk('public')->delete($company->logo_path);
+            if ($request->boolean('remove_logo') && $company->logo_path) {
+                Storage::disk('public')->delete($company->logo_path);
+                $validated['logo_path'] = null;
+            } elseif ($request->filled('logo_base64')) {
+                $newPath = $this->storeBase64Logo($request->input('logo_base64'));
+                if ($newPath) {
+                    if ($company->logo_path) {
+                        Storage::disk('public')->delete($company->logo_path);
+                    }
+                    $validated['logo_path'] = $newPath;
+                } else {
+                    return back()->withInput()->with('error', 'Falha ao processar logo. Verifique o formato da imagem.');
                 }
-                $validated['logo_path'] = $newPath;
-            } else {
-                return back()->withInput()->with('error', 'Falha ao processar logo. Verifique o formato da imagem.');
             }
+
+            $company->update($validated);
+
+            return redirect()->route('companies.index')
+                ->with('success', 'Empresa atualizada com sucesso.');
+        } catch (\Throwable $e) {
+            Log::error('[COMPANY UPDATE ERROR] ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            // Return JSON for fetch-based submissions so we can diagnose
+            if ($request->wantsJson() || $request->header('X-Requested-With')) {
+                return response()->json([
+                    'error' => $e->getMessage(),
+                    'file' => $e->getFile() . ':' . $e->getLine(),
+                ], 500);
+            }
+
+            return back()->withInput()->with('error', 'Erro interno: ' . $e->getMessage());
         }
-
-        $company->update($validated);
-
-        return redirect()->route('companies.index')
-            ->with('success', 'Empresa atualizada com sucesso.');
     }
 
     public function destroy(Company $company)
