@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class CompanyController extends Controller
@@ -37,14 +38,19 @@ class CompanyController extends Controller
             'address.zip_code' => 'nullable|string|max:10',
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
-            'logo' => 'nullable|image|max:2048',
+            'logo' => 'nullable|image|max:10240',
         ]);
 
         $validated['document'] = preg_replace('/\D/', '', $validated['document']);
         unset($validated['logo']);
 
         if ($request->hasFile('logo')) {
-            $validated['logo_path'] = $request->file('logo')->store('logos/companies', 'public');
+            try {
+                $validated['logo_path'] = $request->file('logo')->store('logos/companies', 'public');
+            } catch (\Throwable $e) {
+                Log::error('Company logo upload failed: ' . $e->getMessage());
+                return back()->withInput()->with('error', 'Falha ao enviar logo: ' . $e->getMessage());
+            }
         }
 
         Company::create($validated);
@@ -78,7 +84,7 @@ class CompanyController extends Controller
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
             'is_active' => 'boolean',
-            'logo' => 'nullable|image|max:2048',
+            'logo' => 'nullable|image|max:10240',
         ]);
 
         $validated['document'] = preg_replace('/\D/', '', $validated['document']);
@@ -90,10 +96,15 @@ class CompanyController extends Controller
             Storage::disk('public')->delete($company->logo_path);
             $validated['logo_path'] = null;
         } elseif ($request->hasFile('logo')) {
-            if ($company->logo_path) {
-                Storage::disk('public')->delete($company->logo_path);
+            try {
+                if ($company->logo_path) {
+                    Storage::disk('public')->delete($company->logo_path);
+                }
+                $validated['logo_path'] = $request->file('logo')->store('logos/companies', 'public');
+            } catch (\Throwable $e) {
+                Log::error('Company logo upload failed: ' . $e->getMessage());
+                return back()->withInput()->with('error', 'Falha ao enviar logo: ' . $e->getMessage());
             }
-            $validated['logo_path'] = $request->file('logo')->store('logos/companies', 'public');
         }
 
         $company->update($validated);
