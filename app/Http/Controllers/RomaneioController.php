@@ -158,4 +158,18 @@ class RomaneioController extends Controller
 
         return back()->with('success', 'Romaneio sendo fechado. Os pedidos serão atualizados em instantes.');
     }
+
+    public function destroy(Romaneio $romaneio)
+    {
+        abort_unless($romaneio->company_id === Auth::user()->company_id, 403);
+
+        if ($romaneio->items()->count() > 0) {
+            return back()->with('error', 'Não é possível excluir um romaneio que possui pedidos vinculados.');
+        }
+
+        $romaneio->delete();
+
+        return redirect()->route('romaneios.index')
+            ->with('success', 'Romaneio excluído com sucesso.');
+    }
 }

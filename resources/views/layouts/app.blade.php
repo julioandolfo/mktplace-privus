@@ -7,6 +7,9 @@
 
         <title>{{ $title ?? config('app.name') }}</title>
 
+        {{-- Apply dark mode immediately to prevent flash of light theme --}}
+        <script>if(localStorage.getItem('theme')!=='light')document.documentElement.classList.add('dark')</script>
+
         {{-- Google Fonts: Fira Sans + Fira Code --}}
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

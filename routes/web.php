@@ -104,6 +104,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/romaneios/{romaneio}/pdf/etiquetas', [\App\Http\Controllers\RomaneioController::class, 'pdfEtiquetas'])->name('romaneios.pdf.etiquetas');
     Route::post('/romaneios/{romaneio}/scan', [\App\Http\Controllers\RomaneioController::class, 'scan'])->name('romaneios.scan');
     Route::post('/romaneios/{romaneio}/close', [\App\Http\Controllers\RomaneioController::class, 'close'])->name('romaneios.close');
+    Route::delete('/romaneios/{romaneio}', [\App\Http\Controllers\RomaneioController::class, 'destroy'])->name('romaneios.destroy');
 
     // Romaneio board — tela de bipagem
     Route::get('/romaneios/{romaneio}/board', \App\Livewire\Romaneios\RomaneioBoard::class)->name('romaneios.board');
