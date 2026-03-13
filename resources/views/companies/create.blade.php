@@ -14,7 +14,6 @@
     <form
         method="POST"
         action="{{ route('companies.store') }}"
-        enctype="multipart/form-data"
         x-data="companyForm()"
         @submit.prevent="submitForm"
     >
