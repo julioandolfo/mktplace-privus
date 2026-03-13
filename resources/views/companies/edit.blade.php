@@ -12,7 +12,13 @@
         </li>
     </x-slot>
 
-    <form method="POST" action="{{ route('companies.update', $company) }}">
+    <form
+        method="POST"
+        action="{{ route('companies.update', $company) }}"
+        enctype="multipart/form-data"
+        x-data="companyForm()"
+        @submit.prevent="submitForm"
+    >
         @csrf
         @method('PUT')
         @include('companies._form', ['company' => $company])

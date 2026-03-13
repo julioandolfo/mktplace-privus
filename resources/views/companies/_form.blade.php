@@ -314,16 +314,15 @@
     </x-ui.card>
 </div>
 
-<div class="flex items-center justify-end gap-3 mt-6" x-data="{ submitting: false }">
-    <a href="{{ route('companies.index') }}" class="btn-secondary" x-bind:class="{ 'pointer-events-none opacity-50': submitting }">Cancelar</a>
+<div class="flex items-center justify-end gap-3 mt-6">
+    <a href="{{ route('companies.index') }}" class="btn-secondary" :class="{ 'pointer-events-none opacity-50': submitting }">Cancelar</a>
     <button
         type="submit"
         class="btn-primary inline-flex items-center gap-2"
         :disabled="submitting"
         :class="{ 'opacity-75 cursor-not-allowed': submitting }"
-        @click="submitting = true; $nextTick(() => $el.closest('form').submit())"
     >
-        <svg x-show="submitting" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+        <svg x-show="submitting" x-cloak class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
         </svg>
@@ -331,3 +330,47 @@
         <span x-text="submitting ? 'Salvando...' : '{{ $company ? 'Salvar Alteracoes' : 'Cadastrar Empresa' }}'"></span>
     </button>
 </div>
+
+{{-- Submit via fetch to avoid URL-encoding overhead on base64 data --}}
+<script>
+function companyForm() {
+    return {
+        submitting: false,
+        async submitForm() {
+            if (this.submitting) return;
+            this.submitting = true;
+
+            const form = this.$el;
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    redirect: 'follow',
+                });
+
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+
+                if (response.ok) {
+                    window.location.href = response.url;
+                    return;
+                }
+
+                // Error — show details
+                const text = await response.text();
+                console.error('Form submit error:', response.status, text);
+                alert('Erro ao salvar (HTTP ' + response.status + '). Verifique o console (F12) para detalhes.');
+                this.submitting = false;
+            } catch (err) {
+                console.error('Network error:', err);
+                alert('Erro de conexão ao salvar. Tente novamente.');
+                this.submitting = false;
+            }
+        }
+    };
+}
+</script>
