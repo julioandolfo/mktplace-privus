@@ -235,16 +235,48 @@ class CompanyController extends Controller
 
     public function debugLog()
     {
+        $sections = [];
+
+        // Laravel log
         $logFile = storage_path('logs/laravel.log');
-        if (! file_exists($logFile)) {
-            return response('<pre>Log file not found at: ' . $logFile . "\n\nExisting files:\n" . implode("\n", glob(storage_path('logs/*'))) . '</pre>');
+        if (file_exists($logFile)) {
+            $lines = file($logFile);
+            $sections['LARAVEL LOG (last 100 lines)'] = implode('', array_slice($lines, -100));
+        } else {
+            $sections['LARAVEL LOG'] = 'Not found at: ' . $logFile;
         }
 
-        $lines = file($logFile);
-        $tail = array_slice($lines, -150);
+        // PHP error log
+        $phpLog = storage_path('logs/php-errors.log');
+        if (file_exists($phpLog)) {
+            $lines = file($phpLog);
+            $sections['PHP ERROR LOG (last 50 lines)'] = implode('', array_slice($lines, -50));
+        }
 
-        return response('<html><body style="font-family:monospace;padding:20px;background:#111;color:#0f0;font-size:12px;white-space:pre-wrap">'
-            . htmlspecialchars(implode('', $tail))
-            . '</body></html>');
+        // Nginx error log
+        $nginxLog = '/var/log/nginx/error.log';
+        if (file_exists($nginxLog) && is_readable($nginxLog)) {
+            $lines = @file($nginxLog);
+            if ($lines) {
+                $sections['NGINX ERROR LOG (last 50 lines)'] = implode('', array_slice($lines, -50));
+            }
+        }
+
+        // PHP info
+        $sections['PHP CONFIG'] = "opcache.validate_timestamps=" . ini_get('opcache.validate_timestamps')
+            . "\nopcache.enable=" . ini_get('opcache.enable')
+            . "\npost_max_size=" . ini_get('post_max_size')
+            . "\nupload_max_filesize=" . ini_get('upload_max_filesize')
+            . "\ndisplay_errors=" . ini_get('display_errors')
+            . "\nmemory_limit=" . ini_get('memory_limit');
+
+        $html = '<html><body style="font-family:monospace;padding:20px;background:#111;color:#0f0;font-size:12px;white-space:pre-wrap">';
+        foreach ($sections as $title => $content) {
+            $html .= '<h2 style="color:#ff0;border-bottom:1px solid #333;padding-bottom:4px;margin-top:20px">' . $title . '</h2>';
+            $html .= htmlspecialchars($content) . "\n";
+        }
+        $html .= '</body></html>';
+
+        return response($html);
     }
 }

@@ -18,5 +18,20 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Always return JSON errors for AJAX/fetch requests
+        $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
+            if ($request->header('X-Requested-With') === 'XMLHttpRequest' || $request->wantsJson()) {
+                \Illuminate\Support\Facades\Log::error('[GLOBAL EXCEPTION] ' . get_class($e) . ': ' . $e->getMessage(), [
+                    'url' => $request->fullUrl(),
+                    'method' => $request->method(),
+                    'file' => $e->getFile() . ':' . $e->getLine(),
+                ]);
+
+                return response()->json([
+                    'error' => $e->getMessage(),
+                    'class' => get_class($e),
+                    'file' => basename($e->getFile()) . ':' . $e->getLine(),
+                ], method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500);
+            }
+        });
     })->create();
