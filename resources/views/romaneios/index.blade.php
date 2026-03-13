@@ -57,9 +57,21 @@
                             {{ $romaneio->created_at->format('d/m/Y H:i') }}
                         </td>
                         <td class="text-right">
-                            <a href="{{ route('romaneios.show', $romaneio) }}" class="btn-ghost btn-xs">
-                                <x-heroicon-o-eye class="w-4 h-4" />
-                            </a>
+                            <div class="flex items-center justify-end gap-1">
+                                <a href="{{ route('romaneios.show', $romaneio) }}" class="btn-ghost btn-xs">
+                                    <x-heroicon-o-eye class="w-4 h-4" />
+                                </a>
+                                @if($romaneio->total_orders === 0)
+                                <form method="POST" action="{{ route('romaneios.destroy', $romaneio) }}"
+                                      onsubmit="return confirm('Tem certeza que deseja excluir o romaneio {{ $romaneio->name }}?')">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn-ghost btn-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                                        <x-heroicon-o-trash class="w-4 h-4" />
+                                    </button>
+                                </form>
+                                @endif
+                            </div>
                         </td>
                     </tr>
                     @endforeach
