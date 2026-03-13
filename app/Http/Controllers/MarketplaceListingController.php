@@ -146,6 +146,24 @@ class MarketplaceListingController extends Controller
                 $categoryOptions = collect();
             }
 
+            // Fetch visits for current page listings (batch call per account)
+            $visitsMap = [];
+            try {
+                $listingsByAccount = $listings->getCollection()->groupBy('marketplace_account_id');
+                foreach ($listingsByAccount as $accountId => $accountListings) {
+                    $account = $accounts->firstWhere('id', $accountId);
+                    if ($account && $account->credentials) {
+                        $service = new MercadoLivreService($account);
+                        $externalIds = $accountListings->pluck('external_id')->filter()->values()->all();
+                        if (! empty($externalIds)) {
+                            $visitsMap = array_merge($visitsMap, $service->getItemVisitsBatch($externalIds));
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::info('listings.index: visits fetch failed: ' . $e->getMessage());
+            }
+
             $totalListings = MarketplaceListing::count();
             $activeCount   = MarketplaceListing::where('status', 'active')->count();
             $pausedCount   = MarketplaceListing::where('status', 'paused')->count();
@@ -157,7 +175,8 @@ class MarketplaceListingController extends Controller
 
             return view('marketplace-listings.index', compact(
                 'listings', 'accounts', 'companies', 'categoryOptions',
-                'totalListings', 'activeCount', 'pausedCount', 'unlinkedCount', 'perAccount'
+                'totalListings', 'activeCount', 'pausedCount', 'unlinkedCount', 'perAccount',
+                'visitsMap'
             ));
 
         } catch (\Throwable $e) {
@@ -190,6 +209,7 @@ class MarketplaceListingController extends Controller
             $fiscalData            = [];
             $canInvoice            = [];
             $taxRules              = [];
+            $visits                = [];
             $apiError              = null;
 
             $step    = 'check-account';
@@ -264,6 +284,13 @@ class MarketplaceListingController extends Controller
                         Log::info("ListingController getTaxRules [{$listing->external_id}]: " . $e->getMessage());
                     }
 
+                    $step = 'api-visits';
+                    try {
+                        $visits = $service->getItemVisits($listing->external_id, 30);
+                    } catch (\Throwable $e) {
+                        Log::info("ListingController getItemVisits [{$listing->external_id}]: " . $e->getMessage());
+                    }
+
                     $step = 'api-attributes';
                     if (! empty($liveData['category_id'])) {
                         $categoryAttributes = $service->getCategoryAttributes($liveData['category_id']);
@@ -316,7 +343,7 @@ class MarketplaceListingController extends Controller
             $viewData = compact(
                 'listing', 'products',
                 'liveData', 'quality', 'purchaseExperience', 'description', 'categoryAttributes', 'availableListingTypes', 'apiError',
-                'fiscalData', 'canInvoice', 'taxRules',
+                'fiscalData', 'canInvoice', 'taxRules', 'visits',
                 'salesStats', 'totalQty', 'totalRevenue', 'avgTicket',
                 'aiConfigured'
             );
@@ -1471,7 +1498,14 @@ SYS;
             'condition'              => 'required|string|in:new,used,not_specified',
             'attributes'             => 'nullable|array',
             'pictures'               => 'nullable|array',
-            'pictures.*'             => 'url',
+            'pictures.*'             => 'nullable|url',
+            'picture_files'          => 'nullable|array',
+            'picture_files.*'        => 'image|mimes:jpeg,png,jpg|max:10240',
+            'variations'                          => 'nullable|array',
+            'variations.*.attributes'             => 'nullable|array',
+            'variations.*.price'                  => 'nullable|numeric|min:0',
+            'variations.*.available_quantity'     => 'nullable|integer|min:1',
+            'variations.*.seller_custom_field'    => 'nullable|string|max:100',
         ]);
 
         $account = MarketplaceAccount::findOrFail($validated['marketplace_account_id']);
@@ -1505,8 +1539,68 @@ SYS;
                     ->all();
             }
 
+            // Upload files first, then combine with URL pictures
+            $allPictures = [];
+
+            if (! empty($validated['picture_files'])) {
+                foreach ($validated['picture_files'] as $file) {
+                    $pictureId = $service->uploadPicture($file);
+                    $allPictures[] = ['id' => $pictureId];
+                }
+            }
+
             if (! empty($validated['pictures'])) {
-                $payload['pictures'] = array_map(fn ($url) => ['source' => $url], $validated['pictures']);
+                foreach ($validated['pictures'] as $url) {
+                    if (! empty($url)) {
+                        $allPictures[] = ['source' => $url];
+                    }
+                }
+            }
+
+            if (! empty($allPictures)) {
+                $payload['pictures'] = $allPictures;
+            }
+
+            // Variations
+            if (! empty($validated['variations'])) {
+                $mlVariations = [];
+                foreach ($validated['variations'] as $v) {
+                    if (empty($v['attributes'])) continue;
+
+                    $combos = [];
+                    foreach ($v['attributes'] as $attrId => $valueName) {
+                        if (! empty($valueName)) {
+                            $combos[] = ['id' => $attrId, 'value_name' => $valueName];
+                        }
+                    }
+                    if (empty($combos)) continue;
+
+                    $variation = [
+                        'attribute_combinations' => $combos,
+                        'available_quantity'     => (int) ($v['available_quantity'] ?? 1),
+                    ];
+                    if (! empty($v['price'])) {
+                        $variation['price'] = (float) $v['price'];
+                    }
+                    if (! empty($v['seller_custom_field'])) {
+                        $variation['seller_custom_field'] = $v['seller_custom_field'];
+                    }
+                    if (! empty($allPictures)) {
+                        $variation['picture_ids'] = collect($allPictures)
+                            ->pluck('id')
+                            ->filter()
+                            ->values()
+                            ->all();
+                    }
+
+                    $mlVariations[] = $variation;
+                }
+
+                if (! empty($mlVariations)) {
+                    $payload['variations'] = $mlVariations;
+                    // When using variations, remove top-level available_quantity
+                    unset($payload['available_quantity']);
+                }
             }
 
             $item = $service->publishItem($payload);

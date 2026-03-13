@@ -2002,6 +2002,31 @@
                 </details>
             </x-ui.card>
 
+            {{-- Visitas --}}
+            @if(!empty($visits['total_visits']))
+            <x-ui.card title="Visitas">
+                <div class="text-sm space-y-3">
+                    <div class="flex items-baseline justify-between">
+                        <span class="text-gray-500 dark:text-zinc-400">Ultimos 30 dias</span>
+                        <span class="text-xl font-bold font-mono text-gray-900 dark:text-white">{{ number_format($visits['total_visits'], 0, ',', '.') }}</span>
+                    </div>
+                    @if(!empty($visits['results']))
+                    <div class="flex items-end gap-px h-16" title="Visitas diárias">
+                        @php
+                            $maxVisits = max(array_map(fn ($r) => $r['total'] ?? 0, $visits['results']));
+                        @endphp
+                        @foreach($visits['results'] as $day)
+                        @php $dayTotal = $day['total'] ?? 0; $pct = $maxVisits > 0 ? ($dayTotal / $maxVisits * 100) : 0; @endphp
+                        <div class="flex-1 bg-primary-500/70 dark:bg-primary-400/60 rounded-t-sm hover:bg-primary-600 dark:hover:bg-primary-300 transition-colors"
+                             style="height: {{ max($pct, 2) }}%"
+                             title="{{ \Carbon\Carbon::parse($day['date'] ?? '')->format('d/m') }}: {{ number_format($dayTotal, 0, ',', '.') }} visitas"></div>
+                        @endforeach
+                    </div>
+                    @endif
+                </div>
+            </x-ui.card>
+            @endif
+
             {{-- Sincronizacao --}}
             <x-ui.card title="Sincronizacao">
                 <div class="text-sm space-y-2">

@@ -494,6 +494,7 @@
                             <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Preço</th>
                             <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Estoque</th>
                             <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Vendidos</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Visitas</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Produto</th>
                             <th class="px-4 py-3"></th>
                         </tr>
@@ -616,6 +617,13 @@
                             <td class="px-4 py-3 text-right">
                                 <span class="font-mono text-sm text-gray-700 dark:text-zinc-300">
                                     {{ number_format($sold) }}
+                                </span>
+                            </td>
+                            {{-- Visits --}}
+                            <td class="px-4 py-3 text-right">
+                                @php $itemVisits = $visitsMap[$listing->external_id] ?? 0; @endphp
+                                <span class="font-mono text-sm text-gray-700 dark:text-zinc-300">
+                                    {{ $itemVisits > 0 ? number_format($itemVisits, 0, ',', '.') : '—' }}
                                 </span>
                             </td>
                             {{-- Product --}}
@@ -827,6 +835,7 @@
                                 <div class="text-xs text-gray-400 dark:text-zinc-500 mt-0.5">
                                     {{ $listing->available_quantity ?? 0 }} em estoque
                                     @if($sold > 0) · {{ number_format($sold) }} vendidos @endif
+                                    @if(($visitsMap[$listing->external_id] ?? 0) > 0) · {{ number_format($visitsMap[$listing->external_id], 0, ',', '.') }} visitas @endif
                                 </div>
                             </div>
 
