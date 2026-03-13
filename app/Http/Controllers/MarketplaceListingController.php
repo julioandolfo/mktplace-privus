@@ -189,6 +189,7 @@ class MarketplaceListingController extends Controller
             $availableListingTypes = [];
             $fiscalData            = [];
             $canInvoice            = [];
+            $taxRules              = [];
             $apiError              = null;
 
             $step    = 'check-account';
@@ -249,6 +250,20 @@ class MarketplaceListingController extends Controller
                         Log::info("ListingController fiscal data [{$listing->external_id}]: " . $e->getMessage());
                     }
 
+                    $step = 'api-tax-rules';
+                    try {
+                        $rulesResponse = $service->getTaxRules();
+                        $taxRules = collect($rulesResponse['results'] ?? $rulesResponse)
+                            ->map(fn ($r) => [
+                                'id'          => $r['id'] ?? '',
+                                'description' => $r['description'] ?? $r['name'] ?? ('Regra #' . ($r['id'] ?? '?')),
+                            ])
+                            ->values()
+                            ->toArray();
+                    } catch (\Throwable $e) {
+                        Log::info("ListingController getTaxRules [{$listing->external_id}]: " . $e->getMessage());
+                    }
+
                     $step = 'api-attributes';
                     if (! empty($liveData['category_id'])) {
                         $categoryAttributes = $service->getCategoryAttributes($liveData['category_id']);
@@ -301,7 +316,7 @@ class MarketplaceListingController extends Controller
             $viewData = compact(
                 'listing', 'products',
                 'liveData', 'quality', 'purchaseExperience', 'description', 'categoryAttributes', 'availableListingTypes', 'apiError',
-                'fiscalData', 'canInvoice',
+                'fiscalData', 'canInvoice', 'taxRules',
                 'salesStats', 'totalQty', 'totalRevenue', 'avgTicket',
                 'aiConfigured'
             );

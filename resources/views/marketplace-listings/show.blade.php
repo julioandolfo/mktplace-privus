@@ -1981,6 +1981,18 @@
                                 @endforeach
                             </select>
                         </div>
+                        @if(!empty($taxRules))
+                        <div>
+                            <label class="text-xs text-gray-600 dark:text-zinc-400">Regra Tributária</label>
+                            <select name="tax_rule_id" class="form-input text-sm">
+                                @php $currentTaxRule = old('tax_rule_id', $fiscalTax['tax_rule_id'] ?? ''); @endphp
+                                <option value="">Nenhuma (Simples Nacional)</option>
+                                @foreach($taxRules as $rule)
+                                <option value="{{ $rule['id'] }}" {{ (string) $currentTaxRule === (string) $rule['id'] ? 'selected' : '' }}>{{ $rule['description'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        @endif
 
                         <button type="submit" class="btn-primary btn-sm text-xs w-full">
                             <x-heroicon-o-cloud-arrow-up class="w-3.5 h-3.5" />
