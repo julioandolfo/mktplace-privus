@@ -18,9 +18,90 @@ class MercadoLivreService
      */
     private const MLB_AGENT_ID = 3037675074;
 
+    /**
+     * Minimum interval (microseconds) between API calls to avoid rate limiting.
+     * 200ms = max ~5 requests/second per account.
+     */
+    private const THROTTLE_US = 200_000;
+
+    private static float $lastRequestAt = 0;
+
     public function __construct(private MarketplaceAccount $account) {}
 
     // ─── HTTP Helpers ────────────────────────────────────────────────────────
+
+    private function throttle(): void
+    {
+        $now  = microtime(true);
+        $diff = ($now - self::$lastRequestAt) * 1_000_000; // to microseconds
+
+        if (self::$lastRequestAt > 0 && $diff < self::THROTTLE_US) {
+            usleep((int) (self::THROTTLE_US - $diff));
+        }
+
+        self::$lastRequestAt = microtime(true);
+    }
+
+    /**
+     * Execute an HTTP request with throttling and retry on transient errors.
+     */
+    private function requestWithRetry(string $method, string $path, array $params = [], array $body = []): array
+    {
+        $maxAttempts = 3;
+        $attempt     = 0;
+
+        while (true) {
+            $attempt++;
+            $this->throttle();
+
+            try {
+                $request = Http::withToken($this->token())
+                    ->withHeaders(['x-format-new' => 'true'])
+                    ->timeout(15);
+
+                $url = self::BASE_URL . $path;
+
+                $response = match (strtoupper($method)) {
+                    'GET'   => $request->get($url, $params),
+                    'POST'  => $request->post($url, $body),
+                    'PUT'   => $request->put($url, $body),
+                    'PATCH' => $request->patch($url, $body),
+                    default => throw new \RuntimeException("Unsupported method: {$method}"),
+                };
+
+                // Rate limited by ML — retry with backoff
+                if ($response->status() === 429 && $attempt < $maxAttempts) {
+                    $wait = min($attempt * 2, 10);
+                    Log::warning("ML API rate limited on {$method} {$path}, retrying in {$wait}s (attempt {$attempt}/{$maxAttempts})");
+                    sleep($wait);
+                    continue;
+                }
+
+                // Server error — retry with backoff
+                if ($response->serverError() && $attempt < $maxAttempts) {
+                    $wait = $attempt * 2;
+                    Log::warning("ML API server error [{$response->status()}] on {$method} {$path}, retrying in {$wait}s (attempt {$attempt}/{$maxAttempts})");
+                    sleep($wait);
+                    continue;
+                }
+
+                if ($response->failed()) {
+                    throw new \RuntimeException(
+                        "ML API error [{$response->status()}] {$method} {$path}: " . $response->body()
+                    );
+                }
+
+                return $response->json() ?? [];
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                if ($attempt >= $maxAttempts) {
+                    throw $e;
+                }
+                $wait = $attempt * 2;
+                Log::warning("ML API connection error on {$method} {$path}, retrying in {$wait}s: " . $e->getMessage());
+                sleep($wait);
+            }
+        }
+    }
 
     private function token(): string
     {
@@ -36,68 +117,23 @@ class MercadoLivreService
 
     private function get(string $path, array $params = []): array
     {
-        $response = Http::withToken($this->token())
-            ->withHeaders(['x-format-new' => 'true'])
-            ->timeout(30)
-            ->get(self::BASE_URL . $path, $params);
-
-        if ($response->failed()) {
-            throw new \RuntimeException(
-                "ML API error [{$response->status()}] GET {$path}: " . $response->body()
-            );
-        }
-
-        return $response->json() ?? [];
+        return $this->requestWithRetry('GET', $path, $params);
     }
 
     private function put(string $path, array $data): array
     {
-        $response = Http::withToken($this->token())
-            ->timeout(30)
-            ->put(self::BASE_URL . $path, $data);
-
-        if ($response->failed()) {
-            throw new \RuntimeException(
-                "ML API PUT error [{$response->status()}] {$path}: " . $response->body()
-            );
-        }
-
-        return $response->json() ?? [];
+        return $this->requestWithRetry('PUT', $path, body: $data);
     }
 
     private function post(string $path, array $data, array $query = []): array
     {
-        $request = Http::withToken($this->token())->timeout(30);
-
-        $url = self::BASE_URL . $path;
-        if (! empty($query)) {
-            $url .= '?' . http_build_query($query);
-        }
-
-        $response = $request->post($url, $data);
-
-        if ($response->failed()) {
-            throw new \RuntimeException(
-                "ML API POST error [{$response->status()}] {$path}: " . $response->body()
-            );
-        }
-
-        return $response->json() ?? [];
+        $fullPath = ! empty($query) ? $path . '?' . http_build_query($query) : $path;
+        return $this->requestWithRetry('POST', $fullPath, body: $data);
     }
 
     private function patch(string $path, array $data): array
     {
-        $response = Http::withToken($this->token())
-            ->timeout(30)
-            ->patch(self::BASE_URL . $path, $data);
-
-        if ($response->failed()) {
-            throw new \RuntimeException(
-                "ML API PATCH error [{$response->status()}] {$path}: " . $response->body()
-            );
-        }
-
-        return $response->json() ?? [];
+        return $this->requestWithRetry('PATCH', $path, body: $data);
     }
 
     // ─── Diagnostics ────────────────────────────────────────────────────────
