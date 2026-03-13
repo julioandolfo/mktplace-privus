@@ -43,16 +43,16 @@ class FixOrderPipelineStatus extends Command
             ->update(['pipeline_status' => PipelineStatus::Shipped->value]);
         $this->info("Pedidos delivered/shipped com pipeline errado corrigidos: {$wrongPipeline}");
 
-        // ── 3. Pedidos cancelled com pipeline != null → sem pipeline ───────
-        DB::table('orders')
+        // ── 3. Pedidos cancelled com pipeline != shipped → marca como shipped ─
+        $cancelledFixed = DB::table('orders')
             ->where('status', OrderStatus::Cancelled->value)
-            ->whereNotNull('pipeline_status')
-            ->whereNotIn('pipeline_status', [PipelineStatus::Shipped->value])
-            ->update(['pipeline_status' => null]);
+            ->where('pipeline_status', '!=', PipelineStatus::Shipped->value)
+            ->update(['pipeline_status' => PipelineStatus::Shipped->value]);
+        $this->info("Pedidos cancelled com pipeline corrigido: {$cancelledFixed}");
 
         // ── 4. Pedidos com pipeline_status NULL → define pelo status ───────
         $statusMap = [
-            OrderStatus::Cancelled->value    => null,
+            OrderStatus::Cancelled->value    => PipelineStatus::Shipped->value,
             OrderStatus::Delivered->value    => PipelineStatus::Shipped->value,
             OrderStatus::Shipped->value      => PipelineStatus::Shipped->value,
             OrderStatus::ReadyToShip->value  => PipelineStatus::ReadyToShip->value,
