@@ -289,6 +289,28 @@
                 </p>
             </x-ui.card>
 
+            {{-- Agrupamento (Família) --}}
+            <x-ui.card title="Agrupamento (Familia)">
+                <div class="space-y-3">
+                    <div class="flex items-start gap-3 text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
+                        <x-heroicon-o-information-circle class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                        <p class="text-blue-700 dark:text-blue-300">
+                            Para agrupar anúncios como variações visuais no Mercado Livre (ex: diferentes estampas de caneca),
+                            use o mesmo <strong>nome de família</strong> em todos os anúncios do grupo.
+                            Deixe vazio para anúncio independente.
+                        </p>
+                    </div>
+                    <div>
+                        <label class="form-label">Nome da Família</label>
+                        <input type="text" name="family_name" maxlength="255"
+                            value="{{ old('family_name') }}"
+                            class="form-input"
+                            placeholder="Ex: Caneca Porcelana Presente Dia das Mães">
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">Anúncios com o mesmo nome de família serão agrupados no ML.</p>
+                    </div>
+                </div>
+            </x-ui.card>
+
             {{-- Variações --}}
             <div x-show="variationAttributes.length > 0" x-cloak>
             <x-ui.card title="Variacoes">
