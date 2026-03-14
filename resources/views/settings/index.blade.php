@@ -474,12 +474,15 @@
                                     <option value="openai" {{ ($aiProviders->firstWhere('is_active', true)?->provider) === 'openai' ? 'selected' : '' }}>OpenAI</option>
                                     <option value="anthropic" {{ ($aiProviders->firstWhere('is_active', true)?->provider) === 'anthropic' ? 'selected' : '' }}>Anthropic</option>
                                 </select>
-                                <p class="mt-1 text-xs text-gray-500 dark:text-zinc-400">OpenRouter permite acesso a Claude, GPT e outros modelos com uma unica API key.</p>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-zinc-400">
+                                    <span x-show="document.getElementById('ai_provider')?.value === 'openrouter' || !document.getElementById('ai_provider')">OpenRouter permite acesso a Claude, GPT e outros modelos com uma unica API key.</span>
+                                </p>
                             </div>
 
                             <div>
                                 <label for="ai_api_key" class="form-label">API Key</label>
-                                <input type="password" id="ai_api_key" name="api_key" value="{{ $aiProviders->firstWhere('is_active', true)?->api_key ? '••••••••' : '' }}" class="form-input" placeholder="sk-or-...">
+                                <input type="password" id="ai_api_key" name="api_key" value="{{ $aiProviders->firstWhere('is_active', true)?->api_key ? '••••••••' : '' }}" class="form-input"
+                                       :placeholder="document.getElementById('ai_provider')?.value === 'openai' ? 'sk-...' : (document.getElementById('ai_provider')?.value === 'anthropic' ? 'sk-ant-...' : 'sk-or-...')">
                             </div>
 
                             <div>

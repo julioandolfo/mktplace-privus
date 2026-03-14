@@ -89,14 +89,23 @@ class SettingsController extends Controller
             'monthly_budget_limit' => 'nullable|numeric|min:0',
         ]);
 
+        $data = [
+            'default_model' => $validated['default_model'],
+            'monthly_budget_limit' => $validated['monthly_budget_limit'],
+            'is_active' => true,
+        ];
+
+        // Só atualizar API key se o usuário digitou uma nova (não o placeholder)
+        if (! empty($validated['api_key']) && ! str_contains($validated['api_key'], '••')) {
+            $data['api_key'] = $validated['api_key'];
+        }
+
+        // Desativar outros providers
+        AiProviderSetting::where('provider', '!=', $validated['provider'])->update(['is_active' => false]);
+
         AiProviderSetting::updateOrCreate(
             ['provider' => $validated['provider']],
-            [
-                'api_key' => $validated['api_key'],
-                'default_model' => $validated['default_model'],
-                'monthly_budget_limit' => $validated['monthly_budget_limit'],
-                'is_active' => true,
-            ]
+            $data,
         );
     }
 
@@ -157,6 +166,40 @@ class SettingsController extends Controller
                     ->values();
 
                 return response()->json($models);
+            }
+
+            if ($provider->provider === 'openai') {
+                $response = Http::withToken($provider->api_key)
+                    ->timeout(15)
+                    ->get('https://api.openai.com/v1/models');
+
+                if ($response->failed()) {
+                    return response()->json([]);
+                }
+
+                $models = collect($response->json('data') ?? [])
+                    ->filter(fn ($m) => str_starts_with($m['id'], 'gpt-') || str_starts_with($m['id'], 'o') || str_starts_with($m['id'], 'chatgpt'))
+                    ->map(fn ($m) => [
+                        'id' => $m['id'],
+                        'name' => $m['id'],
+                        'free' => false,
+                        'context' => null,
+                    ])
+                    ->sortBy('name')
+                    ->values();
+
+                return response()->json($models);
+            }
+
+            if ($provider->provider === 'anthropic') {
+                // Anthropic não tem endpoint de listagem de modelos — retornar lista fixa
+                return response()->json([
+                    ['id' => 'claude-sonnet-4-20250514', 'name' => 'Claude Sonnet 4', 'free' => false, 'context' => 200000],
+                    ['id' => 'claude-haiku-4-20250414', 'name' => 'Claude Haiku 4', 'free' => false, 'context' => 200000],
+                    ['id' => 'claude-3-5-sonnet-20241022', 'name' => 'Claude 3.5 Sonnet', 'free' => false, 'context' => 200000],
+                    ['id' => 'claude-3-5-haiku-20241022', 'name' => 'Claude 3.5 Haiku', 'free' => false, 'context' => 200000],
+                    ['id' => 'claude-3-haiku-20240307', 'name' => 'Claude 3 Haiku', 'free' => false, 'context' => 200000],
+                ]);
             }
 
             return response()->json([]);

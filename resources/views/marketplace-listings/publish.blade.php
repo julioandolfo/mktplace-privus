@@ -185,15 +185,32 @@
             <div x-show="attributes.length > 0" x-cloak>
             <x-ui.card title="Atributos da Categoria">
                 <div class="space-y-3">
+                    {{-- Botão preencher com IA --}}
+                    <div class="flex justify-end">
+                        <button type="button" @click="fillAttributesWithAi()"
+                                :disabled="aiAttrLoading"
+                                class="btn-secondary btn-sm inline-flex items-center gap-1.5 text-xs">
+                            <template x-if="!aiAttrLoading">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z"/></svg>
+                            </template>
+                            <template x-if="aiAttrLoading">
+                                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                            </template>
+                            <span x-text="aiAttrLoading ? 'Preenchendo...' : 'Preencher com IA'"></span>
+                        </button>
+                    </div>
+
                     <template x-for="attr in attributes" :key="attr.id">
-                        <div x-show="!attr.tags?.includes('read_only')" class="flex items-center gap-3">
+                        <div x-show="!hasTag(attr.tags, 'read_only')" class="flex items-center gap-3">
                             <div class="w-44 flex-shrink-0">
                                 <span class="text-sm text-gray-600 dark:text-zinc-400" x-text="attr.name"></span>
-                                <span x-show="attr.tags?.includes('required')" class="text-red-400 text-xs ml-0.5">*</span>
+                                <span x-show="hasTag(attr.tags, 'required')" class="text-red-400 text-xs ml-0.5">*</span>
                             </div>
                             {{-- Select for allowed_values, input otherwise --}}
                             <template x-if="attr.allowed_values?.length > 0">
-                                <select :name="'attributes[' + attr.id + ']'" class="form-input flex-1 text-sm py-1.5">
+                                <select :name="'attributes[' + attr.id + ']'"
+                                        x-model="attrValues[attr.id]"
+                                        class="form-input flex-1 text-sm py-1.5">
                                     <option value="">Selecione...</option>
                                     <template x-for="val in attr.allowed_values" :key="val.id">
                                         <option :value="val.name" x-text="val.name"></option>
@@ -203,6 +220,7 @@
                             <template x-if="!attr.allowed_values?.length">
                                 <input :type="attr.value_type === 'number' ? 'number' : 'text'"
                                     :name="'attributes[' + attr.id + ']'"
+                                    x-model="attrValues[attr.id]"
                                     class="form-input flex-1 text-sm py-1.5"
                                     placeholder="Não informado">
                             </template>
@@ -215,13 +233,40 @@
             {{-- Imagens --}}
             <x-ui.card title="Imagens">
                 <div class="space-y-4">
-                    {{-- Upload de arquivos --}}
+                    {{-- Upload de arquivos com preview --}}
                     <div>
                         <label class="form-label">Upload de Imagens</label>
-                        <input type="file" name="picture_files[]" multiple accept="image/jpeg,image/png"
-                               class="form-input text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 dark:file:bg-primary-900/20 dark:file:text-primary-400 hover:file:bg-primary-100">
-                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">JPG/PNG, max 10MB cada. Min. 500x500px. Recomendado: 1200x1200px.</p>
+                        <div class="border-2 border-dashed border-gray-300 dark:border-zinc-600 rounded-lg p-4 text-center cursor-pointer hover:border-primary-500 dark:hover:border-primary-500 transition-colors"
+                             @click="$refs.fileInput.click()"
+                             @dragover.prevent="$event.currentTarget.classList.add('border-primary-500','bg-primary-50','dark:bg-primary-900/10')"
+                             @dragleave.prevent="$event.currentTarget.classList.remove('border-primary-500','bg-primary-50','dark:bg-primary-900/10')"
+                             @drop.prevent="$event.currentTarget.classList.remove('border-primary-500','bg-primary-50','dark:bg-primary-900/10'); handleFilesDrop($event)">
+                            <svg class="w-8 h-8 mx-auto text-gray-400 dark:text-zinc-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+                            <p class="text-sm text-gray-500 dark:text-zinc-400">Clique ou arraste imagens aqui</p>
+                            <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">JPG/PNG, max 10MB. Min. 500x500px</p>
+                        </div>
+                        <input type="file" x-ref="fileInput" @change="handleFilesSelect($event)" multiple accept="image/jpeg,image/png" class="hidden">
                     </div>
+
+                    {{-- Preview das imagens selecionadas --}}
+                    <div x-show="uploadedImages.length > 0" class="grid grid-cols-4 sm:grid-cols-6 gap-2" x-cloak>
+                        <template x-for="(img, idx) in uploadedImages" :key="idx">
+                            <div class="relative group aspect-square rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700">
+                                <img :src="img.preview" class="w-full h-full object-cover">
+                                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <button type="button" @click="removeImage(idx)" class="text-white hover:text-red-300">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                    </button>
+                                </div>
+                                <span x-show="idx === 0" class="absolute top-1 left-1 bg-primary-600 text-white text-[10px] px-1.5 py-0.5 rounded font-medium">Principal</span>
+                            </div>
+                        </template>
+                    </div>
+
+                    {{-- Hidden file inputs para envio do form --}}
+                    <template x-for="(img, idx) in uploadedImages" :key="'file-'+idx">
+                        <input type="file" :name="'picture_files[]'" class="hidden" x-ref="'hiddenFile'+idx">
+                    </template>
 
                     {{-- URLs de imagens --}}
                     <div>
@@ -290,6 +335,23 @@
                                     </div>
                                 </template>
                             </div>
+                            {{-- Imagens da variação --}}
+                            <div x-show="uploadedImages.length > 0">
+                                <label class="text-xs text-gray-600 dark:text-zinc-400 mb-1 block">Imagens desta variação</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="(img, imgIdx) in uploadedImages" :key="'var-img-'+vi+'-'+imgIdx">
+                                        <label class="relative cursor-pointer">
+                                            <input type="checkbox"
+                                                   :value="imgIdx"
+                                                   @change="toggleVariationImage(vi, imgIdx, $event.target.checked)"
+                                                   :checked="variation.picture_indices?.includes(imgIdx)"
+                                                   class="sr-only peer">
+                                            <img :src="img.preview"
+                                                 class="w-12 h-12 rounded object-cover border-2 border-gray-200 dark:border-zinc-700 peer-checked:border-primary-500 peer-checked:ring-2 peer-checked:ring-primary-500/30 transition-all">
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
                             {{-- Price, qty, SKU --}}
                             <div class="grid grid-cols-3 gap-3">
                                 <div>
@@ -329,7 +391,20 @@
 
             {{-- Descrição --}}
             <x-ui.card title="Descricao">
-                <textarea name="description" rows="8"
+                <div class="flex justify-end mb-2">
+                    <button type="button" @click="generateDescriptionAi()"
+                            :disabled="aiDescLoading"
+                            class="btn-secondary btn-sm inline-flex items-center gap-1.5 text-xs">
+                        <template x-if="!aiDescLoading">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z"/></svg>
+                        </template>
+                        <template x-if="aiDescLoading">
+                            <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                        </template>
+                        <span x-text="aiDescLoading ? 'Gerando...' : 'Gerar com IA'"></span>
+                    </button>
+                </div>
+                <textarea name="description" x-model="description" rows="8"
                     class="form-input w-full text-sm leading-relaxed resize-y"
                     placeholder="Descrição detalhada do produto...">{{ old('description') }}</textarea>
                 <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">
@@ -393,6 +468,8 @@
                 attributes: [],
                 variationAttributes: [],
                 variations: [],
+                attrValues: {},
+                description: '{{ old('description', '') }}',
 
                 // Category search state
                 catQuery: '',
@@ -400,6 +477,18 @@
                 catOpen: false,
                 catLoading: false,
                 catError: '',
+
+                // AI state
+                aiAttrLoading: false,
+                aiDescLoading: false,
+
+                // Images state
+                uploadedImages: [],
+                fileTransfer: null,
+
+                hasTag(tags, key) {
+                    return Array.isArray(tags) ? tags.includes(key) : !!(tags && tags[key]);
+                },
 
                 searchCategory() {
                     if (!this.accountId) {
@@ -446,9 +535,9 @@
                         .then(r => r.json())
                         .then(data => {
                             const allAttrs = Array.isArray(data) ? data : [];
-                            const hasTag = (tags, key) => Array.isArray(tags) ? tags.includes(key) : !!(tags && tags[key]);
-                            this.attributes = allAttrs.filter(a => !hasTag(a.tags, 'read_only') && !hasTag(a.tags, 'allow_variations'));
-                            this.variationAttributes = allAttrs.filter(a => hasTag(a.tags, 'allow_variations'));
+                            this.attributes = allAttrs.filter(a => !this.hasTag(a.tags, 'read_only') && !this.hasTag(a.tags, 'allow_variations'));
+                            this.variationAttributes = allAttrs.filter(a => this.hasTag(a.tags, 'allow_variations'));
+                            this.attrValues = {};
                             this.variations = [];
                         })
                         .catch(() => { this.attributes = []; this.variationAttributes = []; });
@@ -460,8 +549,135 @@
                         price: '',
                         available_quantity: 1,
                         seller_custom_field: '',
+                        picture_indices: [],
                     });
-                }
+                },
+
+                // === Image handling ===
+                handleFilesSelect(event) {
+                    this.addFiles(event.target.files);
+                },
+
+                handleFilesDrop(event) {
+                    this.addFiles(event.dataTransfer.files);
+                },
+
+                addFiles(fileList) {
+                    for (const file of fileList) {
+                        if (!file.type.match(/^image\/(jpeg|png)$/)) continue;
+                        this.uploadedImages.push({
+                            file: file,
+                            preview: URL.createObjectURL(file),
+                        });
+                    }
+                    this.syncFileInput();
+                },
+
+                removeImage(idx) {
+                    URL.revokeObjectURL(this.uploadedImages[idx].preview);
+                    this.uploadedImages.splice(idx, 1);
+                    // Update variation picture_indices
+                    this.variations.forEach(v => {
+                        v.picture_indices = (v.picture_indices || [])
+                            .filter(i => i !== idx)
+                            .map(i => i > idx ? i - 1 : i);
+                    });
+                    this.syncFileInput();
+                },
+
+                syncFileInput() {
+                    // Rebuild a real FileList via DataTransfer for form submission
+                    const dt = new DataTransfer();
+                    this.uploadedImages.forEach(img => dt.items.add(img.file));
+                    this.$refs.fileInput.files = dt.files;
+                },
+
+                toggleVariationImage(vi, imgIdx, checked) {
+                    if (!this.variations[vi].picture_indices) {
+                        this.variations[vi].picture_indices = [];
+                    }
+                    if (checked) {
+                        if (!this.variations[vi].picture_indices.includes(imgIdx)) {
+                            this.variations[vi].picture_indices.push(imgIdx);
+                        }
+                    } else {
+                        this.variations[vi].picture_indices = this.variations[vi].picture_indices.filter(i => i !== imgIdx);
+                    }
+                },
+
+                // === AI: Fill attributes ===
+                fillAttributesWithAi() {
+                    const title = document.querySelector('input[name="title"]')?.value;
+                    if (!title) { alert('Preencha o título do anúncio primeiro.'); return; }
+                    if (!this.categoryId) { alert('Selecione uma categoria primeiro.'); return; }
+
+                    this.aiAttrLoading = true;
+
+                    const attrList = this.attributes.map(a => ({
+                        id: a.id,
+                        name: a.name,
+                        value_type: a.value_type,
+                        allowed_values: (a.allowed_values || []).map(v => v.name),
+                    }));
+
+                    fetch('/listings/ai/fill-attributes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                        body: JSON.stringify({
+                            title: title,
+                            category_name: this.categoryName,
+                            attributes: attrList,
+                        }),
+                    })
+                    .then(r => {
+                        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                        return r.json();
+                    })
+                    .then(data => {
+                        // data = { ATTR_ID: "value", ... }
+                        Object.entries(data).forEach(([key, value]) => {
+                            if (value) this.attrValues[key] = value;
+                        });
+                        this.aiAttrLoading = false;
+                    })
+                    .catch(err => {
+                        this.aiAttrLoading = false;
+                        alert('Erro ao preencher com IA. Verifique se a IA está configurada em Configurações.');
+                        console.error('AI fill attributes error:', err);
+                    });
+                },
+
+                // === AI: Generate description ===
+                generateDescriptionAi() {
+                    const title = document.querySelector('input[name="title"]')?.value;
+                    if (!title) { alert('Preencha o título do anúncio primeiro.'); return; }
+
+                    this.aiDescLoading = true;
+
+                    fetch('/listings/ai/generate-description', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                        body: JSON.stringify({
+                            title: title,
+                            category_name: this.categoryName || '',
+                            attributes: this.attrValues || {},
+                            existing_description: this.description || '',
+                        }),
+                    })
+                    .then(r => {
+                        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                        return r.json();
+                    })
+                    .then(data => {
+                        this.description = data.description || '';
+                        this.aiDescLoading = false;
+                    })
+                    .catch(err => {
+                        this.aiDescLoading = false;
+                        alert('Erro ao gerar descrição. Verifique se a IA está configurada em Configurações.');
+                        console.error('AI generate description error:', err);
+                    });
+                },
             };
         }
 

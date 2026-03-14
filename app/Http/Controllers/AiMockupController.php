@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AiProviderSetting;
 use App\Models\DesignAssignment;
 use App\Models\DesignFile;
 use App\Models\OrderTimeline;
@@ -27,9 +28,16 @@ class AiMockupController extends Controller
             'product_url' => 'nullable|url',
         ]);
 
-        $apiKey = config('services.openai.key', env('OPENAI_API_KEY'));
+        // Usar API key do provider configurado (OpenAI ou OpenRouter)
+        $apiKey = null;
+        $provider = AiProviderSetting::where('is_active', true)->first();
+        if ($provider && in_array($provider->provider, ['openai', 'openrouter'])) {
+            $apiKey = $provider->api_key;
+        }
+        // Fallback para config/env
+        $apiKey = $apiKey ?: config('services.openai.key', env('OPENAI_API_KEY'));
         if (! $apiKey) {
-            return response()->json(['error' => 'OpenAI API key não configurada.'], 422);
+            return response()->json(['error' => 'API key não configurada. Configure OpenAI ou OpenRouter em Configurações → IA.'], 422);
         }
 
         try {
