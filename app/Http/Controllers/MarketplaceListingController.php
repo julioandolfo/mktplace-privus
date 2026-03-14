@@ -156,7 +156,13 @@ class MarketplaceListingController extends Controller
                         $service = new MercadoLivreService($account);
                         $externalIds = $accountListings->pluck('external_id')->filter()->values()->all();
                         if (! empty($externalIds)) {
-                            $visitsMap = array_merge($visitsMap, $service->getItemVisitsBatch($externalIds));
+                            $batchResult = $service->getItemVisitsBatch($externalIds);
+                            Log::info("listings.index visits batch account={$accountId}", [
+                                'requested' => count($externalIds),
+                                'returned'  => count($batchResult),
+                                'sample'    => array_slice($batchResult, 0, 3, true),
+                            ]);
+                            $visitsMap = array_merge($visitsMap, $batchResult);
                         }
                     }
                 }

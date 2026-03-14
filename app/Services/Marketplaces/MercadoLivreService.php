@@ -321,11 +321,19 @@ class MercadoLivreService
         try {
             $item = $this->get("/items/{$itemId}");
 
-            // Log what the main endpoint returns for variations
-            $mainVarCount = count($item['variations'] ?? []);
-            Log::info("ML getItemWithVariations({$itemId}) main endpoint: {$mainVarCount} variation(s) in response", [
-                'has_key' => array_key_exists('variations', $item),
-                'type'    => gettype($item['variations'] ?? null),
+            // Debug: log item structure to understand variation format
+            Log::info("ML item({$itemId}) structure", [
+                'keys'                => array_keys($item),
+                'variations_type'     => gettype($item['variations'] ?? null),
+                'variations_count'    => count($item['variations'] ?? []),
+                'catalog_product_id'  => $item['catalog_product_id'] ?? null,
+                'family_name'         => $item['family_name'] ?? null,
+                'parent_item_id'      => $item['parent_item_id'] ?? null,
+                'catalog_listing'     => $item['catalog_listing'] ?? null,
+                'channels'            => $item['channels'] ?? null,
+                'sale_terms_ids'      => collect($item['sale_terms'] ?? [])->pluck('id')->all(),
+                'tags'                => $item['tags'] ?? [],
+                'pictures_count'      => count($item['pictures'] ?? []),
             ]);
 
             // Always fetch variations separately — the main endpoint with x-format-new
