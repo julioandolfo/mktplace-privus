@@ -110,7 +110,7 @@
                             {{-- Dropdown results --}}
                             <div x-show="catOpen && catResults.length > 0" @click.outside="catOpen=false"
                                  class="absolute z-20 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                                <template x-for="cat in catResults" :key="cat.domain_id">
+                                <template x-for="cat in catResults" :key="cat.category_id">
                                     <button type="button"
                                         @click="selectCategory(cat)"
                                         class="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-zinc-700/50 border-b border-gray-100 dark:border-zinc-700/50 last:border-0">
@@ -421,7 +421,7 @@
                             this.catOpen    = this.catResults.length > 0;
                             this.catLoading = false;
                             if (this.catResults.length === 0) {
-                                this.catError = 'Nenhuma categoria encontrada para "' + this.catQuery + '".';
+                                this.catError = 'Nenhuma categoria encontrada para "' + this.catQuery + '". Tente descrever o produto (ex: "caneca de porcelana", "copo térmico").';
                             }
                         })
                         .catch((err) => {

@@ -498,15 +498,86 @@ class MercadoLivreService
 
     /**
      * Search ML categories by keyword (for publishing new items).
+     * Combines domain_discovery, category_predictor and sites/categories for better results.
      */
     public function searchCategories(string $query): array
     {
+        $results = [];
+        $seenIds = [];
+
+        // 1) Domain discovery (works well for specific product terms)
         try {
-            return $this->get('/sites/MLB/domain_discovery/search', ['q' => $query, 'limit' => 20]);
+            $domains = $this->get('/sites/MLB/domain_discovery/search', ['q' => $query, 'limit' => 10]);
+            if (is_array($domains)) {
+                foreach ($domains as $d) {
+                    $id = $d['category_id'] ?? null;
+                    if ($id && !isset($seenIds[$id])) {
+                        $seenIds[$id] = true;
+                        $results[]    = $d;
+                    }
+                }
+            }
         } catch (\Throwable $e) {
-            Log::warning("ML searchCategories({$query}) failed: " . $e->getMessage());
-            return [];
+            Log::debug("ML domain_discovery({$query}) failed: " . $e->getMessage());
         }
+
+        // 2) Category predictor (predicts category from a product title)
+        try {
+            $prediction = $this->get('/sites/MLB/category_predictor/predict', ['title' => $query]);
+            $predId     = $prediction['id'] ?? null;
+            if ($predId && !isset($seenIds[$predId])) {
+                $seenIds[$predId] = true;
+                $results[]        = [
+                    'category_id'   => $predId,
+                    'category_name' => $prediction['name'] ?? $predId,
+                    'domain_name'   => $prediction['prediction_quality'] ?? 'predicted',
+                ];
+            }
+            // Also check prediction path for parent categories
+            foreach ($prediction['path_from_root'] ?? [] as $path) {
+                $pathId = $path['category_id'] ?? null;
+                if ($pathId && !isset($seenIds[$pathId])) {
+                    $seenIds[$pathId] = true;
+                    $results[]        = [
+                        'category_id'   => $pathId,
+                        'category_name' => $path['category_name'] ?? $pathId,
+                        'domain_name'   => 'sugestão',
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::debug("ML category_predictor({$query}) failed: " . $e->getMessage());
+        }
+
+        // 3) Fallback: search via items and extract unique categories
+        if (empty($results)) {
+            try {
+                $search = $this->get('/sites/MLB/search', ['q' => $query, 'limit' => 10]);
+                foreach ($search['results'] ?? [] as $item) {
+                    $catId = $item['category_id'] ?? null;
+                    if ($catId && !isset($seenIds[$catId])) {
+                        $seenIds[$catId] = true;
+                        // Fetch category name
+                        try {
+                            $catInfo   = $this->get("/categories/{$catId}");
+                            $catName   = $catInfo['name'] ?? $catId;
+                        } catch (\Throwable $e) {
+                            $catName = $catId;
+                        }
+                        $results[] = [
+                            'category_id'   => $catId,
+                            'category_name' => $catName,
+                            'domain_name'   => 'encontrado via busca',
+                        ];
+                        if (count($results) >= 10) break;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::debug("ML search fallback({$query}) failed: " . $e->getMessage());
+            }
+        }
+
+        return $results;
     }
 
     /**
