@@ -1516,6 +1516,7 @@ SYS;
             'pictures.*'             => 'nullable|url',
             'picture_files'          => 'nullable|array',
             'picture_files.*'        => 'image|mimes:jpeg,png,jpg|max:10240',
+            'family_name'                         => 'nullable|string|max:255',
             'variations'                          => 'nullable|array',
             'variations.*.attributes'             => 'nullable|array',
             'variations.*.price'                  => 'nullable|numeric|min:0',
@@ -1546,6 +1547,10 @@ SYS;
                     'handling_time' => (int) $validated['handling_time'],
                 ],
             ];
+
+            if (! empty($validated['family_name'])) {
+                $payload['family_name'] = $validated['family_name'];
+            }
 
             if (! empty($validated['attributes'])) {
                 $payload['attributes'] = collect($validated['attributes'])
@@ -1643,13 +1648,14 @@ SYS;
                 'price'                  => $validated['price'],
                 'available_quantity'     => $validated['available_quantity'],
                 'status'                 => 'active',
-                'meta'                   => [
+                'meta'                   => array_filter([
                     'ml_item_id'      => $item['id'],
                     'ml_status'       => 'active',
                     'ml_permalink'    => $item['permalink'] ?? null,
                     'category_id'     => $validated['category_id'],
                     'listing_type_id' => $validated['listing_type_id'],
-                ],
+                    'family_name'     => $item['family_name'] ?? ($validated['family_name'] ?? null),
+                ]),
             ]);
 
         } catch (\Throwable $e) {
