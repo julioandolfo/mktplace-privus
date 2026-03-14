@@ -321,61 +321,26 @@ class MercadoLivreService
         try {
             $item = $this->get("/items/{$itemId}");
 
-            // Debug: log item structure to understand variation format
-            Log::info("ML item({$itemId}) structure", [
-                'keys'                => array_keys($item),
-                'variations_type'     => gettype($item['variations'] ?? null),
-                'variations_count'    => count($item['variations'] ?? []),
-                'catalog_product_id'  => $item['catalog_product_id'] ?? null,
-                'family_name'         => $item['family_name'] ?? null,
-                'parent_item_id'      => $item['parent_item_id'] ?? null,
-                'catalog_listing'     => $item['catalog_listing'] ?? null,
-                'channels'            => $item['channels'] ?? null,
-                'sale_terms_ids'      => collect($item['sale_terms'] ?? [])->pluck('id')->all(),
-                'tags'                => $item['tags'] ?? [],
-                'pictures_count'      => count($item['pictures'] ?? []),
-            ]);
-
-            // Always fetch variations separately — the main endpoint with x-format-new
-            // may not include them or may return them incomplete for some variation types
-            try {
-                $rawResponse = $this->getWithoutFormatHeaderRaw("/items/{$itemId}/variations");
-                $statusCode  = $rawResponse->status();
-                $variations  = $rawResponse->json();
-
-                Log::info("ML /items/{$itemId}/variations: HTTP {$statusCode}", [
-                    'is_array'   => is_array($variations),
-                    'count'      => is_array($variations) ? count($variations) : 0,
-                    'body_start' => substr($rawResponse->body(), 0, 500),
-                ]);
-
-                if (! empty($variations) && is_array($variations)) {
-                    $item['variations'] = $variations;
-                }
-            } catch (\Throwable $e) {
-                Log::info("ML /items/{$itemId}/variations failed: {$e->getMessage()}, trying include param");
-
-                // If separate call fails (404 for items without variations), try include param
-                if (empty($item['variations'])) {
+            // Fetch variations separately — x-format-new header may omit them
+            if (empty($item['variations'])) {
+                try {
+                    $varResponse = $this->getWithoutFormatHeaderRaw("/items/{$itemId}/variations");
+                    $variations  = $varResponse->json();
+                    if (! empty($variations) && is_array($variations)) {
+                        $item['variations'] = $variations;
+                    }
+                } catch (\Throwable $e) {
+                    // Try with include param as fallback
                     try {
-                        $rawResponse2 = $this->getWithoutFormatHeaderRaw("/items/{$itemId}", ['include' => 'variations']);
-                        $itemWithVars = $rawResponse2->json() ?? [];
-
-                        Log::info("ML /items/{$itemId}?include=variations: HTTP {$rawResponse2->status()}", [
-                            'variations_count' => count($itemWithVars['variations'] ?? []),
-                        ]);
-
+                        $itemWithVars = $this->getWithoutFormatHeaderRaw("/items/{$itemId}", ['include' => 'variations'])->json() ?? [];
                         if (! empty($itemWithVars['variations'])) {
                             $item['variations'] = $itemWithVars['variations'];
                         }
                     } catch (\Throwable $e2) {
-                        Log::info("ML include=variations also failed for {$itemId}: {$e2->getMessage()}");
+                        // No variations available
                     }
                 }
             }
-
-            $finalCount = count($item['variations'] ?? []);
-            Log::info("ML getItemWithVariations({$itemId}) FINAL: {$finalCount} variation(s)");
 
             return $item;
         } catch (\Throwable $e) {
@@ -402,6 +367,61 @@ class MercadoLivreService
         }
 
         return $response;
+    }
+
+    /**
+     * Get family members for an item that belongs to a family (grouped items).
+     * Uses item_relations or search by family_id to find siblings.
+     * Returns array of item summaries.
+     */
+    public function getFamilyMembers(string $itemId, array $itemData = []): array
+    {
+        $familyId = $itemData['family_id'] ?? null;
+        $itemRelations = $itemData['item_relations'] ?? [];
+        $sellerId = $itemData['seller_id'] ?? null;
+
+        // 1. Try item_relations first (direct reference)
+        $relatedIds = collect($itemRelations)
+            ->pluck('item_id')
+            ->filter()
+            ->unique()
+            ->reject(fn ($id) => $id === $itemId)
+            ->values()
+            ->all();
+
+        // 2. If no item_relations, search by seller + family_id
+        if (empty($relatedIds) && $familyId && $sellerId) {
+            try {
+                $searchResult = $this->get('/users/' . $sellerId . '/items/search', [
+                    'family_id' => $familyId,
+                    'limit'     => 50,
+                ]);
+                $relatedIds = collect($searchResult['results'] ?? [])
+                    ->reject(fn ($id) => $id === $itemId)
+                    ->values()
+                    ->all();
+            } catch (\Throwable $e) {
+                Log::info("ML getFamilyMembers search by family_id failed for {$itemId}: " . $e->getMessage());
+            }
+        }
+
+        if (empty($relatedIds)) {
+            return [];
+        }
+
+        // Fetch details for each related item (max 20 via multiget)
+        $relatedIds = array_slice($relatedIds, 0, 20);
+        try {
+            $response = $this->get('/items', ['ids' => implode(',', $relatedIds)]);
+            return collect($response)
+                ->filter(fn ($r) => ($r['code'] ?? 200) === 200)
+                ->map(fn ($r) => $r['body'] ?? $r)
+                ->values()
+                ->all();
+        } catch (\Throwable $e) {
+            Log::info("ML getFamilyMembers multiget failed for {$itemId}: " . $e->getMessage());
+            return [];
+        }
     }
 
     /**
@@ -531,29 +551,49 @@ class MercadoLivreService
 
     /**
      * Get visits for multiple items in batch (max 50 per call).
+     * Uses /visits/items endpoint which returns total visits per item.
      * Returns array keyed by item_id => total_visits.
      */
     public function getItemVisitsBatch(array $itemIds, int $lastDays = 30): array
     {
         $result = [];
+        $dateFrom = now()->subDays($lastDays)->format('Y-m-d');
+        $dateTo   = now()->format('Y-m-d');
 
         foreach (array_chunk($itemIds, 50) as $chunk) {
             try {
+                // Primary: /visits/items endpoint (total visits, no breakdown)
                 $response = Http::withToken($this->token())
                     ->timeout(20)
-                    ->get(self::BASE_URL . '/items/visits/time_window', [
-                        'ids'  => implode(',', $chunk),
-                        'last' => $lastDays,
-                        'unit' => 'day',
+                    ->get(self::BASE_URL . '/visits/items', [
+                        'ids'       => implode(',', $chunk),
+                        'date_from' => $dateFrom,
+                        'date_to'   => $dateTo,
                     ]);
 
                 if ($response->successful()) {
-                    foreach ($response->json() ?? [] as $item) {
-                        $id = $item['item_id'] ?? null;
-                        if ($id) {
-                            $result[$id] = (int) ($item['total_visits'] ?? 0);
+                    $data = $response->json() ?? [];
+                    // Response can be keyed by item_id or array of objects
+                    if (isset($data[0]['item_id'])) {
+                        // Array format: [{item_id, total_visits}, ...]
+                        foreach ($data as $item) {
+                            $id = $item['item_id'] ?? null;
+                            if ($id) {
+                                $result[$id] = (int) ($item['total_visits'] ?? 0);
+                            }
+                        }
+                    } else {
+                        // Object format keyed by item_id: {MLB123: 500, MLB456: 200}
+                        foreach ($data as $id => $visits) {
+                            if (is_numeric($visits)) {
+                                $result[$id] = (int) $visits;
+                            } elseif (is_array($visits)) {
+                                $result[$id] = (int) ($visits['total_visits'] ?? $visits['total'] ?? 0);
+                            }
                         }
                     }
+                } else {
+                    Log::info("ML getItemVisitsBatch: HTTP {$response->status()} for " . count($chunk) . " items");
                 }
             } catch (\Throwable $e) {
                 Log::info("ML getItemVisitsBatch exception: " . $e->getMessage());

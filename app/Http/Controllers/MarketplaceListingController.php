@@ -156,13 +156,7 @@ class MarketplaceListingController extends Controller
                         $service = new MercadoLivreService($account);
                         $externalIds = $accountListings->pluck('external_id')->filter()->values()->all();
                         if (! empty($externalIds)) {
-                            $batchResult = $service->getItemVisitsBatch($externalIds);
-                            Log::info("listings.index visits batch account={$accountId}", [
-                                'requested' => count($externalIds),
-                                'returned'  => count($batchResult),
-                                'sample'    => array_slice($batchResult, 0, 3, true),
-                            ]);
-                            $visitsMap = array_merge($visitsMap, $batchResult);
+                            $visitsMap = array_merge($visitsMap, $service->getItemVisitsBatch($externalIds));
                         }
                     }
                 }
@@ -216,6 +210,7 @@ class MarketplaceListingController extends Controller
             $canInvoice            = [];
             $taxRules              = [];
             $visits                = [];
+            $familyMembers         = [];
             $apiError              = null;
 
             $step    = 'check-account';
@@ -226,16 +221,6 @@ class MarketplaceListingController extends Controller
                     $step     = 'api-item';
                     $service  = new MercadoLivreService($account);
                     $liveData = $service->getItemWithVariations($listing->external_id);
-
-                    // Debug: log variations data
-                    Log::info("ListingShow [{$listing->external_id}] variations debug", [
-                        'has_variations_key' => array_key_exists('variations', $liveData ?? []),
-                        'variations_count'   => count($liveData['variations'] ?? []),
-                        'variations_ids'     => collect($liveData['variations'] ?? [])->pluck('id')->all(),
-                        'variations_sample'  => ! empty($liveData['variations'])
-                            ? json_encode(array_slice($liveData['variations'], 0, 2), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
-                            : 'EMPTY',
-                    ]);
 
                     $step    = 'api-quality';
                     $quality = $service->getItemQuality($listing->external_id);
@@ -277,6 +262,20 @@ class MarketplaceListingController extends Controller
                     $cleanMeta = $listing->meta ?? [];
                     unset($cleanMeta['handling_time_locked'], $cleanMeta['locked_fields']);
                     $listing->update(['meta' => array_merge($cleanMeta, $metaPatch)]);
+
+                    // Fetch family members for family items (grouped items that look like variations in ML)
+                    $step = 'api-family';
+                    if (! empty($liveData['family_name']) || ! empty($liveData['family_id'])) {
+                        try {
+                            $familyMembers = $service->getFamilyMembers($listing->external_id, $liveData);
+                            if (! empty($familyMembers)) {
+                                $metaPatch['has_family'] = true;
+                                $metaPatch['family_count'] = count($familyMembers) + 1; // +1 for self
+                            }
+                        } catch (\Throwable $e) {
+                            Log::info("ListingController family members [{$listing->external_id}]: " . $e->getMessage());
+                        }
+                    }
 
                     $step = 'api-fiscal';
                     try {
@@ -359,7 +358,7 @@ class MarketplaceListingController extends Controller
             $viewData = compact(
                 'listing', 'products',
                 'liveData', 'quality', 'purchaseExperience', 'description', 'categoryAttributes', 'availableListingTypes', 'apiError',
-                'fiscalData', 'canInvoice', 'taxRules', 'visits',
+                'fiscalData', 'canInvoice', 'taxRules', 'visits', 'familyMembers',
                 'salesStats', 'totalQty', 'totalRevenue', 'avgTicket',
                 'aiConfigured'
             );

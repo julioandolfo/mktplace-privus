@@ -635,6 +635,75 @@
             </x-ui.card>
             @endif
 
+            {{-- Família (itens agrupados no ML) --}}
+            @if(!empty($familyMembers))
+            <x-ui.card title="Família — {{ $live['family_name'] ?? 'Itens agrupados' }} ({{ count($familyMembers) + 1 }})">
+                <p class="text-xs text-gray-500 dark:text-zinc-400 mb-3">
+                    Estes anúncios estão agrupados no Mercado Livre como variações visuais (por imagem/texto). Cada um é um anúncio separado.
+                </p>
+                <div class="space-y-2">
+                    {{-- Current item (highlighted) --}}
+                    <div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary-50/50 dark:bg-primary-900/10 border border-primary-200 dark:border-primary-800/30">
+                        <div class="w-10 h-10 rounded-md overflow-hidden bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 flex-shrink-0">
+                            @if($live['thumbnail'] ?? null)
+                                <img src="{{ $live['thumbnail'] }}" class="w-full h-full object-cover" loading="lazy">
+                            @else
+                                <div class="w-full h-full flex items-center justify-center"><x-heroicon-o-photo class="w-4 h-4 text-gray-300" /></div>
+                            @endif
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ $live['title'] ?? $listing->title }}</p>
+                            <div class="flex items-center gap-2 mt-0.5 text-xs text-gray-500 dark:text-zinc-400">
+                                <span class="font-mono">{{ $listing->external_id }}</span>
+                                <span class="font-mono">R$ {{ number_format($live['price'] ?? $listing->price, 2, ',', '.') }}</span>
+                                <span>Est: {{ $live['available_quantity'] ?? $listing->available_quantity ?? 0 }}</span>
+                                <x-ui.badge color="primary" class="text-[9px]">Atual</x-ui.badge>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Family members --}}
+                    @foreach($familyMembers as $member)
+                    @php
+                        $mId = $member['id'] ?? '';
+                        $mTitle = $member['title'] ?? $mId;
+                        $mThumb = $member['thumbnail'] ?? null;
+                        $mPrice = $member['price'] ?? null;
+                        $mQty = $member['available_quantity'] ?? 0;
+                        $mStatus = $member['status'] ?? 'unknown';
+                        $localListing = \App\Models\MarketplaceListing::where('external_id', $mId)->first();
+                    @endphp
+                    <div class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors border border-gray-100 dark:border-zinc-800">
+                        <div class="w-10 h-10 rounded-md overflow-hidden bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 flex-shrink-0">
+                            @if($mThumb)
+                                <img src="{{ $mThumb }}" class="w-full h-full object-cover" loading="lazy">
+                            @else
+                                <div class="w-full h-full flex items-center justify-center"><x-heroicon-o-photo class="w-4 h-4 text-gray-300" /></div>
+                            @endif
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            @if($localListing)
+                            <a href="{{ route('listings.show', $localListing) }}" class="text-sm font-medium text-gray-900 dark:text-white hover:text-primary-500 truncate block">{{ $mTitle }}</a>
+                            @else
+                            <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ $mTitle }}</p>
+                            @endif
+                            <div class="flex items-center gap-2 mt-0.5 text-xs text-gray-500 dark:text-zinc-400">
+                                <span class="font-mono">{{ $mId }}</span>
+                                @if($mPrice)
+                                <span class="font-mono">R$ {{ number_format($mPrice, 2, ',', '.') }}</span>
+                                @endif
+                                <span class="{{ $mQty <= 3 ? 'text-red-500 font-semibold' : '' }}">Est: {{ $mQty }}</span>
+                                <x-ui.badge :color="match($mStatus) { 'active' => 'success', 'paused' => 'warning', default => 'gray' }">
+                                    {{ match($mStatus) { 'active' => 'Ativo', 'paused' => 'Pausado', 'closed' => 'Encerrado', default => $mStatus } }}
+                                </x-ui.badge>
+                            </div>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+            </x-ui.card>
+            @endif
+
             {{-- Imagens --}}
             @if($liveData !== null)
             <div id="imagens">
