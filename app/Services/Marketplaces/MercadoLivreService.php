@@ -321,42 +321,65 @@ class MercadoLivreService
         try {
             $item = $this->get("/items/{$itemId}");
 
+            // Log what the main endpoint returns for variations
+            $mainVarCount = count($item['variations'] ?? []);
+            Log::info("ML getItemWithVariations({$itemId}) main endpoint: {$mainVarCount} variation(s) in response", [
+                'has_key' => array_key_exists('variations', $item),
+                'type'    => gettype($item['variations'] ?? null),
+            ]);
+
             // Always fetch variations separately — the main endpoint with x-format-new
             // may not include them or may return them incomplete for some variation types
             try {
-                $variations = $this->getWithoutFormatHeader("/items/{$itemId}/variations");
+                $rawResponse = $this->getWithoutFormatHeaderRaw("/items/{$itemId}/variations");
+                $statusCode  = $rawResponse->status();
+                $variations  = $rawResponse->json();
+
+                Log::info("ML /items/{$itemId}/variations: HTTP {$statusCode}", [
+                    'is_array'   => is_array($variations),
+                    'count'      => is_array($variations) ? count($variations) : 0,
+                    'body_start' => substr($rawResponse->body(), 0, 500),
+                ]);
+
                 if (! empty($variations) && is_array($variations)) {
-                    // Endpoint /variations returns array directly (not keyed by 'variations')
                     $item['variations'] = $variations;
-                    Log::info("ML variations({$itemId}): loaded " . count($variations) . " variation(s) via /variations endpoint");
                 }
             } catch (\Throwable $e) {
-                Log::info("ML getVariations({$itemId}) separate call failed ({$e->getMessage()}), trying include param");
+                Log::info("ML /items/{$itemId}/variations failed: {$e->getMessage()}, trying include param");
+
                 // If separate call fails (404 for items without variations), try include param
                 if (empty($item['variations'])) {
                     try {
-                        $itemWithVars = $this->getWithoutFormatHeader("/items/{$itemId}", ['include' => 'variations']);
+                        $rawResponse2 = $this->getWithoutFormatHeaderRaw("/items/{$itemId}", ['include' => 'variations']);
+                        $itemWithVars = $rawResponse2->json() ?? [];
+
+                        Log::info("ML /items/{$itemId}?include=variations: HTTP {$rawResponse2->status()}", [
+                            'variations_count' => count($itemWithVars['variations'] ?? []),
+                        ]);
+
                         if (! empty($itemWithVars['variations'])) {
                             $item['variations'] = $itemWithVars['variations'];
-                            Log::info("ML variations({$itemId}): loaded " . count($itemWithVars['variations']) . " variation(s) via include param");
                         }
                     } catch (\Throwable $e2) {
-                        // No variations available
+                        Log::info("ML include=variations also failed for {$itemId}: {$e2->getMessage()}");
                     }
                 }
             }
 
+            $finalCount = count($item['variations'] ?? []);
+            Log::info("ML getItemWithVariations({$itemId}) FINAL: {$finalCount} variation(s)");
+
             return $item;
         } catch (\Throwable $e) {
-            Log::warning("ML getItemWithVariations({$itemId}) failed: " . $e->getMessage());
+            Log::warning("ML getItemWithVariations({$itemId}) TOTAL FAIL: " . $e->getMessage());
             return $this->getItem($itemId);
         }
     }
 
     /**
-     * GET request without x-format-new header (needed for some endpoints like /variations).
+     * GET request without x-format-new header — returns raw Response for debugging.
      */
-    private function getWithoutFormatHeader(string $path, array $params = []): array
+    private function getWithoutFormatHeaderRaw(string $path, array $params = []): \Illuminate\Http\Client\Response
     {
         $this->throttle();
 
@@ -370,7 +393,7 @@ class MercadoLivreService
             );
         }
 
-        return $response->json() ?? [];
+        return $response;
     }
 
     /**

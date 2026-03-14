@@ -221,6 +221,16 @@ class MarketplaceListingController extends Controller
                     $service  = new MercadoLivreService($account);
                     $liveData = $service->getItemWithVariations($listing->external_id);
 
+                    // Debug: log variations data
+                    Log::info("ListingShow [{$listing->external_id}] variations debug", [
+                        'has_variations_key' => array_key_exists('variations', $liveData ?? []),
+                        'variations_count'   => count($liveData['variations'] ?? []),
+                        'variations_ids'     => collect($liveData['variations'] ?? [])->pluck('id')->all(),
+                        'variations_sample'  => ! empty($liveData['variations'])
+                            ? json_encode(array_slice($liveData['variations'], 0, 2), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+                            : 'EMPTY',
+                    ]);
+
                     $step    = 'api-quality';
                     $quality = $service->getItemQuality($listing->external_id);
 
