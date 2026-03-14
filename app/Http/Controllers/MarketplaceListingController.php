@@ -265,9 +265,13 @@ class MarketplaceListingController extends Controller
 
                     // Fetch family members for family items (grouped items that look like variations in ML)
                     $step = 'api-family';
+                    Log::info("DEBUG ListingController [{$listing->external_id}] family check: family_name=" . ($liveData['family_name'] ?? 'NULL')
+                        . ", family_id=" . ($liveData['family_id'] ?? 'NULL')
+                        . ", item_relations=" . count($liveData['item_relations'] ?? []));
                     if (! empty($liveData['family_name']) || ! empty($liveData['family_id'])) {
                         try {
                             $familyMembers = $service->getFamilyMembers($listing->external_id, $liveData);
+                            Log::info("DEBUG ListingController [{$listing->external_id}] familyMembers count=" . count($familyMembers));
                             if (! empty($familyMembers)) {
                                 $metaPatch['has_family'] = true;
                                 $metaPatch['family_count'] = count($familyMembers) + 1; // +1 for self
