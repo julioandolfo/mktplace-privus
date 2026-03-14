@@ -831,7 +831,7 @@ class MarketplaceListingController extends Controller
         $validated = $request->validate([
             'fiscal_sku'     => 'required|string|max:100',
             'fiscal_title'   => 'required|string|max:200',
-            'fiscal_cost'    => 'required|numeric|min:0',
+            'fiscal_cost'    => 'nullable|numeric|min:0',
             'ncm'            => 'required|string|size:8',
             'origin_type'    => 'required|in:manufacturer,reseller,imported',
             'origin_detail'  => 'required|string|max:10',
@@ -868,10 +868,13 @@ class MarketplaceListingController extends Controller
             'sku'              => $validated['fiscal_sku'],
             'title'            => $validated['fiscal_title'],
             'type'             => 'single',
-            'cost'             => (float) $validated['fiscal_cost'],
             'measurement_unit' => $validated['measurement_unit'] ?? 'UN',
             'tax_information'  => $taxInfo,
         ];
+
+        if (! empty($validated['fiscal_cost'])) {
+            $payload['cost'] = (float) $validated['fiscal_cost'];
+        }
 
         try {
             // Tenta consultar se já existe dados fiscais para este SKU
@@ -897,6 +900,128 @@ class MarketplaceListingController extends Controller
         } catch (\Throwable $e) {
             Log::error("updateFiscalData [{$listing->external_id}]: " . $e->getMessage());
             return back()->with('error', 'Erro ao salvar dados fiscais: ' . self::friendlyMlError($e->getMessage()));
+        }
+    }
+
+    /**
+     * Search NCM code using AI based on listing title.
+     */
+    public function searchNcmWithAi(Request $request, MarketplaceListing $listing)
+    {
+        $title = $request->input('title', $listing->title);
+
+        try {
+            $ai = new AiService();
+            if (! $ai->isConfigured()) {
+                return response()->json(['error' => 'IA não configurada. Acesse Configurações.'], 422);
+            }
+
+            $systemPrompt = <<<'PROMPT'
+Você é um especialista em classificação fiscal brasileira (NCM - Nomenclatura Comum do Mercosul).
+Dado o nome/descrição de um produto, retorne APENAS o código NCM de 8 dígitos mais adequado.
+
+Regras:
+- Retorne SOMENTE o código NCM com 8 dígitos numéricos, sem pontos ou traços
+- Não inclua explicações, texto adicional ou formatação
+- Se não conseguir determinar com certeza, retorne o NCM mais provável
+- Considere que são produtos vendidos no Mercado Livre Brasil
+PROMPT;
+
+            $userPrompt = "Qual o NCM para o seguinte produto?\n\nProduto: {$title}";
+            $ncm = trim($ai->generateText($systemPrompt, $userPrompt, 20));
+            $ncm = preg_replace('/[^0-9]/', '', $ncm);
+
+            if (strlen($ncm) >= 8) {
+                $ncm = substr($ncm, 0, 8);
+            }
+
+            if (strlen($ncm) === 8) {
+                return response()->json(['ncm' => $ncm]);
+            }
+
+            return response()->json(['error' => 'IA não conseguiu determinar um NCM válido.'], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Erro ao buscar NCM: ' . $e->getMessage()], 500);
+        }
+    }
+
+    // ─── Wholesale (atacado) ────────────────────────────────────────────
+
+    /**
+     * Get current wholesale/quantity pricing for a listing (AJAX).
+     */
+    public function getWholesalePrices(MarketplaceListing $listing)
+    {
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return response()->json(['prices' => []]);
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+            $data = $service->getItemPrices($listing->external_id);
+            $prices = collect($data['prices'] ?? [])
+                ->filter(fn ($p) => ! empty($p['conditions']['min_purchase_unit']))
+                ->map(fn ($p) => [
+                    'id'       => $p['id'],
+                    'amount'   => $p['amount'],
+                    'min_qty'  => $p['conditions']['min_purchase_unit'],
+                ])
+                ->sortBy('min_qty')
+                ->values()
+                ->all();
+
+            return response()->json(['prices' => $prices]);
+        } catch (\Throwable $e) {
+            return response()->json(['prices' => [], 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Update wholesale/quantity pricing tiers for a listing.
+     */
+    public function updateWholesalePrices(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'tiers'              => 'nullable|array|max:5',
+            'tiers.*.min_qty'    => 'required|integer|min:2',
+            'tiers.*.amount'     => 'required|numeric|min:0.01',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta sem credenciais.');
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+
+            // Get current prices to find the base price id
+            $current = $service->getItemPrices($listing->external_id);
+            $basePrice = collect($current['prices'] ?? [])
+                ->first(fn ($p) => empty($p['conditions']['min_purchase_unit']));
+
+            $prices = [];
+            if ($basePrice) {
+                $prices[] = ['id' => $basePrice['id']]; // keep base price
+            }
+
+            foreach ($validated['tiers'] ?? [] as $tier) {
+                $prices[] = [
+                    'amount'      => (float) $tier['amount'],
+                    'currency_id' => 'BRL',
+                    'conditions'  => [
+                        'context_restrictions' => ['channel_marketplace', 'user_type_business'],
+                        'min_purchase_unit'    => (int) $tier['min_qty'],
+                    ],
+                ];
+            }
+
+            $service->updateItemPrices($listing->external_id, $prices);
+
+            return redirect()->route('listings.show', $listing)->with('success', 'Precos por quantidade atualizados.');
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao salvar precos por quantidade: ' . self::friendlyMlError($e->getMessage()));
         }
     }
 
@@ -1502,7 +1627,12 @@ SYS;
     {
         $validated = $request->validate([
             'marketplace_account_id' => 'required|exists:marketplace_accounts,id',
-            'product_id'             => 'required|exists:products,id',
+            'product_mode'           => 'required|in:existing,new,none',
+            'product_id'             => 'required_if:product_mode,existing|nullable|exists:products,id',
+            'new_product_name'       => 'required_if:product_mode,new|nullable|string|max:200',
+            'new_product_sku'        => 'nullable|string|max:100',
+            'new_product_cost'       => 'nullable|numeric|min:0',
+            'new_product_weight'     => 'nullable|numeric|min:0',
             'title'                  => 'required|string|max:60',
             'category_id'            => 'required|string',
             'listing_type_id'        => 'required|string|in:gold_special,gold_pro,free',
@@ -1638,11 +1768,27 @@ SYS;
                 }
             }
 
+            // Handle product creation/linking based on product_mode
+            $productId = null;
+            if ($validated['product_mode'] === 'existing') {
+                $productId = $validated['product_id'];
+            } elseif ($validated['product_mode'] === 'new') {
+                $newProduct = Product::create(array_filter([
+                    'name'   => $validated['new_product_name'],
+                    'sku'    => $validated['new_product_sku'] ?? null,
+                    'cost'   => $validated['new_product_cost'] ?? null,
+                    'weight' => $validated['new_product_weight'] ?? null,
+                    'price'  => $validated['price'],
+                    'status' => 'active',
+                ]));
+                $productId = $newProduct->id;
+            }
+
             // Create local listing record
             $listing = MarketplaceListing::create([
                 'marketplace_account_id' => $account->id,
                 'external_id'            => $item['id'],
-                'product_id'             => $validated['product_id'],
+                'product_id'             => $productId,
                 'product_quantity'       => 1,
                 'title'                  => $validated['title'],
                 'price'                  => $validated['price'],

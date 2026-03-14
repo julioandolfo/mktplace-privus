@@ -39,21 +39,82 @@
                         @error('marketplace_account_id') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
                     </div>
 
-                    <div>
-                        <label class="form-label">Produto Interno *</label>
-                        <select name="product_id"
-                            class="form-input @error('product_id') border-red-500 @enderror" required>
-                            <option value="">Selecione o produto...</option>
-                            @foreach($products as $product)
-                            <option value="{{ $product->id }}"
-                                data-price="{{ $product->price }}"
-                                @selected(old('product_id', $preselectedProduct?->id) == $product->id)>
-                                {{ $product->name }}
-                                @if($product->sku) ({{ $product->sku }}) @endif
-                            </option>
-                            @endforeach
-                        </select>
-                        @error('product_id') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                    <div x-data="{ productMode: '{{ old('product_mode', $preselectedProduct ? 'existing' : 'none') }}' }">
+                        <label class="form-label">Produto Interno</label>
+                        <div class="flex gap-2 mb-2">
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="radio" name="product_mode" value="existing" x-model="productMode" class="text-primary-500">
+                                <span class="text-xs text-gray-600 dark:text-zinc-400">Vincular existente</span>
+                            </label>
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="radio" name="product_mode" value="new" x-model="productMode" class="text-primary-500">
+                                <span class="text-xs text-gray-600 dark:text-zinc-400">Criar novo</span>
+                            </label>
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="radio" name="product_mode" value="none" x-model="productMode" class="text-primary-500">
+                                <span class="text-xs text-gray-600 dark:text-zinc-400">Sem produto</span>
+                            </label>
+                        </div>
+
+                        {{-- Existing product --}}
+                        <div x-show="productMode === 'existing'" x-cloak>
+                            <select name="product_id"
+                                class="form-input @error('product_id') border-red-500 @enderror"
+                                :required="productMode === 'existing'">
+                                <option value="">Selecione o produto...</option>
+                                @foreach($products as $product)
+                                <option value="{{ $product->id }}"
+                                    data-price="{{ $product->price }}"
+                                    @selected(old('product_id', $preselectedProduct?->id) == $product->id)>
+                                    {{ $product->name }}
+                                    @if($product->sku) ({{ $product->sku }}) @endif
+                                </option>
+                                @endforeach
+                            </select>
+                            @error('product_id') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+                        </div>
+
+                        {{-- New product inline --}}
+                        <div x-show="productMode === 'new'" x-cloak class="space-y-2 border border-dashed border-gray-300 dark:border-zinc-600 rounded-lg p-3">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-xs text-gray-600 dark:text-zinc-400">Nome do Produto *</label>
+                                    <input type="text" name="new_product_name"
+                                           value="{{ old('new_product_name') }}"
+                                           class="form-input text-sm"
+                                           :required="productMode === 'new'"
+                                           placeholder="Nome do produto">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-600 dark:text-zinc-400">SKU</label>
+                                    <input type="text" name="new_product_sku"
+                                           value="{{ old('new_product_sku') }}"
+                                           class="form-input text-sm font-mono" placeholder="Opcional">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="text-xs text-gray-600 dark:text-zinc-400">Custo (R$)</label>
+                                    <input type="number" name="new_product_cost" step="0.01" min="0"
+                                           value="{{ old('new_product_cost') }}"
+                                           class="form-input text-sm" placeholder="Opcional">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-600 dark:text-zinc-400">Peso (g)</label>
+                                    <input type="number" name="new_product_weight" min="0"
+                                           value="{{ old('new_product_weight') }}"
+                                           class="form-input text-sm" placeholder="Opcional">
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-gray-400 dark:text-zinc-500">O produto sera criado automaticamente ao publicar o anuncio.</p>
+                        </div>
+
+                        {{-- No product --}}
+                        <div x-show="productMode === 'none'" x-cloak>
+                            <p class="text-xs text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-800/40 rounded-lg p-2.5">
+                                O anuncio sera publicado sem vinculo com produto interno. Voce pode vincular depois na tela de edicao.
+                            </p>
+                        </div>
                     </div>
                 </div>
             </x-ui.card>

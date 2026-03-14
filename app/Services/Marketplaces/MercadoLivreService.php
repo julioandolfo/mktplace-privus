@@ -907,6 +907,25 @@ class MercadoLivreService
         return $this->post('/items', $data);
     }
 
+    // ─── Wholesale / quantity pricing ────────────────────────────────────────
+
+    /**
+     * Get item prices including wholesale tiers.
+     */
+    public function getItemPrices(string $itemId): array
+    {
+        return $this->get("/items/{$itemId}/prices");
+    }
+
+    /**
+     * Update item wholesale/quantity pricing tiers via ML API.
+     * POST /items/{ITEM_ID}/prices/standard/quantity
+     */
+    public function updateItemPrices(string $itemId, array $prices): array
+    {
+        return $this->post("/items/{$itemId}/prices/standard/quantity", ['prices' => $prices]);
+    }
+
     // ─── Kits ────────────────────────────────────────────────────────────────
 
     /**

@@ -177,6 +177,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/listings/{listing}/listing-type', [MarketplaceListingController::class, 'updateListingType'])->name('listings.update-listing-type');
     Route::post('/listings/{listing}/shipping', [MarketplaceListingController::class, 'updateShipping'])->name('listings.update-shipping');
     Route::post('/listings/{listing}/fiscal-data', [MarketplaceListingController::class, 'updateFiscalData'])->name('listings.update-fiscal-data');
+    Route::post('/listings/{listing}/fiscal-data/ncm-ai', [MarketplaceListingController::class, 'searchNcmWithAi'])->name('listings.ncm-ai');
+    // Wholesale (atacado) pricing
+    Route::get('/listings/{listing}/wholesale', [MarketplaceListingController::class, 'getWholesalePrices'])->name('listings.wholesale');
+    Route::post('/listings/{listing}/wholesale', [MarketplaceListingController::class, 'updateWholesalePrices'])->name('listings.update-wholesale');
     Route::post('/listings/{listing}/pictures', [MarketplaceListingController::class, 'addPicture'])->name('listings.add-picture');
     Route::delete('/listings/{listing}/pictures/{pictureId}', [MarketplaceListingController::class, 'removePicture'])->name('listings.remove-picture');
     Route::post('/listings/{listing}/link-product', [MarketplaceListingController::class, 'linkProduct'])->name('listings.link-product');

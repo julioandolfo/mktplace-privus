@@ -2135,16 +2135,31 @@
                         <div class="grid grid-cols-2 gap-2">
                             <div>
                                 <label class="text-xs text-gray-600 dark:text-zinc-400">NCM * <span class="text-gray-400">(8 dig.)</span></label>
-                                <input type="text" name="ncm"
-                                       value="{{ old('ncm', $fiscalTax['ncm'] ?? $product?->ncm ?? '') }}"
-                                       class="form-input text-sm font-mono" maxlength="8" pattern="\d{8}" required
-                                       placeholder="00000000">
+                                <div class="flex gap-1.5">
+                                    <input type="text" name="ncm" id="fiscal-ncm-input"
+                                           value="{{ old('ncm', $fiscalTax['ncm'] ?? $product?->ncm ?? '') }}"
+                                           class="form-input text-sm font-mono flex-1" maxlength="8" pattern="\d{8}" required
+                                           placeholder="00000000">
+                                    @if($aiConfigured)
+                                    <button type="button" id="btn-ncm-ai"
+                                        class="btn-secondary btn-sm text-xs flex-shrink-0 flex items-center gap-1"
+                                        title="Buscar NCM com IA">
+                                        <x-heroicon-o-sparkles class="w-3.5 h-3.5 text-purple-500" />
+                                        <span id="ncm-ai-text">IA</span>
+                                        <svg id="ncm-ai-spinner" class="w-3.5 h-3.5 animate-spin hidden" viewBox="0 0 24 24" fill="none">
+                                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/>
+                                            <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/>
+                                        </svg>
+                                    </button>
+                                    @endif
+                                </div>
                             </div>
                             <div>
-                                <label class="text-xs text-gray-600 dark:text-zinc-400">Custo (R$) *</label>
+                                <label class="text-xs text-gray-600 dark:text-zinc-400">Custo (R$)</label>
                                 <input type="number" name="fiscal_cost" step="0.01" min="0"
                                        value="{{ old('fiscal_cost', $fiscalData['cost'] ?? $product?->cost ?? '') }}"
-                                       class="form-input text-sm" required>
+                                       class="form-input text-sm"
+                                       placeholder="Opcional">
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
@@ -2197,8 +2212,36 @@
                         <div>
                             <label class="text-xs text-gray-600 dark:text-zinc-400">Unidade de Medida</label>
                             <select name="measurement_unit" class="form-input text-sm">
-                                @php $mu = old('measurement_unit', $fiscalData['measurement_unit'] ?? 'UN'); @endphp
-                                @foreach(['UN' => 'Unidade (UN)', 'KG' => 'Quilograma (KG)', 'L' => 'Litro (L)', 'M' => 'Metro (M)', 'M2' => 'Metro² (M2)', 'CX' => 'Caixa (CX)', 'PC' => 'Peca (PC)'] as $v => $l)
+                                @php
+                                    $mu = old('measurement_unit', $fiscalData['measurement_unit'] ?? 'UN');
+                                    $measurementUnits = [
+                                        'UN'   => 'Unidade (UN)',
+                                        'PC'   => 'Peca (PC)',
+                                        'CX'   => 'Caixa (CX)',
+                                        'KIT'  => 'Kit (KIT)',
+                                        'JOGO' => 'Jogo (JOGO)',
+                                        'PAR'  => 'Par (PAR)',
+                                        'PCT'  => 'Pacote (PCT)',
+                                        'FD'   => 'Fardo (FD)',
+                                        'DZ'   => 'Duzia (DZ)',
+                                        'KG'   => 'Quilograma (KG)',
+                                        'GR'   => 'Grama (GR)',
+                                        'L'    => 'Litro (L)',
+                                        'ML'   => 'Mililitro (ML)',
+                                        'M'    => 'Metro (M)',
+                                        'CM'   => 'Centimetro (CM)',
+                                        'M2'   => 'Metro quadrado (M2)',
+                                        'M3'   => 'Metro cubico (M3)',
+                                        'RL'   => 'Rolo (RL)',
+                                        'FL'   => 'Folha (FL)',
+                                        'SC'   => 'Saco (SC)',
+                                        'TB'   => 'Tubo (TB)',
+                                        'GL'   => 'Galao (GL)',
+                                        'BD'   => 'Balde (BD)',
+                                        'LT'   => 'Lata (LT)',
+                                    ];
+                                @endphp
+                                @foreach($measurementUnits as $v => $l)
                                 <option value="{{ $v }}" {{ $mu === $v ? 'selected' : '' }}>{{ $l }}</option>
                                 @endforeach
                             </select>
@@ -2223,6 +2266,92 @@
                     </form>
                 </details>
             </x-ui.card>
+
+            {{-- Atacado (Precos por Quantidade) --}}
+            @if($liveData !== null)
+            <div x-data="wholesaleManager()" id="atacado">
+            <x-ui.card title="Atacado (Precos por Quantidade)">
+                <div class="flex items-start gap-3 text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-4">
+                    <x-heroicon-o-information-circle class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <p class="text-blue-700 dark:text-blue-300">
+                        Configure descontos por quantidade para compradores B2B. Max 5 faixas. Precos devem ser decrescentes.
+                    </p>
+                </div>
+
+                <div x-show="loading" class="text-center py-4">
+                    <svg class="w-5 h-5 animate-spin mx-auto text-gray-400" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/>
+                        <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/>
+                    </svg>
+                </div>
+
+                <form method="POST" action="{{ route('listings.update-wholesale', $listing) }}" x-show="!loading" x-cloak>
+                    @csrf
+
+                    <div class="space-y-2 mb-3">
+                        <div class="grid grid-cols-12 gap-2 text-[10px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider px-1">
+                            <div class="col-span-5">Qtd. minima</div>
+                            <div class="col-span-5">Preco (R$)</div>
+                            <div class="col-span-2"></div>
+                        </div>
+                        <template x-for="(tier, idx) in tiers" :key="idx">
+                            <div class="grid grid-cols-12 gap-2 items-center">
+                                <div class="col-span-5">
+                                    <input type="number" :name="'tiers['+idx+'][min_qty]'" x-model.number="tier.min_qty"
+                                           min="2" class="form-input text-sm" placeholder="Ex: 10" required>
+                                </div>
+                                <div class="col-span-5">
+                                    <input type="number" :name="'tiers['+idx+'][amount]'" x-model.number="tier.amount"
+                                           step="0.01" min="0.01" class="form-input text-sm" placeholder="Ex: 25.00" required>
+                                </div>
+                                <div class="col-span-2 text-center">
+                                    <button type="button" @click="tiers.splice(idx, 1)" class="text-red-400 hover:text-red-600">
+                                        <x-heroicon-o-x-mark class="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <p x-show="tiers.length === 0" class="text-sm text-gray-400 dark:text-zinc-500 mb-3">Nenhuma faixa de atacado configurada.</p>
+
+                    <div class="flex items-center gap-2">
+                        <button type="button" @click="tiers.length < 5 && tiers.push({min_qty: '', amount: ''})"
+                                :disabled="tiers.length >= 5"
+                                class="btn-secondary btn-sm text-xs flex-1 justify-center">
+                            <x-heroicon-o-plus class="w-3.5 h-3.5" />
+                            Adicionar faixa
+                        </button>
+                        <button type="submit" class="btn-primary btn-sm text-xs flex-1 justify-center">
+                            <x-heroicon-o-cloud-arrow-up class="w-3.5 h-3.5" />
+                            Salvar
+                        </button>
+                    </div>
+                </form>
+            </x-ui.card>
+            </div>
+
+            <script>
+            function wholesaleManager() {
+                return {
+                    tiers: [],
+                    loading: true,
+                    init() {
+                        fetch('{{ route('listings.wholesale', $listing) }}')
+                            .then(r => r.json())
+                            .then(data => {
+                                this.tiers = (data.prices || []).map(p => ({
+                                    min_qty: p.min_qty,
+                                    amount: p.amount,
+                                }));
+                                this.loading = false;
+                            })
+                            .catch(() => { this.loading = false; });
+                    }
+                };
+            }
+            </script>
+            @endif
 
             {{-- Visitas --}}
             @if(!empty($visits['total_visits']))
@@ -2693,5 +2822,53 @@ function promoCard(loadUrl, storeUrl, deleteUrl) {
     };
 }
 </script>
+
+{{-- NCM AI search --}}
+@if($aiConfigured)
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('btn-ncm-ai');
+    if (!btn) return;
+
+    btn.addEventListener('click', async function() {
+        const input = document.getElementById('fiscal-ncm-input');
+        const text = document.getElementById('ncm-ai-text');
+        const spinner = document.getElementById('ncm-ai-spinner');
+
+        const titleInput = btn.closest('form')?.querySelector('[name="fiscal_title"]');
+        const title = titleInput?.value || '{{ addslashes($listing->title) }}';
+
+        btn.disabled = true;
+        text.classList.add('hidden');
+        spinner.classList.remove('hidden');
+
+        try {
+            const resp = await fetch('{{ route("listings.ncm-ai", $listing) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify({ title }),
+            });
+            const data = await resp.json();
+            if (data.ncm) {
+                input.value = data.ncm;
+                input.classList.add('ring-2', 'ring-green-400');
+                setTimeout(() => input.classList.remove('ring-2', 'ring-green-400'), 2000);
+            } else {
+                alert(data.error || 'NCM nao encontrado.');
+            }
+        } catch (e) {
+            alert('Erro: ' + e.message);
+        }
+
+        btn.disabled = false;
+        text.classList.remove('hidden');
+        spinner.classList.add('hidden');
+    });
+});
+</script>
+@endif
 
 </x-app-layout>
