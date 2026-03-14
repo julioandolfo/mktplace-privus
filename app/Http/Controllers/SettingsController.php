@@ -139,14 +139,48 @@ class SettingsController extends Controller
 
     public function aiModels(Request $request)
     {
-        $provider = AiProviderSetting::where('is_active', true)->first();
+        // Aceitar provider via query param (ex: ?provider=openai) para preview antes de salvar
+        $requestedProvider = $request->query('provider');
+
+        if ($requestedProvider) {
+            $provider = AiProviderSetting::where('provider', $requestedProvider)->first();
+        } else {
+            $provider = AiProviderSetting::where('is_active', true)->first();
+        }
 
         if (! $provider || empty($provider->api_key)) {
+            // Se não tem provider salvo mas pediu anthropic, retornar lista fixa mesmo sem key
+            if ($requestedProvider === 'anthropic') {
+                return response()->json([
+                    ['id' => 'claude-sonnet-4-20250514', 'name' => 'Claude Sonnet 4', 'free' => false, 'context' => 200000],
+                    ['id' => 'claude-haiku-4-20250414', 'name' => 'Claude Haiku 4', 'free' => false, 'context' => 200000],
+                    ['id' => 'claude-3-5-sonnet-20241022', 'name' => 'Claude 3.5 Sonnet', 'free' => false, 'context' => 200000],
+                    ['id' => 'claude-3-5-haiku-20241022', 'name' => 'Claude 3.5 Haiku', 'free' => false, 'context' => 200000],
+                    ['id' => 'claude-3-haiku-20240307', 'name' => 'Claude 3 Haiku', 'free' => false, 'context' => 200000],
+                ]);
+            }
+
+            // OpenAI sem key — retornar lista fixa dos modelos populares
+            if ($requestedProvider === 'openai') {
+                return response()->json([
+                    ['id' => 'gpt-4.1', 'name' => 'GPT-4.1', 'free' => false, 'context' => 1047576],
+                    ['id' => 'gpt-4.1-mini', 'name' => 'GPT-4.1 Mini', 'free' => false, 'context' => 1047576],
+                    ['id' => 'gpt-4.1-nano', 'name' => 'GPT-4.1 Nano', 'free' => false, 'context' => 1047576],
+                    ['id' => 'gpt-4o', 'name' => 'GPT-4o', 'free' => false, 'context' => 128000],
+                    ['id' => 'gpt-4o-mini', 'name' => 'GPT-4o Mini', 'free' => false, 'context' => 128000],
+                    ['id' => 'o3', 'name' => 'o3', 'free' => false, 'context' => 200000],
+                    ['id' => 'o3-mini', 'name' => 'o3-mini', 'free' => false, 'context' => 200000],
+                    ['id' => 'o4-mini', 'name' => 'o4-mini', 'free' => false, 'context' => 200000],
+                ]);
+            }
+
             return response()->json([]);
         }
 
+        $providerName = $requestedProvider ?? $provider->provider;
+
         try {
-            if ($provider->provider === 'openrouter') {
+            if ($providerName === 'openrouter') {
                 $response = Http::withToken($provider->api_key)
                     ->timeout(15)
                     ->get('https://openrouter.ai/api/v1/models');
@@ -168,7 +202,7 @@ class SettingsController extends Controller
                 return response()->json($models);
             }
 
-            if ($provider->provider === 'openai') {
+            if ($providerName === 'openai') {
                 $response = Http::withToken($provider->api_key)
                     ->timeout(15)
                     ->get('https://api.openai.com/v1/models');
@@ -191,7 +225,7 @@ class SettingsController extends Controller
                 return response()->json($models);
             }
 
-            if ($provider->provider === 'anthropic') {
+            if ($providerName === 'anthropic') {
                 // Anthropic não tem endpoint de listagem de modelos — retornar lista fixa
                 return response()->json([
                     ['id' => 'claude-sonnet-4-20250514', 'name' => 'Claude Sonnet 4', 'free' => false, 'context' => 200000],

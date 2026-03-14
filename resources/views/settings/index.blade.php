@@ -427,10 +427,11 @@
                      aiTestResult: null,
                      aiTestSuccess: false,
                      currentModel: '{{ $aiProviders->firstWhere('is_active', true)?->default_model ?? '' }}',
+                     selectedProvider: '{{ $aiProviders->firstWhere('is_active', true)?->provider ?? 'openrouter' }}',
                      async loadModels() {
                          this.aiModelsLoading = true;
                          try {
-                             const res = await fetch('{{ route('settings.ai.models') }}');
+                             const res = await fetch('{{ route('settings.ai.models') }}?provider=' + this.selectedProvider);
                              this.aiModels = await res.json();
                          } catch (e) {
                              this.aiModels = [];
@@ -469,20 +470,23 @@
                             <div>
                                 <label for="ai_provider" class="form-label">Provedor de IA</label>
                                 <select id="ai_provider" name="provider" class="form-input"
-                                        @change="$nextTick(() => loadModels())">
+                                        x-model="selectedProvider"
+                                        @change="currentModel = ''; $nextTick(() => loadModels())">
                                     <option value="openrouter" {{ ($aiProviders->firstWhere('is_active', true)?->provider ?? 'openrouter') === 'openrouter' ? 'selected' : '' }}>OpenRouter (Recomendado)</option>
                                     <option value="openai" {{ ($aiProviders->firstWhere('is_active', true)?->provider) === 'openai' ? 'selected' : '' }}>OpenAI</option>
                                     <option value="anthropic" {{ ($aiProviders->firstWhere('is_active', true)?->provider) === 'anthropic' ? 'selected' : '' }}>Anthropic</option>
                                 </select>
                                 <p class="mt-1 text-xs text-gray-500 dark:text-zinc-400">
-                                    <span x-show="document.getElementById('ai_provider')?.value === 'openrouter' || !document.getElementById('ai_provider')">OpenRouter permite acesso a Claude, GPT e outros modelos com uma unica API key.</span>
+                                    <span x-show="selectedProvider === 'openrouter'">OpenRouter permite acesso a Claude, GPT e outros modelos com uma unica API key.</span>
+                                    <span x-show="selectedProvider === 'openai'">Acesso direto aos modelos GPT e DALL-E da OpenAI.</span>
+                                    <span x-show="selectedProvider === 'anthropic'">Acesso direto aos modelos Claude da Anthropic.</span>
                                 </p>
                             </div>
 
                             <div>
                                 <label for="ai_api_key" class="form-label">API Key</label>
                                 <input type="password" id="ai_api_key" name="api_key" value="{{ $aiProviders->firstWhere('is_active', true)?->api_key ? '••••••••' : '' }}" class="form-input"
-                                       :placeholder="document.getElementById('ai_provider')?.value === 'openai' ? 'sk-...' : (document.getElementById('ai_provider')?.value === 'anthropic' ? 'sk-ant-...' : 'sk-or-...')">
+                                       :placeholder="selectedProvider === 'openai' ? 'sk-...' : (selectedProvider === 'anthropic' ? 'sk-ant-...' : 'sk-or-...')">
                             </div>
 
                             <div>
