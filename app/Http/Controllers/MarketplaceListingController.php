@@ -1659,14 +1659,22 @@ SYS;
 
     public function searchCategories(Request $request)
     {
-        $query      = $request->validate(['q' => 'required|string|min:2'])['q'];
-        $accountId  = $request->input('account_id');
-        $account    = MarketplaceAccount::findOrFail($accountId);
+        $validated = $request->validate([
+            'q'          => 'required|string|min:2',
+            'account_id' => 'required|integer|exists:marketplace_accounts,id',
+        ]);
+
+        $account = MarketplaceAccount::findOrFail($validated['account_id']);
+
+        if (! $account->credentials) {
+            return response()->json(['error' => 'Conta sem credenciais'], 422);
+        }
 
         try {
             $service    = new MercadoLivreService($account);
-            $categories = $service->searchCategories($query);
+            $categories = $service->searchCategories($validated['q']);
         } catch (\Throwable $e) {
+            Log::warning("searchCategories failed: " . $e->getMessage());
             $categories = [];
         }
 

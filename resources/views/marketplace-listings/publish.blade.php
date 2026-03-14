@@ -26,7 +26,7 @@
                     <div>
                         <label class="form-label">Conta do Marketplace *</label>
                         <select name="marketplace_account_id" x-model="accountId"
-                            @change="loadCategoryAttributes()"
+                            @change="categoryId=''; categoryName=''; catQuery=''; attributes=[]; variationAttributes=[]; variations=[];"
                             class="form-input @error('marketplace_account_id') border-red-500 @enderror" required>
                             <option value="">Selecione a conta...</option>
                             @foreach($accounts as $account)
@@ -76,17 +76,21 @@
                         <div class="relative">
                             <div class="flex gap-2">
                                 <input type="text"
-                                    placeholder="Buscar categoria... (ex: Tênis, Notebook, Câmera)"
+                                    :placeholder="accountId ? 'Buscar categoria... (ex: Tênis, Notebook, Câmera)' : 'Selecione uma conta primeiro...'"
                                     x-model="catQuery"
                                     @input.debounce.500ms="searchCategory()"
                                     @focus="catOpen = catResults.length > 0"
                                     x-show="!categoryId"
+                                    :disabled="!accountId"
                                     class="form-input flex-1"
+                                    :class="!accountId && 'opacity-50 cursor-not-allowed'"
                                     autocomplete="off">
                                 <span x-show="catLoading" class="flex items-center px-3">
                                     <x-heroicon-o-arrow-path class="w-4 h-4 animate-spin text-gray-400" />
                                 </span>
                             </div>
+                            {{-- Error message for no results --}}
+                            <p x-show="catError" x-text="catError" class="text-xs text-red-500 mt-1" x-cloak></p>
                             <input type="hidden" name="category_id" x-model="categoryId"
                                 class="@error('category_id') border-red-500 @enderror" required>
 
@@ -379,32 +383,47 @@
     <script>
         function publishForm() {
             return {
-                accountId: '{{ old('marketplace_account_id', '') }}',
+                accountId: '{{ old('marketplace_account_id', $accounts->count() === 1 ? $accounts->first()->id : '') }}',
                 categoryId: '{{ old('category_id', '') }}',
                 categoryName: '{{ old('category_id', '') ? 'Categoria selecionada' : '' }}',
                 attributes: [],
                 variationAttributes: [],
                 variations: [],
 
-                // Category search state (was in nested x-data, broke in Alpine v3)
+                // Category search state
                 catQuery: '',
                 catResults: [],
                 catOpen: false,
                 catLoading: false,
+                catError: '',
 
                 searchCategory() {
-                    if (!this.catQuery || this.catQuery.length < 2 || !this.accountId) return;
+                    if (!this.accountId) {
+                        this.catError = 'Selecione uma conta do marketplace primeiro.';
+                        return;
+                    }
+                    if (!this.catQuery || this.catQuery.length < 2) return;
+
                     this.catLoading = true;
+                    this.catError = '';
 
                     fetch(`/listings/categories/search?q=${encodeURIComponent(this.catQuery)}&account_id=${this.accountId}`)
-                        .then(r => r.json())
+                        .then(r => {
+                            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                            return r.json();
+                        })
                         .then(data => {
                             this.catResults = Array.isArray(data) ? data : (data.domain_categories ?? []);
                             this.catOpen    = this.catResults.length > 0;
                             this.catLoading = false;
+                            if (this.catResults.length === 0) {
+                                this.catError = 'Nenhuma categoria encontrada para "' + this.catQuery + '".';
+                            }
                         })
-                        .catch(() => {
+                        .catch((err) => {
                             this.catLoading = false;
+                            this.catError = 'Erro ao buscar categorias. Verifique as credenciais da conta.';
+                            console.error('searchCategory error:', err);
                         });
                 },
 
