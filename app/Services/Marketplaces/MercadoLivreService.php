@@ -321,32 +321,19 @@ class MercadoLivreService
         try {
             $item = $this->get("/items/{$itemId}");
 
-            Log::info("DEBUG getItemWithVariations [{$itemId}] initial: family_name=" . ($item['family_name'] ?? 'NULL')
-                . ", variations=" . count($item['variations'] ?? [])
-                . ", item_relations=" . count($item['item_relations'] ?? []));
-
             // x-format-new header may strip variations and item_relations
             // Fetch raw item without the header to get full data
             if (empty($item['variations']) || empty($item['item_relations'])) {
                 try {
                     $rawItem = $this->getWithoutFormatHeaderRaw("/items/{$itemId}")->json() ?? [];
 
-                    Log::info("DEBUG getItemWithVariations [{$itemId}] raw: family_name=" . ($rawItem['family_name'] ?? 'NULL')
-                        . ", variations=" . count($rawItem['variations'] ?? [])
-                        . ", item_relations=" . count($rawItem['item_relations'] ?? [])
-                        . ", keys=" . implode(',', array_keys($rawItem)));
-
-                    // Merge item_relations if missing
                     if (empty($item['item_relations']) && ! empty($rawItem['item_relations'])) {
                         $item['item_relations'] = $rawItem['item_relations'];
                     }
-
-                    // Merge variations if missing
                     if (empty($item['variations']) && ! empty($rawItem['variations'])) {
                         $item['variations'] = $rawItem['variations'];
                     }
                 } catch (\Throwable $e) {
-                    Log::info("DEBUG getItemWithVariations [{$itemId}] raw fetch failed: " . $e->getMessage());
                     // Fallback: try dedicated variations endpoint
                     if (empty($item['variations'])) {
                         try {
@@ -361,9 +348,6 @@ class MercadoLivreService
                     }
                 }
             }
-
-            Log::info("DEBUG getItemWithVariations [{$itemId}] final: variations=" . count($item['variations'] ?? [])
-                . ", item_relations=" . count($item['item_relations'] ?? []));
 
             return $item;
         } catch (\Throwable $e) {
@@ -401,16 +385,9 @@ class MercadoLivreService
     {
         $familyName = $itemData['family_name'] ?? null;
         $itemRelations = $itemData['item_relations'] ?? [];
-
-        Log::info("DEBUG getFamilyMembers [{$itemId}]: family_name=" . ($familyName ?? 'NULL')
-            . ", item_relations_count=" . count($itemRelations)
-            . ", itemData_keys=" . implode(',', array_keys($itemData)));
-
-        $familyId = $itemData['family_id'] ?? null;
         $sellerId = $itemData['seller_id'] ?? null;
 
         if (! $familyName) {
-            Log::info("DEBUG getFamilyMembers [{$itemId}]: EXITING - no family_name");
             return [];
         }
 
@@ -424,7 +401,7 @@ class MercadoLivreService
             ->all();
 
         // 2. If no item_relations, search seller items by family_name text
-        if (empty($relatedIds) && $familyName && $sellerId) {
+        if (empty($relatedIds) && $sellerId) {
             try {
                 $searchResult = $this->get('/users/' . $sellerId . '/items/search', [
                     'q'     => $familyName,
@@ -435,13 +412,10 @@ class MercadoLivreService
                     ->unique()
                     ->values()
                     ->all();
-                Log::info("DEBUG getFamilyMembers [{$itemId}]: search by family_name text found " . count($relatedIds) . " items");
             } catch (\Throwable $e) {
-                Log::info("ML getFamilyMembers search by family_name failed for {$itemId}: " . $e->getMessage());
+                Log::info("ML getFamilyMembers search failed for {$itemId}: " . $e->getMessage());
             }
         }
-
-        Log::info("DEBUG getFamilyMembers [{$itemId}]: relatedIds=" . json_encode($relatedIds));
 
         if (empty($relatedIds)) {
             return [];
@@ -452,22 +426,12 @@ class MercadoLivreService
         try {
             $response = $this->get('/items', ['ids' => implode(',', $relatedIds)]);
 
-            $allItems = collect($response)
+            return collect($response)
                 ->filter(fn ($r) => ($r['code'] ?? 200) === 200)
-                ->map(fn ($r) => $r['body'] ?? $r);
-
-            Log::info("DEBUG getFamilyMembers [{$itemId}]: fetched " . $allItems->count() . " items, family_names="
-                . $allItems->pluck('family_name')->unique()->implode('|'));
-
-            $filtered = $allItems
-                // Only keep items with the EXACT same family_name
+                ->map(fn ($r) => $r['body'] ?? $r)
                 ->filter(fn ($item) => ($item['family_name'] ?? null) === $familyName)
                 ->values()
                 ->all();
-
-            Log::info("DEBUG getFamilyMembers [{$itemId}]: after filter=" . count($filtered));
-
-            return $filtered;
         } catch (\Throwable $e) {
             Log::info("ML getFamilyMembers multiget failed for {$itemId}: " . $e->getMessage());
             return [];
@@ -758,6 +722,34 @@ class MercadoLivreService
         Log::info("ML searchCategories({$query}): " . count($results) . " results");
 
         return $results;
+    }
+
+    /**
+     * Search seller items by query and return item details.
+     */
+    public function searchSellerItems(string $sellerId, string $query, int $limit = 20, ?string $excludeId = null): array
+    {
+        $searchResult = $this->get('/users/' . $sellerId . '/items/search', [
+            'q'     => $query,
+            'limit' => $limit,
+        ]);
+
+        $ids = collect($searchResult['results'] ?? [])
+            ->when($excludeId, fn ($c) => $c->reject(fn ($id) => $id === $excludeId))
+            ->take($limit)
+            ->all();
+
+        if (empty($ids)) {
+            return [];
+        }
+
+        $response = $this->get('/items', ['ids' => implode(',', array_slice($ids, 0, 20))]);
+
+        return collect($response)
+            ->filter(fn ($r) => ($r['code'] ?? 200) === 200)
+            ->map(fn ($r) => $r['body'] ?? $r)
+            ->values()
+            ->all();
     }
 
     /**

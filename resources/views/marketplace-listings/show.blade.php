@@ -636,13 +636,63 @@
             @endif
 
             {{-- Família (itens agrupados no ML) --}}
-            @if(!empty($familyMembers))
-            <x-ui.card title="Família — {{ $live['family_name'] ?? 'Itens agrupados' }} ({{ count($familyMembers) + 1 }})">
-                <p class="text-xs text-gray-500 dark:text-zinc-400 mb-3">
-                    Estes anúncios estão agrupados no Mercado Livre como variações visuais (por imagem/texto). Cada um é um anúncio separado.
-                </p>
-                <div class="space-y-2">
-                    {{-- Current item (highlighted) --}}
+            @if($liveData !== null)
+            <div x-data="familyManager()" id="familia">
+            <x-ui.card>
+                <x-slot name="title">
+                    <div class="flex items-center justify-between">
+                        <span>Familia {{ !empty($live['family_name']) ? '— ' . $live['family_name'] : '' }}
+                            @if(!empty($familyMembers)) ({{ count($familyMembers) + 1 }}) @endif
+                        </span>
+                    </div>
+                </x-slot>
+
+                {{-- Info box --}}
+                <div class="flex items-start gap-3 text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-4">
+                    <x-heroicon-o-information-circle class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <p class="text-blue-700 dark:text-blue-300">
+                        Familia agrupa anuncios como variacoes visuais no ML (ex: diferentes estampas).
+                        Cada anuncio e separado, mas aparece como opcao no mesmo anuncio.
+                        <strong>Diferente de variacoes</strong> (cor/tamanho dentro do mesmo anuncio).
+                    </p>
+                </div>
+
+                {{-- Current family name + edit --}}
+                <div class="mb-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <label class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Nome da Familia</label>
+                    </div>
+                    <form method="POST" action="{{ route('listings.update-family', $listing) }}" class="flex items-center gap-2">
+                        @csrf
+                        @method('PUT')
+                        <input type="text" name="family_name"
+                            value="{{ $live['family_name'] ?? '' }}"
+                            class="form-input flex-1 text-sm"
+                            placeholder="Ex: Caneca Porcelana Presente Dia das Maes">
+                        <button type="submit" class="btn-primary btn-sm text-xs">
+                            <x-heroicon-o-check class="w-3.5 h-3.5" />
+                            Salvar
+                        </button>
+                        @if(!empty($live['family_name']))
+                        <button type="button" onclick="if(confirm('Remover este anuncio da familia?')) document.getElementById('remove-family-form').submit()"
+                            class="btn-ghost btn-sm text-xs text-red-500 hover:text-red-600">
+                            <x-heroicon-o-x-mark class="w-3.5 h-3.5" />
+                        </button>
+                        @endif
+                    </form>
+                    @if(!empty($live['family_name']))
+                    <form id="remove-family-form" method="POST" action="{{ route('listings.remove-family', $listing) }}" class="hidden">
+                        @csrf
+                        @method('DELETE')
+                    </form>
+                    @endif
+                    <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">Anuncios com o mesmo nome de familia serao agrupados no ML.</p>
+                </div>
+
+                @if(!empty($familyMembers) || !empty($live['family_name']))
+                {{-- Current item (highlighted) --}}
+                <div class="space-y-2 mb-4">
+                    <div class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">Membros da familia</div>
                     <div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary-50/50 dark:bg-primary-900/10 border border-primary-200 dark:border-primary-800/30">
                         <div class="w-10 h-10 rounded-md overflow-hidden bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 flex-shrink-0">
                             @if($live['thumbnail'] ?? null)
@@ -662,7 +712,7 @@
                         </div>
                     </div>
 
-                    {{-- Family members --}}
+                    {{-- Family members with remove button --}}
                     @foreach($familyMembers as $member)
                     @php
                         $mId = $member['id'] ?? '';
@@ -673,7 +723,7 @@
                         $mStatus = $member['status'] ?? 'unknown';
                         $localListing = \App\Models\MarketplaceListing::where('external_id', $mId)->first();
                     @endphp
-                    <div class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors border border-gray-100 dark:border-zinc-800">
+                    <div class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors border border-gray-100 dark:border-zinc-800 group">
                         <div class="w-10 h-10 rounded-md overflow-hidden bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 flex-shrink-0">
                             @if($mThumb)
                                 <img src="{{ $mThumb }}" class="w-full h-full object-cover" loading="lazy">
@@ -698,10 +748,101 @@
                                 </x-ui.badge>
                             </div>
                         </div>
+                        <form method="POST" action="{{ route('listings.family-remove-member', $listing) }}"
+                              onsubmit="return confirm('Remover {{ $mId }} da familia?')">
+                            @csrf
+                            <input type="hidden" name="member_id" value="{{ $mId }}">
+                            <button type="submit" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" title="Remover da familia">
+                                <x-heroicon-o-x-circle class="w-5 h-5" />
+                            </button>
+                        </form>
                     </div>
                     @endforeach
                 </div>
+
+                {{-- Add member search --}}
+                @if(!empty($live['family_name']))
+                <div class="border-t border-gray-200 dark:border-zinc-700 pt-4">
+                    <div class="text-xs font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Adicionar anuncio a familia</div>
+                    <div class="flex gap-2 mb-3">
+                        <input type="text" x-model="searchQuery" @keydown.enter.prevent="search()"
+                            class="form-input flex-1 text-sm"
+                            placeholder="Buscar por titulo do anuncio...">
+                        <button type="button" @click="search()" class="btn-secondary btn-sm text-xs" :disabled="searching">
+                            <template x-if="!searching">
+                                <x-heroicon-o-magnifying-glass class="w-3.5 h-3.5" />
+                            </template>
+                            <template x-if="searching">
+                                <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/>
+                                    <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/>
+                                </svg>
+                            </template>
+                            Buscar
+                        </button>
+                    </div>
+
+                    {{-- Search results --}}
+                    <div x-show="results.length > 0" class="space-y-1">
+                        <template x-for="item in results" :key="item.id">
+                            <div class="flex items-center gap-3 px-3 py-2 rounded-lg border border-dashed border-gray-200 dark:border-zinc-700 hover:border-primary-300 dark:hover:border-primary-700 transition-colors">
+                                <div class="w-8 h-8 rounded overflow-hidden bg-gray-100 dark:bg-zinc-800 flex-shrink-0">
+                                    <img x-show="item.thumbnail" :src="item.thumbnail" class="w-full h-full object-cover" loading="lazy">
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm text-gray-900 dark:text-white truncate" x-text="item.title"></p>
+                                    <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-zinc-400">
+                                        <span class="font-mono" x-text="item.id"></span>
+                                        <span class="font-mono" x-text="'R$ ' + parseFloat(item.price).toFixed(2).replace('.', ',')"></span>
+                                        <template x-if="item.family_name">
+                                            <span class="text-amber-500 text-[10px]" x-text="'Familia: ' + item.family_name"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                                <form method="POST" action="{{ route('listings.family-add-member', $listing) }}">
+                                    @csrf
+                                    <input type="hidden" name="member_id" :value="item.id">
+                                    <input type="hidden" name="family_name" value="{{ $live['family_name'] }}">
+                                    <button type="submit" class="btn-primary btn-sm text-xs"
+                                        onclick="return confirm('Adicionar ' + this.closest('form').querySelector('[name=member_id]').value + ' a familia?')">
+                                        <x-heroicon-o-plus class="w-3.5 h-3.5" />
+                                    </button>
+                                </form>
+                            </div>
+                        </template>
+                    </div>
+                    <p x-show="searched && results.length === 0" class="text-sm text-gray-400 dark:text-zinc-500">Nenhum anuncio encontrado.</p>
+                </div>
+                @endif
+                @else
+                <p class="text-sm text-gray-400 dark:text-zinc-500">Defina um nome de familia acima para agrupar anuncios.</p>
+                @endif
             </x-ui.card>
+            </div>
+
+            <script>
+            function familyManager() {
+                return {
+                    searchQuery: '',
+                    results: [],
+                    searching: false,
+                    searched: false,
+                    async search() {
+                        if (this.searchQuery.trim().length < 2) return;
+                        this.searching = true;
+                        this.searched = false;
+                        try {
+                            const resp = await fetch(`{{ route('listings.family-search', $listing) }}?q=${encodeURIComponent(this.searchQuery)}`);
+                            this.results = await resp.json();
+                        } catch (e) {
+                            this.results = [];
+                        }
+                        this.searching = false;
+                        this.searched = true;
+                    }
+                };
+            }
+            </script>
             @endif
 
             {{-- Imagens --}}

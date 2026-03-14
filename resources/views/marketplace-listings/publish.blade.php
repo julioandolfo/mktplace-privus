@@ -289,39 +289,70 @@
                 </p>
             </x-ui.card>
 
-            {{-- Agrupamento (Família) --}}
-            <x-ui.card title="Agrupamento (Familia)">
-                <div class="space-y-3">
-                    <div class="flex items-start gap-3 text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
-                        <x-heroicon-o-information-circle class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                        <p class="text-blue-700 dark:text-blue-300">
-                            Para agrupar anúncios como variações visuais no Mercado Livre (ex: diferentes estampas de caneca),
-                            use o mesmo <strong>nome de família</strong> em todos os anúncios do grupo.
-                            Deixe vazio para anúncio independente.
-                        </p>
+            {{-- Agrupamento: escolha entre Variações e Família --}}
+            <x-ui.card title="Agrupamento">
+                <div class="space-y-4">
+                    {{-- Toggle: Variações vs Família --}}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <label class="relative cursor-pointer" @click="groupingMode = 'variations'">
+                            <input type="radio" name="grouping_mode" value="variations" x-model="groupingMode" class="sr-only peer">
+                            <div class="border-2 rounded-lg p-3 transition-colors
+                                        peer-checked:border-primary-500 peer-checked:bg-primary-50/50 dark:peer-checked:bg-primary-900/10
+                                        border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <x-heroicon-o-squares-2x2 class="w-4 h-4 text-amber-500" />
+                                    <span class="text-sm font-semibold text-gray-900 dark:text-white">Variacoes</span>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-zinc-400">
+                                    Cor, tamanho, etc. dentro do <strong>mesmo anuncio</strong>. Cada variacao tem seu estoque e preco.
+                                </p>
+                            </div>
+                        </label>
+                        <label class="relative cursor-pointer" @click="groupingMode = 'family'">
+                            <input type="radio" name="grouping_mode" value="family" x-model="groupingMode" class="sr-only peer">
+                            <div class="border-2 rounded-lg p-3 transition-colors
+                                        peer-checked:border-primary-500 peer-checked:bg-primary-50/50 dark:peer-checked:bg-primary-900/10
+                                        border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <x-heroicon-o-rectangle-group class="w-4 h-4 text-blue-500" />
+                                    <span class="text-sm font-semibold text-gray-900 dark:text-white">Familia</span>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-zinc-400">
+                                    Agrupa <strong>anuncios separados</strong> como opcoes visuais (ex: diferentes estampas de caneca).
+                                </p>
+                            </div>
+                        </label>
                     </div>
-                    <div>
-                        <label class="form-label">Nome da Família</label>
+
+                    {{-- Família: nome --}}
+                    <div x-show="groupingMode === 'family'" x-collapse x-cloak>
+                        <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-3">
+                            <p class="text-xs text-blue-700 dark:text-blue-300">
+                                Defina o mesmo nome de familia em todos os anuncios que devem ser agrupados.
+                                Apos publicar, voce pode gerenciar os membros na tela de edicao.
+                            </p>
+                        </div>
+                        <label class="form-label">Nome da Familia</label>
                         <input type="text" name="family_name" maxlength="255"
                             value="{{ old('family_name') }}"
                             class="form-input"
-                            placeholder="Ex: Caneca Porcelana Presente Dia das Mães">
-                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">Anúncios com o mesmo nome de família serão agrupados no ML.</p>
+                            placeholder="Ex: Caneca Porcelana Presente Dia das Maes">
+                        <p class="text-xs text-gray-400 dark:text-zinc-500 mt-1">Anuncios com o mesmo nome de familia serao agrupados no ML.</p>
+                    </div>
+
+                    {{-- Variações: aviso --}}
+                    <div x-show="groupingMode === 'variations' && variationAttributes.length === 0" x-collapse x-cloak>
+                        <p class="text-sm text-gray-500 dark:text-zinc-400">
+                            Esta categoria nao possui atributos de variacao disponiveis.
+                        </p>
                     </div>
                 </div>
             </x-ui.card>
 
-            {{-- Variações --}}
-            <div x-show="variationAttributes.length > 0" x-cloak>
+            {{-- Variações (detalhes) --}}
+            <div x-show="groupingMode === 'variations' && variationAttributes.length > 0" x-cloak>
             <x-ui.card title="Variacoes">
                 <div class="space-y-4">
-                    <div class="flex items-start gap-3 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3">
-                        <x-heroicon-o-information-circle class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                        <p class="text-amber-700 dark:text-amber-300">
-                            Se o produto tem variações (cor, tamanho, etc.), adicione-as abaixo.
-                            Cada variação terá seu próprio estoque e preço.
-                        </p>
-                    </div>
 
                     <template x-for="(variation, vi) in variations" :key="vi">
                         <div class="border border-gray-200 dark:border-zinc-700 rounded-lg p-4 space-y-3 relative">
@@ -490,6 +521,7 @@
                 attributes: [],
                 variationAttributes: [],
                 variations: [],
+                groupingMode: '{{ old('family_name') ? 'family' : 'none' }}',
                 attrValues: {},
                 description: '{{ old('description', '') }}',
 

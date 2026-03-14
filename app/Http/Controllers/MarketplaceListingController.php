@@ -265,13 +265,9 @@ class MarketplaceListingController extends Controller
 
                     // Fetch family members for family items (grouped items that look like variations in ML)
                     $step = 'api-family';
-                    Log::info("DEBUG ListingController [{$listing->external_id}] family check: family_name=" . ($liveData['family_name'] ?? 'NULL')
-                        . ", family_id=" . ($liveData['family_id'] ?? 'NULL')
-                        . ", item_relations=" . count($liveData['item_relations'] ?? []));
                     if (! empty($liveData['family_name']) || ! empty($liveData['family_id'])) {
                         try {
                             $familyMembers = $service->getFamilyMembers($listing->external_id, $liveData);
-                            Log::info("DEBUG ListingController [{$listing->external_id}] familyMembers count=" . count($familyMembers));
                             if (! empty($familyMembers)) {
                                 $metaPatch['has_family'] = true;
                                 $metaPatch['family_count'] = count($familyMembers) + 1; // +1 for self
@@ -1842,6 +1838,143 @@ PROMPT;
             ->get(['id', 'external_id', 'title', 'price', 'meta']);
 
         return view('marketplace-listings.kit', compact('listing', 'liveData', 'otherListings', 'account'));
+    }
+
+    // ─── Family management ───────────────────────────────────────────────
+
+    /**
+     * Update or set the family_name of this listing via ML API.
+     */
+    public function updateFamilyName(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'family_name' => 'required|string|max:255',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta sem credenciais.');
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+            $service->updateItem($listing->external_id, ['family_name' => $validated['family_name']]);
+            $listing->update(['meta' => array_merge($listing->meta ?? [], ['family_name' => $validated['family_name']])]);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao atualizar família: ' . self::friendlyMlError($e->getMessage()));
+        }
+
+        return redirect()->route('listings.show', $listing)->with('success', 'Nome da família atualizado.');
+    }
+
+    /**
+     * Remove family_name from this listing (unlink from family).
+     */
+    public function removeFamilyName(MarketplaceListing $listing)
+    {
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta sem credenciais.');
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+            $service->updateItem($listing->external_id, ['family_name' => '']);
+            $meta = $listing->meta ?? [];
+            unset($meta['family_name'], $meta['has_family'], $meta['family_count']);
+            $listing->update(['meta' => $meta]);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao remover família: ' . self::friendlyMlError($e->getMessage()));
+        }
+
+        return redirect()->route('listings.show', $listing)->with('success', 'Anúncio removido da família.');
+    }
+
+    /**
+     * Search seller's other listings to add as family members (AJAX).
+     */
+    public function searchFamilyCandidates(Request $request, MarketplaceListing $listing)
+    {
+        $q = trim($request->input('q', ''));
+        if (strlen($q) < 2) {
+            return response()->json([]);
+        }
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return response()->json([]);
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+            $liveData = $service->getItem($listing->external_id);
+            $sellerId = $liveData['seller_id'] ?? null;
+            if (! $sellerId) {
+                return response()->json([]);
+            }
+
+            $items = $service->searchSellerItems($sellerId, $q, 10, $listing->external_id);
+
+            return response()->json(collect($items)->map(fn ($item) => [
+                'id'          => $item['id'],
+                'title'       => $item['title'] ?? '',
+                'price'       => $item['price'] ?? 0,
+                'thumbnail'   => $item['thumbnail'] ?? null,
+                'status'      => $item['status'] ?? 'unknown',
+                'family_name' => $item['family_name'] ?? null,
+            ])->values()->all());
+        } catch (\Throwable $e) {
+            return response()->json([]);
+        }
+    }
+
+    /**
+     * Add another listing to this item's family by setting the same family_name on it.
+     */
+    public function addFamilyMember(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'member_id'   => 'required|string',
+            'family_name' => 'required|string|max:255',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta sem credenciais.');
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+            $service->updateItem($validated['member_id'], ['family_name' => $validated['family_name']]);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao adicionar membro à família: ' . self::friendlyMlError($e->getMessage()));
+        }
+
+        return redirect()->route('listings.show', $listing)->with('success', "Anúncio {$validated['member_id']} adicionado à família.");
+    }
+
+    /**
+     * Remove a member from the family by clearing its family_name.
+     */
+    public function removeFamilyMember(Request $request, MarketplaceListing $listing)
+    {
+        $validated = $request->validate([
+            'member_id' => 'required|string',
+        ]);
+
+        $account = $listing->marketplaceAccount;
+        if (! $account || ! $account->credentials) {
+            return back()->with('error', 'Conta sem credenciais.');
+        }
+
+        try {
+            $service = new MercadoLivreService($account);
+            $service->updateItem($validated['member_id'], ['family_name' => '']);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Erro ao remover membro da família: ' . self::friendlyMlError($e->getMessage()));
+        }
+
+        return redirect()->route('listings.show', $listing)->with('success', "Anúncio {$validated['member_id']} removido da família.");
     }
 
     /**

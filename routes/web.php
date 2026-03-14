@@ -185,6 +185,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/listings/{listing}/variations/{variationId}', [MarketplaceListingController::class, 'updateVariation'])->name('listings.update-variation');
     Route::delete('/listings/{listing}/variations/{variationId}', [MarketplaceListingController::class, 'deleteVariation'])->name('listings.delete-variation');
     Route::post('/listings/{listing}/variations', [MarketplaceListingController::class, 'addVariation'])->name('listings.add-variation');
+    // Family management
+    Route::put('/listings/{listing}/family', [MarketplaceListingController::class, 'updateFamilyName'])->name('listings.update-family');
+    Route::delete('/listings/{listing}/family', [MarketplaceListingController::class, 'removeFamilyName'])->name('listings.remove-family');
+    Route::get('/listings/{listing}/family/search', [MarketplaceListingController::class, 'searchFamilyCandidates'])->name('listings.family-search');
+    Route::post('/listings/{listing}/family/add-member', [MarketplaceListingController::class, 'addFamilyMember'])->name('listings.family-add-member');
+    Route::post('/listings/{listing}/family/remove-member', [MarketplaceListingController::class, 'removeFamilyMember'])->name('listings.family-remove-member');
     // Kits
     Route::get('/listings/{listing}/kit', [MarketplaceListingController::class, 'kitForm'])->name('listings.kit-form');
     Route::post('/listings/{listing}/kit/multipack', [MarketplaceListingController::class, 'storeMultipack'])->name('listings.store-multipack');
