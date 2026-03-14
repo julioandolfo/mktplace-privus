@@ -561,6 +561,16 @@
                                             {{ $listing->title }}
                                         </a>
                                         <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                                            @php $company = $listing->marketplaceAccount?->company; @endphp
+                                            @if($company)
+                                            <div class="w-4 h-4 rounded-full overflow-hidden bg-gray-100 dark:bg-zinc-700 flex-shrink-0 border border-gray-200 dark:border-zinc-600" title="{{ $company->name }}">
+                                                @if($company->logo_path)
+                                                    <img src="{{ asset('storage/' . $company->logo_path) }}" alt="{{ $company->name }}" class="w-full h-full object-cover">
+                                                @else
+                                                    <span class="flex items-center justify-center w-full h-full text-[7px] font-bold text-gray-400 dark:text-zinc-500 uppercase">{{ Str::substr($company->name, 0, 2) }}</span>
+                                                @endif
+                                            </div>
+                                            @endif
                                             <span class="text-xs font-mono text-gray-400 dark:text-zinc-500">{{ $listing->external_id }}</span>
                                             @if($listType)
                                             <span class="text-[10px] px-1.5 py-0.5 rounded font-medium
@@ -820,11 +830,23 @@
                         </div>
                         @endif
 
-                        {{-- Title --}}
-                        <a href="{{ route('listings.show', $listing) }}"
-                           class="text-sm font-medium text-gray-900 dark:text-white hover:text-primary-500 dark:hover:text-primary-400 line-clamp-2 leading-snug transition-colors flex-1">
-                            {{ $listing->title }}
-                        </a>
+                        {{-- Title + Company --}}
+                        <div class="flex items-start gap-1.5">
+                            @php $gridCompany = $listing->marketplaceAccount?->company; @endphp
+                            @if($gridCompany)
+                            <div class="w-4 h-4 mt-0.5 rounded-full overflow-hidden bg-gray-100 dark:bg-zinc-700 flex-shrink-0 border border-gray-200 dark:border-zinc-600" title="{{ $gridCompany->name }}">
+                                @if($gridCompany->logo_path)
+                                    <img src="{{ asset('storage/' . $gridCompany->logo_path) }}" alt="{{ $gridCompany->name }}" class="w-full h-full object-cover">
+                                @else
+                                    <span class="flex items-center justify-center w-full h-full text-[7px] font-bold text-gray-400 dark:text-zinc-500 uppercase">{{ Str::substr($gridCompany->name, 0, 2) }}</span>
+                                @endif
+                            </div>
+                            @endif
+                            <a href="{{ route('listings.show', $listing) }}"
+                               class="text-sm font-medium text-gray-900 dark:text-white hover:text-primary-500 dark:hover:text-primary-400 line-clamp-2 leading-snug transition-colors flex-1">
+                                {{ $listing->title }}
+                            </a>
+                        </div>
 
                         {{-- Price + Stock --}}
                         <div class="flex items-end justify-between mt-3 pt-2 border-t border-gray-100 dark:border-zinc-800">

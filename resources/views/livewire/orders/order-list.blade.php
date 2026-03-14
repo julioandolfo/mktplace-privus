@@ -175,10 +175,20 @@
                         {{-- Pedido + canal --}}
                         <td>
                             <div class="flex items-start gap-2">
-                                {{-- Ícone do marketplace --}}
-                                @if($mlType)
-                                    <span class="mt-0.5 flex-shrink-0" title="{{ $order->marketplaceAccount->account_name }}">{!! $mlType->logoSvg('w-5 h-5') !!}</span>
-                                @endif
+                                {{-- Avatar da empresa --}}
+                                @php $orderCompany = $order->marketplaceAccount?->company; @endphp
+                                <div class="relative mt-0.5 flex-shrink-0">
+                                    <div class="w-6 h-6 rounded-full overflow-hidden bg-gray-100 dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 flex items-center justify-center" title="{{ $orderCompany?->name ?? $order->marketplaceAccount?->account_name }}">
+                                        @if($orderCompany?->logo_path)
+                                            <img src="{{ asset('storage/' . $orderCompany->logo_path) }}" alt="{{ $orderCompany->name }}" class="w-full h-full object-cover">
+                                        @else
+                                            <span class="text-[8px] font-bold text-gray-400 dark:text-zinc-500 uppercase">{{ Str::substr($orderCompany?->name ?? $order->marketplaceAccount?->account_name ?? '?', 0, 2) }}</span>
+                                        @endif
+                                    </div>
+                                    @if($mlType)
+                                    <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center shadow-sm">{!! $mlType->logoSvg('w-3 h-3') !!}</span>
+                                    @endif
+                                </div>
                                 <div>
                                     <a href="{{ route('orders.show', $order) }}" class="font-mono font-medium text-primary-600 dark:text-primary-400 hover:underline">
                                         {{ $order->order_number }}

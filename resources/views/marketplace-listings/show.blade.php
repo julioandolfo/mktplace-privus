@@ -364,7 +364,19 @@
                         @endforeach
                     </div>
 
-                    <div class="flex justify-end pt-2">
+                    <div class="flex justify-between items-center pt-2">
+                        @if($aiConfigured ?? false)
+                        <button type="button" id="btn-ai-fill-attrs" class="btn-secondary btn-sm">
+                            <x-heroicon-o-sparkles class="w-4 h-4" />
+                            <span id="ai-fill-attrs-text">Preencher com IA</span>
+                            <svg id="ai-fill-attrs-spinner" class="w-4 h-4 animate-spin hidden" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/>
+                                <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="opacity-75"/>
+                            </svg>
+                        </button>
+                        @else
+                        <span></span>
+                        @endif
                         <button type="submit" class="btn-primary btn-sm">
                             <x-heroicon-o-cloud-arrow-up class="w-4 h-4" />
                             Salvar Atributos
@@ -2344,6 +2356,89 @@
                 if (! imgUploadStatus.textContent.includes('✅')) {
                     imgUploadText.textContent = 'Adicionar ao anúncio no ML';
                     btnUploadImg.disabled = false;
+                }
+            }
+        });
+    }
+    // ─── AI Fill Attributes ────────────────────────────────────────────────
+    const btnFillAttrs   = document.getElementById('btn-ai-fill-attrs');
+    const fillAttrsText  = document.getElementById('ai-fill-attrs-text');
+    const fillAttrsSpin  = document.getElementById('ai-fill-attrs-spinner');
+
+    if (btnFillAttrs) {
+        btnFillAttrs.addEventListener('click', async () => {
+            btnFillAttrs.disabled = true;
+            fillAttrsText.textContent = 'Gerando...';
+            fillAttrsSpin.classList.remove('hidden');
+
+            // Collect attribute metadata from the form
+            const attrInputs = document.querySelectorAll('[name^="attributes["]');
+            const attributes = [];
+            attrInputs.forEach(el => {
+                const match = el.name.match(/attributes\[(.+?)\]/);
+                if (!match) return;
+                const id = match[1];
+                const label = el.closest('.flex.items-start')?.querySelector('.text-sm.text-gray-600, .text-sm.dark\\:text-zinc-400')?.textContent?.trim() || id;
+                const allowedValues = [];
+                if (el.tagName === 'SELECT') {
+                    el.querySelectorAll('option').forEach(opt => {
+                        if (opt.value) allowedValues.push(opt.value);
+                    });
+                }
+                attributes.push({
+                    id: id,
+                    name: label,
+                    value_type: el.type === 'number' ? 'number' : 'string',
+                    allowed_values: allowedValues,
+                });
+            });
+
+            try {
+                const res = await fetch('{{ route("listings.ai-fill-attributes") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': CSRF,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        title: @json($live['title'] ?? $listing->title),
+                        category_name: @json($live['category_id'] ?? ''),
+                        attributes: attributes,
+                    }),
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Erro: ' + data.error);
+                } else {
+                    let filled = 0;
+                    attrInputs.forEach(el => {
+                        const match = el.name.match(/attributes\[(.+?)\]/);
+                        if (!match) return;
+                        const id = match[1];
+                        const value = data[id];
+                        if (value !== undefined && value !== '' && value !== null) {
+                            // Only fill if currently empty or user wants override
+                            if (!el.value || el.value === '' || el.value === 'Selecione...' || el.value === '— Selecione —') {
+                                el.value = value;
+                                el.classList.add('ring-2', 'ring-purple-400');
+                                setTimeout(() => el.classList.remove('ring-2', 'ring-purple-400'), 3000);
+                                filled++;
+                            }
+                        }
+                    });
+                    fillAttrsText.textContent = filled > 0 ? `${filled} atributo(s) preenchido(s)` : 'Nenhum atributo novo';
+                    setTimeout(() => { fillAttrsText.textContent = 'Preencher com IA'; }, 3000);
+                }
+            } catch (e) {
+                alert('Erro ao conectar com a IA: ' + e.message);
+            } finally {
+                btnFillAttrs.disabled = false;
+                fillAttrsSpin.classList.add('hidden');
+                if (fillAttrsText.textContent === 'Gerando...') {
+                    fillAttrsText.textContent = 'Preencher com IA';
                 }
             }
         });

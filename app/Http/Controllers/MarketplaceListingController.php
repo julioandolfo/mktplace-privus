@@ -18,7 +18,7 @@ class MarketplaceListingController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = MarketplaceListing::with(['marketplaceAccount', 'product']);
+            $query = MarketplaceListing::with(['marketplaceAccount.company', 'product']);
 
             // ── Basic filters ──────────────────────────────────────────────────────
             if ($accountId = $request->input('account')) {
