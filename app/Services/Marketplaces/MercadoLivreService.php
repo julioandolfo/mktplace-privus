@@ -321,23 +321,33 @@ class MercadoLivreService
         try {
             $item = $this->get("/items/{$itemId}");
 
-            // Fetch variations separately — x-format-new header may omit them
-            if (empty($item['variations'])) {
+            // x-format-new header may strip variations and item_relations
+            // Fetch raw item without the header to get full data
+            if (empty($item['variations']) || empty($item['item_relations'])) {
                 try {
-                    $varResponse = $this->getWithoutFormatHeaderRaw("/items/{$itemId}/variations");
-                    $variations  = $varResponse->json();
-                    if (! empty($variations) && is_array($variations)) {
-                        $item['variations'] = $variations;
+                    $rawItem = $this->getWithoutFormatHeaderRaw("/items/{$itemId}")->json() ?? [];
+
+                    // Merge item_relations if missing
+                    if (empty($item['item_relations']) && ! empty($rawItem['item_relations'])) {
+                        $item['item_relations'] = $rawItem['item_relations'];
+                    }
+
+                    // Merge variations if missing
+                    if (empty($item['variations']) && ! empty($rawItem['variations'])) {
+                        $item['variations'] = $rawItem['variations'];
                     }
                 } catch (\Throwable $e) {
-                    // Try with include param as fallback
-                    try {
-                        $itemWithVars = $this->getWithoutFormatHeaderRaw("/items/{$itemId}", ['include' => 'variations'])->json() ?? [];
-                        if (! empty($itemWithVars['variations'])) {
-                            $item['variations'] = $itemWithVars['variations'];
+                    // Fallback: try dedicated variations endpoint
+                    if (empty($item['variations'])) {
+                        try {
+                            $varResponse = $this->getWithoutFormatHeaderRaw("/items/{$itemId}/variations");
+                            $variations  = $varResponse->json();
+                            if (! empty($variations) && is_array($variations)) {
+                                $item['variations'] = $variations;
+                            }
+                        } catch (\Throwable $e2) {
+                            // No variations available
                         }
-                    } catch (\Throwable $e2) {
-                        // No variations available
                     }
                 }
             }
@@ -381,6 +391,16 @@ class MercadoLivreService
 
         if (! $familyName) {
             return [];
+        }
+
+        // x-format-new header may strip item_relations — refetch without it if needed
+        if (empty($itemRelations)) {
+            try {
+                $rawItem = $this->getWithoutFormatHeaderRaw("/items/{$itemId}")->json();
+                $itemRelations = $rawItem['item_relations'] ?? [];
+            } catch (\Throwable $e) {
+                Log::info("ML getFamilyMembers refetch for {$itemId}: " . $e->getMessage());
+            }
         }
 
         // Get related IDs from item_relations
