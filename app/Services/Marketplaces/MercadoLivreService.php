@@ -313,23 +313,36 @@ class MercadoLivreService
 
     /**
      * Get item with variations included.
-     * ML API may not return variations in the main response with x-format-new header,
-     * so we also try fetching variations separately if the main call returns empty.
+     * ML API with x-format-new header may omit variations from the main response,
+     * so we always fetch them separately to ensure completeness.
      */
     public function getItemWithVariations(string $itemId): array
     {
         try {
-            $item = $this->get("/items/{$itemId}", ['include' => 'variations']);
+            $item = $this->get("/items/{$itemId}");
 
-            // If variations are empty but item likely has them, fetch separately
-            if (empty($item['variations'])) {
-                try {
-                    $variations = $this->get("/items/{$itemId}/variations");
-                    if (! empty($variations)) {
-                        $item['variations'] = $variations;
+            // Always fetch variations separately — the main endpoint with x-format-new
+            // may not include them or may return them incomplete for some variation types
+            try {
+                $variations = $this->getWithoutFormatHeader("/items/{$itemId}/variations");
+                if (! empty($variations) && is_array($variations)) {
+                    // Endpoint /variations returns array directly (not keyed by 'variations')
+                    $item['variations'] = $variations;
+                    Log::info("ML variations({$itemId}): loaded " . count($variations) . " variation(s) via /variations endpoint");
+                }
+            } catch (\Throwable $e) {
+                Log::info("ML getVariations({$itemId}) separate call failed ({$e->getMessage()}), trying include param");
+                // If separate call fails (404 for items without variations), try include param
+                if (empty($item['variations'])) {
+                    try {
+                        $itemWithVars = $this->getWithoutFormatHeader("/items/{$itemId}", ['include' => 'variations']);
+                        if (! empty($itemWithVars['variations'])) {
+                            $item['variations'] = $itemWithVars['variations'];
+                            Log::info("ML variations({$itemId}): loaded " . count($itemWithVars['variations']) . " variation(s) via include param");
+                        }
+                    } catch (\Throwable $e2) {
+                        // No variations available
                     }
-                } catch (\Throwable $e) {
-                    // Silently continue — item just has no variations
                 }
             }
 
@@ -338,6 +351,26 @@ class MercadoLivreService
             Log::warning("ML getItemWithVariations({$itemId}) failed: " . $e->getMessage());
             return $this->getItem($itemId);
         }
+    }
+
+    /**
+     * GET request without x-format-new header (needed for some endpoints like /variations).
+     */
+    private function getWithoutFormatHeader(string $path, array $params = []): array
+    {
+        $this->throttle();
+
+        $response = Http::withToken($this->token())
+            ->timeout(15)
+            ->get(self::BASE_URL . $path, $params);
+
+        if ($response->failed()) {
+            throw new \RuntimeException(
+                "ML API error [{$response->status()}] GET {$path}: " . $response->body()
+            );
+        }
+
+        return $response->json() ?? [];
     }
 
     /**
