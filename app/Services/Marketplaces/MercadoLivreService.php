@@ -506,43 +506,9 @@ class MercadoLivreService
         $seenIds = [];
         $baseUrl = self::BASE_URL;
 
-        // 1) Category predictor — best for product descriptions (public, no auth needed)
+        // 1) Domain discovery — primary method, public endpoint (limit max 8)
         try {
-            $resp = Http::timeout(10)->get("{$baseUrl}/sites/MLB/category_predictor/predict", ['title' => $query]);
-            if ($resp->successful()) {
-                $prediction = $resp->json();
-                $predId     = $prediction['id'] ?? null;
-                if ($predId && !isset($seenIds[$predId])) {
-                    $seenIds[$predId] = true;
-                    $results[]        = [
-                        'category_id'   => $predId,
-                        'category_name' => $prediction['name'] ?? $predId,
-                        'domain_name'   => 'categoria sugerida',
-                    ];
-                }
-                // Path from root gives broader parent categories
-                foreach ($prediction['path_from_root'] ?? [] as $node) {
-                    $nodeId = $node['category_id'] ?? null;
-                    if ($nodeId && !isset($seenIds[$nodeId])) {
-                        $seenIds[$nodeId] = true;
-                        $results[]        = [
-                            'category_id'   => $nodeId,
-                            'category_name' => $node['category_name'] ?? $nodeId,
-                            'domain_name'   => 'categoria pai',
-                        ];
-                    }
-                }
-                Log::debug("ML category_predictor({$query}): found {$predId}");
-            } else {
-                Log::debug("ML category_predictor({$query}): HTTP {$resp->status()} - {$resp->body()}");
-            }
-        } catch (\Throwable $e) {
-            Log::debug("ML category_predictor({$query}) error: " . $e->getMessage());
-        }
-
-        // 2) Domain discovery — works well for specific product names (public)
-        try {
-            $resp = Http::timeout(10)->get("{$baseUrl}/sites/MLB/domain_discovery/search", ['q' => $query, 'limit' => 10]);
+            $resp = Http::timeout(10)->get("{$baseUrl}/sites/MLB/domain_discovery/search", ['q' => $query, 'limit' => 8]);
             if ($resp->successful()) {
                 $domains = $resp->json();
                 if (is_array($domains)) {
@@ -554,15 +520,20 @@ class MercadoLivreService
                         }
                     }
                 }
+                Log::debug("ML domain_discovery({$query}): found " . count($results) . " categories");
+            } else {
+                Log::debug("ML domain_discovery({$query}): HTTP {$resp->status()} - {$resp->body()}");
             }
         } catch (\Throwable $e) {
             Log::debug("ML domain_discovery({$query}) error: " . $e->getMessage());
         }
 
-        // 3) Product search — extract categories from real listings + available_filters
+        // 2) Product search fallback (authenticated) — extract categories from real listings
         if (count($results) < 3) {
             try {
-                $resp = Http::timeout(10)->get("{$baseUrl}/sites/MLB/search", ['q' => $query, 'limit' => 5]);
+                $resp = Http::withToken($this->token())
+                    ->timeout(10)
+                    ->get("{$baseUrl}/sites/MLB/search", ['q' => $query, 'limit' => 5]);
                 if ($resp->successful()) {
                     $search = $resp->json();
 
@@ -606,6 +577,8 @@ class MercadoLivreService
                             }
                         }
                     }
+                } else {
+                    Log::debug("ML search fallback({$query}): HTTP {$resp->status()}");
                 }
             } catch (\Throwable $e) {
                 Log::debug("ML search fallback({$query}) error: " . $e->getMessage());
