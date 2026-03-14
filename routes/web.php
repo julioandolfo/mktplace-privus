@@ -165,6 +165,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/listings/publish', [MarketplaceListingController::class, 'publish'])->name('listings.publish');
     Route::get('/listings/categories/search', [MarketplaceListingController::class, 'searchCategories'])->name('listings.search-categories');
     Route::get('/listings/categories/attributes', [MarketplaceListingController::class, 'getCategoryAttributes'])->name('listings.category-attributes');
+    Route::post('/listings/ai/fill-attributes', [MarketplaceListingController::class, 'aiFillAttributes'])->name('listings.ai-fill-attributes');
+    Route::post('/listings/ai/generate-description', [MarketplaceListingController::class, 'aiGenerateDescription'])->name('listings.ai-generate-description');
     Route::get('/listings/{listing}', [MarketplaceListingController::class, 'show'])->name('listings.show');
     Route::put('/listings/{listing}', [MarketplaceListingController::class, 'update'])->name('listings.update');
     Route::post('/listings/{listing}/toggle-status', [MarketplaceListingController::class, 'toggleStatus'])->name('listings.toggle-status');

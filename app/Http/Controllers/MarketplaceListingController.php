@@ -1697,6 +1697,99 @@ SYS;
         return response()->json($attributes);
     }
 
+    /**
+     * AI: fill category attributes based on product title.
+     */
+    public function aiFillAttributes(Request $request)
+    {
+        $data = $request->validate([
+            'title'         => 'required|string|max:200',
+            'category_name' => 'required|string|max:200',
+            'attributes'    => 'required|array',
+        ]);
+
+        $ai = new AiService();
+        if (! $ai->isConfigured()) {
+            return response()->json(['error' => 'IA não configurada'], 422);
+        }
+
+        $attrDescriptions = collect($data['attributes'])->map(function ($attr) {
+            $desc = $attr['id'] . ' (' . $attr['name'] . ')';
+            if (! empty($attr['allowed_values'])) {
+                $desc .= ' - valores permitidos: ' . implode(', ', array_slice($attr['allowed_values'], 0, 30));
+            } else {
+                $desc .= ' - tipo: ' . ($attr['value_type'] ?? 'text');
+            }
+            return $desc;
+        })->implode("\n");
+
+        $system = <<<'PROMPT'
+Você é um especialista em e-commerce brasileiro, especializado em preencher fichas técnicas de produtos para o Mercado Livre.
+
+Regras:
+- Responda APENAS com um JSON válido, sem markdown, sem explicações
+- O JSON deve ter como chaves os IDs dos atributos e como valores os valores sugeridos
+- Para atributos com valores permitidos, SEMPRE escolha um dos valores da lista fornecida (exatamente como escrito)
+- Para atributos de texto livre, preencha com valores realistas baseados no título do produto
+- Para atributos numéricos, use apenas números
+- Se não souber o valor de um atributo, use string vazia ""
+- Preencha o máximo possível de atributos
+PROMPT;
+
+        $user = "Produto: {$data['title']}\nCategoria: {$data['category_name']}\n\nAtributos para preencher:\n{$attrDescriptions}";
+
+        try {
+            $result = $ai->generateText($system, $user, 2000);
+            // Clean potential markdown wrapping
+            $result = preg_replace('/^```(?:json)?\s*/s', '', $result);
+            $result = preg_replace('/\s*```$/s', '', $result);
+            $parsed = json_decode($result, true);
+
+            if (! is_array($parsed)) {
+                return response()->json(['error' => 'Resposta da IA inválida'], 422);
+            }
+
+            return response()->json($parsed);
+        } catch (\Throwable $e) {
+            Log::warning('AI fill attributes error: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * AI: generate listing description.
+     */
+    public function aiGenerateDescription(Request $request)
+    {
+        $data = $request->validate([
+            'title'                => 'required|string|max:200',
+            'category_name'        => 'nullable|string|max:200',
+            'attributes'           => 'nullable|array',
+            'existing_description' => 'nullable|string|max:5000',
+        ]);
+
+        $ai = new AiService();
+        if (! $ai->isConfigured()) {
+            return response()->json(['error' => 'IA não configurada'], 422);
+        }
+
+        try {
+            $prompts = AiService::buildDescriptionPrompt(
+                $data['title'],
+                $data['category_name'] ?? '',
+                $data['existing_description'] ?? '',
+                $data['attributes'] ?? [],
+            );
+
+            $description = $ai->generateText($prompts['system'], $prompts['user'], 2000);
+
+            return response()->json(['description' => $description]);
+        } catch (\Throwable $e) {
+            Log::warning('AI generate description error: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  KITS
     // ═══════════════════════════════════════════════════════════════════════
