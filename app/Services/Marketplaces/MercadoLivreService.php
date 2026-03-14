@@ -498,84 +498,121 @@ class MercadoLivreService
 
     /**
      * Search ML categories by keyword (for publishing new items).
-     * Combines domain_discovery, category_predictor and sites/categories for better results.
+     * Uses multiple public ML API strategies for best coverage.
      */
     public function searchCategories(string $query): array
     {
         $results = [];
         $seenIds = [];
+        $baseUrl = self::BASE_URL;
 
-        // 1) Domain discovery (works well for specific product terms)
+        // 1) Category predictor — best for product descriptions (public, no auth needed)
         try {
-            $domains = $this->get('/sites/MLB/domain_discovery/search', ['q' => $query, 'limit' => 10]);
-            if (is_array($domains)) {
-                foreach ($domains as $d) {
-                    $id = $d['category_id'] ?? null;
-                    if ($id && !isset($seenIds[$id])) {
-                        $seenIds[$id] = true;
-                        $results[]    = $d;
+            $resp = Http::timeout(10)->get("{$baseUrl}/sites/MLB/category_predictor/predict", ['title' => $query]);
+            if ($resp->successful()) {
+                $prediction = $resp->json();
+                $predId     = $prediction['id'] ?? null;
+                if ($predId && !isset($seenIds[$predId])) {
+                    $seenIds[$predId] = true;
+                    $results[]        = [
+                        'category_id'   => $predId,
+                        'category_name' => $prediction['name'] ?? $predId,
+                        'domain_name'   => 'categoria sugerida',
+                    ];
+                }
+                // Path from root gives broader parent categories
+                foreach ($prediction['path_from_root'] ?? [] as $node) {
+                    $nodeId = $node['category_id'] ?? null;
+                    if ($nodeId && !isset($seenIds[$nodeId])) {
+                        $seenIds[$nodeId] = true;
+                        $results[]        = [
+                            'category_id'   => $nodeId,
+                            'category_name' => $node['category_name'] ?? $nodeId,
+                            'domain_name'   => 'categoria pai',
+                        ];
+                    }
+                }
+                Log::debug("ML category_predictor({$query}): found {$predId}");
+            } else {
+                Log::debug("ML category_predictor({$query}): HTTP {$resp->status()} - {$resp->body()}");
+            }
+        } catch (\Throwable $e) {
+            Log::debug("ML category_predictor({$query}) error: " . $e->getMessage());
+        }
+
+        // 2) Domain discovery — works well for specific product names (public)
+        try {
+            $resp = Http::timeout(10)->get("{$baseUrl}/sites/MLB/domain_discovery/search", ['q' => $query, 'limit' => 10]);
+            if ($resp->successful()) {
+                $domains = $resp->json();
+                if (is_array($domains)) {
+                    foreach ($domains as $d) {
+                        $id = $d['category_id'] ?? null;
+                        if ($id && !isset($seenIds[$id])) {
+                            $seenIds[$id] = true;
+                            $results[]    = $d;
+                        }
                     }
                 }
             }
         } catch (\Throwable $e) {
-            Log::debug("ML domain_discovery({$query}) failed: " . $e->getMessage());
+            Log::debug("ML domain_discovery({$query}) error: " . $e->getMessage());
         }
 
-        // 2) Category predictor (predicts category from a product title)
-        try {
-            $prediction = $this->get('/sites/MLB/category_predictor/predict', ['title' => $query]);
-            $predId     = $prediction['id'] ?? null;
-            if ($predId && !isset($seenIds[$predId])) {
-                $seenIds[$predId] = true;
-                $results[]        = [
-                    'category_id'   => $predId,
-                    'category_name' => $prediction['name'] ?? $predId,
-                    'domain_name'   => $prediction['prediction_quality'] ?? 'predicted',
-                ];
-            }
-            // Also check prediction path for parent categories
-            foreach ($prediction['path_from_root'] ?? [] as $path) {
-                $pathId = $path['category_id'] ?? null;
-                if ($pathId && !isset($seenIds[$pathId])) {
-                    $seenIds[$pathId] = true;
-                    $results[]        = [
-                        'category_id'   => $pathId,
-                        'category_name' => $path['category_name'] ?? $pathId,
-                        'domain_name'   => 'sugestão',
-                    ];
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::debug("ML category_predictor({$query}) failed: " . $e->getMessage());
-        }
-
-        // 3) Fallback: search via items and extract unique categories
-        if (empty($results)) {
+        // 3) Product search — extract categories from real listings + available_filters
+        if (count($results) < 3) {
             try {
-                $search = $this->get('/sites/MLB/search', ['q' => $query, 'limit' => 10]);
-                foreach ($search['results'] ?? [] as $item) {
-                    $catId = $item['category_id'] ?? null;
-                    if ($catId && !isset($seenIds[$catId])) {
-                        $seenIds[$catId] = true;
-                        // Fetch category name
-                        try {
-                            $catInfo   = $this->get("/categories/{$catId}");
-                            $catName   = $catInfo['name'] ?? $catId;
-                        } catch (\Throwable $e) {
-                            $catName = $catId;
+                $resp = Http::timeout(10)->get("{$baseUrl}/sites/MLB/search", ['q' => $query, 'limit' => 5]);
+                if ($resp->successful()) {
+                    $search = $resp->json();
+
+                    // Extract category filter (gives category name + count)
+                    foreach ($search['available_filters'] ?? [] as $filter) {
+                        if ($filter['id'] === 'category') {
+                            foreach ($filter['values'] ?? [] as $val) {
+                                $catId = $val['id'] ?? null;
+                                if ($catId && !isset($seenIds[$catId])) {
+                                    $seenIds[$catId] = true;
+                                    $results[] = [
+                                        'category_id'   => $catId,
+                                        'category_name' => $val['name'] ?? $catId,
+                                        'domain_name'   => ($val['results'] ?? '') . ' anúncios no ML',
+                                    ];
+                                }
+                            }
+                            break;
                         }
-                        $results[] = [
-                            'category_id'   => $catId,
-                            'category_name' => $catName,
-                            'domain_name'   => 'encontrado via busca',
-                        ];
-                        if (count($results) >= 10) break;
+                    }
+
+                    // Also extract from individual results if still few
+                    if (count($results) < 3) {
+                        foreach ($search['results'] ?? [] as $item) {
+                            $catId = $item['category_id'] ?? null;
+                            if ($catId && !isset($seenIds[$catId])) {
+                                $seenIds[$catId] = true;
+                                $catName = $catId;
+                                try {
+                                    $catResp = Http::timeout(5)->get("{$baseUrl}/categories/{$catId}");
+                                    if ($catResp->successful()) {
+                                        $catName = $catResp->json()['name'] ?? $catId;
+                                    }
+                                } catch (\Throwable $e) {}
+                                $results[] = [
+                                    'category_id'   => $catId,
+                                    'category_name' => $catName,
+                                    'domain_name'   => 'via busca de produtos',
+                                ];
+                                if (count($results) >= 10) break;
+                            }
+                        }
                     }
                 }
             } catch (\Throwable $e) {
-                Log::debug("ML search fallback({$query}) failed: " . $e->getMessage());
+                Log::debug("ML search fallback({$query}) error: " . $e->getMessage());
             }
         }
+
+        Log::info("ML searchCategories({$query}): " . count($results) . " results");
 
         return $results;
     }
