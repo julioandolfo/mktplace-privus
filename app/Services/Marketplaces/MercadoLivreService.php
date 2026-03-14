@@ -406,23 +406,15 @@ class MercadoLivreService
             . ", item_relations_count=" . count($itemRelations)
             . ", itemData_keys=" . implode(',', array_keys($itemData)));
 
+        $familyId = $itemData['family_id'] ?? null;
+        $sellerId = $itemData['seller_id'] ?? null;
+
         if (! $familyName) {
             Log::info("DEBUG getFamilyMembers [{$itemId}]: EXITING - no family_name");
             return [];
         }
 
-        // x-format-new header may strip item_relations — refetch without it if needed
-        if (empty($itemRelations)) {
-            try {
-                $rawItem = $this->getWithoutFormatHeaderRaw("/items/{$itemId}")->json();
-                $itemRelations = $rawItem['item_relations'] ?? [];
-                Log::info("DEBUG getFamilyMembers [{$itemId}]: refetched, item_relations_count=" . count($itemRelations));
-            } catch (\Throwable $e) {
-                Log::info("ML getFamilyMembers refetch for {$itemId}: " . $e->getMessage());
-            }
-        }
-
-        // Get related IDs from item_relations
+        // 1. Try item_relations first
         $relatedIds = collect($itemRelations)
             ->pluck('item_id')
             ->filter()
@@ -430,6 +422,23 @@ class MercadoLivreService
             ->reject(fn ($id) => $id === $itemId)
             ->values()
             ->all();
+
+        // 2. If no item_relations, search by seller + family_id
+        if (empty($relatedIds) && $familyId && $sellerId) {
+            try {
+                $searchResult = $this->get('/users/' . $sellerId . '/items/search', [
+                    'family_id' => $familyId,
+                    'limit'     => 50,
+                ]);
+                $relatedIds = collect($searchResult['results'] ?? [])
+                    ->reject(fn ($id) => $id === $itemId)
+                    ->values()
+                    ->all();
+                Log::info("DEBUG getFamilyMembers [{$itemId}]: search by family_id found " . count($relatedIds) . " items");
+            } catch (\Throwable $e) {
+                Log::info("ML getFamilyMembers search by family_id failed for {$itemId}: " . $e->getMessage());
+            }
+        }
 
         Log::info("DEBUG getFamilyMembers [{$itemId}]: relatedIds=" . json_encode($relatedIds));
 
