@@ -423,34 +423,21 @@ class MercadoLivreService
             ->values()
             ->all();
 
-        // 2. If no item_relations, search by family_id via site search
-        if (empty($relatedIds) && $familyId && $sellerId) {
-            $siteId = $itemData['site_id'] ?? 'MLB';
-            $searchEndpoints = [
-                "/sites/{$siteId}/search" => ['seller_id' => $sellerId, 'family_id' => (string) $familyId, 'limit' => 50],
-                '/users/' . $sellerId . '/items/search' => ['family_id' => (string) $familyId, 'limit' => 50],
-            ];
-
-            foreach ($searchEndpoints as $endpoint => $params) {
-                try {
-                    $searchResult = $this->get($endpoint, $params);
-                    $resultIds = collect($searchResult['results'] ?? [])
-                        ->map(fn ($r) => is_array($r) ? ($r['id'] ?? null) : $r)
-                        ->filter()
-                        ->reject(fn ($id) => $id === $itemId)
-                        ->unique()
-                        ->values()
-                        ->all();
-
-                    Log::info("DEBUG getFamilyMembers [{$itemId}]: {$endpoint} found " . count($resultIds) . " items");
-
-                    if (! empty($resultIds)) {
-                        $relatedIds = $resultIds;
-                        break;
-                    }
-                } catch (\Throwable $e) {
-                    Log::info("ML getFamilyMembers {$endpoint} failed for {$itemId}: " . $e->getMessage());
-                }
+        // 2. If no item_relations, search seller items by family_name text
+        if (empty($relatedIds) && $familyName && $sellerId) {
+            try {
+                $searchResult = $this->get('/users/' . $sellerId . '/items/search', [
+                    'q'     => $familyName,
+                    'limit' => 50,
+                ]);
+                $relatedIds = collect($searchResult['results'] ?? [])
+                    ->reject(fn ($id) => $id === $itemId)
+                    ->unique()
+                    ->values()
+                    ->all();
+                Log::info("DEBUG getFamilyMembers [{$itemId}]: search by family_name text found " . count($relatedIds) . " items");
+            } catch (\Throwable $e) {
+                Log::info("ML getFamilyMembers search by family_name failed for {$itemId}: " . $e->getMessage());
             }
         }
 
