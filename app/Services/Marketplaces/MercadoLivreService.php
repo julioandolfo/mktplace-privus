@@ -313,11 +313,27 @@ class MercadoLivreService
 
     /**
      * Get item with variations included.
+     * ML API may not return variations in the main response with x-format-new header,
+     * so we also try fetching variations separately if the main call returns empty.
      */
     public function getItemWithVariations(string $itemId): array
     {
         try {
-            return $this->get("/items/{$itemId}", ['include' => 'variations']);
+            $item = $this->get("/items/{$itemId}", ['include' => 'variations']);
+
+            // If variations are empty but item likely has them, fetch separately
+            if (empty($item['variations'])) {
+                try {
+                    $variations = $this->get("/items/{$itemId}/variations");
+                    if (! empty($variations)) {
+                        $item['variations'] = $variations;
+                    }
+                } catch (\Throwable $e) {
+                    // Silently continue — item just has no variations
+                }
+            }
+
+            return $item;
         } catch (\Throwable $e) {
             Log::warning("ML getItemWithVariations({$itemId}) failed: " . $e->getMessage());
             return $this->getItem($itemId);

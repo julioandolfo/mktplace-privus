@@ -103,7 +103,7 @@ class OrderList extends Component
     public function render()
     {
         $orders = Order::query()
-            ->with(['items', 'marketplaceAccount'])
+            ->with(['items', 'marketplaceAccount.company'])
             ->when($this->search, fn ($q) => $q->search($this->search))
             ->when($this->status, fn ($q) => $q->where('status', $this->status))
             ->when($this->paymentStatus, fn ($q) => $q->where('payment_status', $this->paymentStatus))
