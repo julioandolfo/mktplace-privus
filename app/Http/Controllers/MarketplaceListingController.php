@@ -590,7 +590,7 @@ class MarketplaceListingController extends Controller
 
         try {
             $service  = new MercadoLivreService($account);
-            $liveData = $service->getItem($listing->external_id);
+            $liveData = $service->getItemWithVariations($listing->external_id);
 
             $variations = collect($liveData['variations'] ?? [])
                 ->map(function ($v) use ($variationId, $validated) {
@@ -636,7 +636,7 @@ class MarketplaceListingController extends Controller
 
         try {
             $service  = new MercadoLivreService($account);
-            $liveData = $service->getItem($listing->external_id);
+            $liveData = $service->getItemWithVariations($listing->external_id);
 
             $variations = collect($liveData['variations'] ?? [])
                 ->reject(fn ($v) => (string) $v['id'] === $variationId)
@@ -676,7 +676,7 @@ class MarketplaceListingController extends Controller
 
         try {
             $service  = new MercadoLivreService($account);
-            $liveData = $service->getItem($listing->external_id);
+            $liveData = $service->getItemWithVariations($listing->external_id);
 
             $existingVariations = $liveData['variations'] ?? [];
 
