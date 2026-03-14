@@ -446,8 +446,9 @@
                         .then(r => r.json())
                         .then(data => {
                             const allAttrs = Array.isArray(data) ? data : [];
-                            this.attributes = allAttrs.filter(a => !a.tags?.includes('read_only') && !a.tags?.includes('allow_variations'));
-                            this.variationAttributes = allAttrs.filter(a => a.tags?.includes('allow_variations'));
+                            const hasTag = (tags, key) => Array.isArray(tags) ? tags.includes(key) : !!(tags && tags[key]);
+                            this.attributes = allAttrs.filter(a => !hasTag(a.tags, 'read_only') && !hasTag(a.tags, 'allow_variations'));
+                            this.variationAttributes = allAttrs.filter(a => hasTag(a.tags, 'allow_variations'));
                             this.variations = [];
                         })
                         .catch(() => { this.attributes = []; this.variationAttributes = []; });
