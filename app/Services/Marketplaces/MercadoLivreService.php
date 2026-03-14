@@ -371,16 +371,19 @@ class MercadoLivreService
 
     /**
      * Get family members for an item that belongs to a family (grouped items).
-     * Uses item_relations or search by family_id to find siblings.
+     * Uses item_relations to find siblings, then filters by exact family_name match.
      * Returns array of item summaries.
      */
     public function getFamilyMembers(string $itemId, array $itemData = []): array
     {
-        $familyId = $itemData['family_id'] ?? null;
+        $familyName = $itemData['family_name'] ?? null;
         $itemRelations = $itemData['item_relations'] ?? [];
-        $sellerId = $itemData['seller_id'] ?? null;
 
-        // 1. Try item_relations first (direct reference)
+        if (! $familyName) {
+            return [];
+        }
+
+        // Get related IDs from item_relations
         $relatedIds = collect($itemRelations)
             ->pluck('item_id')
             ->filter()
@@ -389,33 +392,20 @@ class MercadoLivreService
             ->values()
             ->all();
 
-        // 2. If no item_relations, search by seller + family_id
-        if (empty($relatedIds) && $familyId && $sellerId) {
-            try {
-                $searchResult = $this->get('/users/' . $sellerId . '/items/search', [
-                    'family_id' => $familyId,
-                    'limit'     => 50,
-                ]);
-                $relatedIds = collect($searchResult['results'] ?? [])
-                    ->reject(fn ($id) => $id === $itemId)
-                    ->values()
-                    ->all();
-            } catch (\Throwable $e) {
-                Log::info("ML getFamilyMembers search by family_id failed for {$itemId}: " . $e->getMessage());
-            }
-        }
-
         if (empty($relatedIds)) {
             return [];
         }
 
-        // Fetch details for each related item (max 20 via multiget)
+        // Fetch details for related items (max 20 via multiget)
         $relatedIds = array_slice($relatedIds, 0, 20);
         try {
             $response = $this->get('/items', ['ids' => implode(',', $relatedIds)]);
+
             return collect($response)
                 ->filter(fn ($r) => ($r['code'] ?? 200) === 200)
                 ->map(fn ($r) => $r['body'] ?? $r)
+                // Only keep items with the EXACT same family_name
+                ->filter(fn ($item) => ($item['family_name'] ?? null) === $familyName)
                 ->values()
                 ->all();
         } catch (\Throwable $e) {
